@@ -30,5 +30,11 @@ jobs:
       with:
         name: binaries
         path: |
+          build/wine*
+          build/loader/wine*
+          build/server/wine*
+          build/fonts/
+          build/nls
           build/**/*.dll
           build/**/*.exe
+          build/**/*.so
