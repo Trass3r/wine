@@ -24,6 +24,7 @@ jobs:
       run: |
         set -eux
         mkdir -p build && cd build
+        PATH="/usr/lib/ccache:$PATH" \
         ../configure --enable-win64 --disable-tests --enable-archs=i386,x86_64
         time make -j4
     - uses: actions/upload-artifact@v3
