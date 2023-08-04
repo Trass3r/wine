@@ -20,13 +20,15 @@ jobs:
         apt install -y sudo git time wget build-essential clang mingw-w64 ccache
     - uses: Trass3r/setup-cpp@master
     - uses: hendrikmuhs/ccache-action@v1
+      with:
+        verbose: 2
     - name: build
       run: |
         set -eux
         mkdir -p build && cd build
         PATH="/usr/lib/ccache:$PATH" \
         ../configure --enable-win64 --disable-tests --enable-archs=i386,x86_64
-        time make -j4
+        time make -j$(($(nproc) + 1))
     - uses: actions/upload-artifact@v3
       with:
         name: binaries
