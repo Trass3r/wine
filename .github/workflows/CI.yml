@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ubuntu:rolling
+    steps:
+    - uses: actions/checkout@v3
+    - name: prereqs
+      run: |
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+        sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list
+        apt update
+        apt-get build-dep wine -y
+        apt install -y sudo git wget build-essential clang ccache
+    - uses: Trass3r/setup-cpp@master
+    - uses: hendrikmuhs/ccache-action@v1
+    - name: build
+      run: |
+        set -eux
+        mkdir -p build && cd build
+        ../configure --enable-win64 --disable-tests --enable-archs=i386,x86_64
+        time make -j`nproc`
+    - uses: actions/upload-artifact@v3
+      with:
+        name: binaries
+        path: build
