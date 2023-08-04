@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    #container: ubuntu:rolling
+    strategy:
+      matrix:
+        include:
+        - name: 'Standard'
+          flags: '' # default: -gdwarf-4 -g -O2
+        - name: 'LTO'
+          flags: 'CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2"'
+        - name: 'Debug'
+          flags: 'CFLAGS="-g -Og" CROSSCFLAGS="-g -Og"'
+    name: ${{ matrix.name }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: mxschmitt/action-tmate/detached@v3
+      with:
+        connect-timeout-seconds: 1200
+    - name: prereqs
+      run: |
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+        sudo rm -f /etc/apt/sources.list.d/azure-cli.sources
+        sudo sed -i "s/$(lsb_release -cs)/plucky/g; s/$(lsb_release -rs)/25.04/g" /etc/apt/sources.list.d/*
+        sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+        sudo apt update
+        sudo apt-get build-dep wine -y
+        sudo apt install -y sudo git time wget build-essential clang mingw-w64 ccache rdfind
+    - uses: Trass3r/setup-cpp@master
+    - uses: hendrikmuhs/ccache-action@v1
+      with:
+        key: ${{ matrix.name }}
+        verbose: 2
+        max-size: 5G
+    - name: build
+      run: |
+        set -ux
+        set +e
+        mkdir -p build && cd build
+        export CCACHE_NOCOMPRESS=1
+        export CCACHE_STATSLOG=/tmp/stats.log
+        ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
+            ${{ matrix.flags }} \
+            --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
+        time make -j$(($(nproc) + 1)) -k
+        make -k install DESTDIR=../install
+        cd ../install/usr/local
+        rdfind -makesymlinks true -makeresultsfile false . || true
+        tar cvapf "$GITHUB_WORKSPACE/wine.tar.xz" *
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ccache-debug-${{ matrix.name }}
+        path: /tmp/stats.log
+    - uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ matrix.name }}
+        path: |
+          wine.tar.xz
