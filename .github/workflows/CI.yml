@@ -26,9 +26,14 @@ jobs:
       run: |
         set -eux
         mkdir -p build && cd build
+        export CCACHE_STATSLOG=/tmp/stats.log
         PATH="/usr/lib/ccache:$PATH" \
         ../configure --enable-win64 --disable-tests --enable-archs=i386,x86_64
         time make -j$(($(nproc) + 1))
+    - uses: actions/upload-artifact@v3
+      with:
+        name: debug
+        path: /tmp/stats.log
     - uses: actions/upload-artifact@v3
       with:
         name: binaries
