@@ -27,6 +27,7 @@ jobs:
         set -eux
         mkdir -p build && cd build
         export CCACHE_STATSLOG=/tmp/stats.log
+        ls -lA /usr/lib/ccache/**
         PATH="/usr/lib/ccache:$PATH" \
         ../configure --enable-win64 --disable-tests --enable-archs=i386,x86_64
         time make -j$(($(nproc) + 1))
