@@ -98,7 +98,7 @@ static void CDECL jpeg_decoder_destroy(struct decoder* iface)
 
     if (This->cinfo_initialized) jpeg_destroy_decompress(&This->cinfo);
     free(This->image_data);
-    RtlFreeHeap(GetProcessHeap(), 0, This);
+    free(This);
 }
 
 static void source_mgr_init_source(j_decompress_ptr cinfo)
@@ -248,6 +248,10 @@ static HRESULT CDECL jpeg_decoder_initialize(struct decoder* iface, IStream *str
     This->stride = (This->frame.bpp * This->cinfo.output_width + 7) / 8;
     data_size = This->stride * This->cinfo.output_height;
 
+    if (data_size / This->stride < This->cinfo.output_height)
+        /* overflow in multiplication */
+        return E_OUTOFMEMORY;
+
     This->image_data = malloc(data_size);
     if (!This->image_data)
         return E_OUTOFMEMORY;
@@ -340,7 +344,7 @@ HRESULT CDECL jpeg_decoder_create(struct decoder_info *info, struct decoder **re
 {
     struct jpeg_decoder *This;
 
-    This = RtlAllocateHeap(GetProcessHeap(), 0, sizeof(struct jpeg_decoder));
+    This = malloc(sizeof(struct jpeg_decoder));
     if (!This) return E_OUTOFMEMORY;
 
     This->decoder.vtable = &jpeg_decoder_vtable;
@@ -618,7 +622,7 @@ static void CDECL jpeg_encoder_destroy(struct encoder* iface)
     struct jpeg_encoder *This = impl_from_encoder(iface);
     if (This->cinfo_initialized)
         jpeg_destroy_compress(&This->cinfo);
-    RtlFreeHeap(GetProcessHeap(), 0, This);
+    free(This);
 };
 
 static const struct encoder_funcs jpeg_encoder_vtable = {
@@ -635,7 +639,7 @@ HRESULT CDECL jpeg_encoder_create(struct encoder_info *info, struct encoder **re
 {
     struct jpeg_encoder *This;
 
-    This = RtlAllocateHeap(GetProcessHeap(), 0, sizeof(struct jpeg_encoder));
+    This = malloc(sizeof(struct jpeg_encoder));
     if (!This) return E_OUTOFMEMORY;
 
     This->encoder.vtable = &jpeg_encoder_vtable;

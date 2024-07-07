@@ -1148,7 +1148,7 @@ static BOOL symt_enum_locals(struct process* pcs, const WCHAR* mask,
     se->sym_info->MaxNameLen = sizeof(se->buffer) - sizeof(SYMBOL_INFO);
 
     pair.pcs = pcs;
-    pair.requested = module_find_by_addr(pair.pcs, pcs->localscope_pc, DMT_UNKNOWN);
+    pair.requested = module_find_by_addr(pair.pcs, pcs->localscope_pc);
     if (!module_get_debug(&pair)) return FALSE;
 
     if (symt_check_tag(pcs->localscope_symt, SymTagFunction) ||
@@ -1318,7 +1318,7 @@ static BOOL sym_enum(HANDLE hProcess, ULONG64 BaseOfDll, PCWSTR Mask,
         HeapFree(GetProcessHeap(), 0, mod);
         return TRUE;
     }
-    pair.requested = module_find_by_addr(pair.pcs, BaseOfDll, DMT_UNKNOWN);
+    pair.requested = module_find_by_addr(pair.pcs, BaseOfDll);
     if (!module_get_debug(&pair))
         return FALSE;
 
@@ -1624,7 +1624,7 @@ BOOL WINAPI SymFromName(HANDLE hProcess, PCSTR Name, PSYMBOL_INFO Symbol)
 
     /* search first in local context */
     pair.pcs = pcs;
-    pair.requested = module_find_by_addr(pair.pcs, pcs->localscope_pc, DMT_UNKNOWN);
+    pair.requested = module_find_by_addr(pair.pcs, pcs->localscope_pc);
     if (module_get_debug(&pair) &&
         (symt_check_tag(pcs->localscope_symt, SymTagFunction) ||
          symt_check_tag(pcs->localscope_symt, SymTagInlineSite)))
@@ -2614,10 +2614,16 @@ BOOL WINAPI SymGetLineFromNameW64(HANDLE hProcess, PCWSTR ModuleName, PCWSTR Fil
  */
 BOOL WINAPI SymFromIndex(HANDLE hProcess, ULONG64 BaseOfDll, DWORD index, PSYMBOL_INFO symbol)
 {
-    FIXME("hProcess = %p, BaseOfDll = %I64x, index = %ld, symbol = %p\n",
+    struct module_pair  pair;
+    struct symt*        sym;
+
+    TRACE("hProcess = %p, BaseOfDll = %I64x, index = %ld, symbol = %p\n",
           hProcess, BaseOfDll, index, symbol);
 
-    return FALSE;
+    if (!module_init_pair(&pair, hProcess, BaseOfDll)) return FALSE;
+    if ((sym = symt_index2ptr(pair.effective, index)) == NULL) return FALSE;
+    symt_fill_sym_info(&pair, NULL, sym, symbol);
+    return TRUE;
 }
 
 /******************************************************************
@@ -2626,10 +2632,21 @@ BOOL WINAPI SymFromIndex(HANDLE hProcess, ULONG64 BaseOfDll, DWORD index, PSYMBO
  */
 BOOL WINAPI SymFromIndexW(HANDLE hProcess, ULONG64 BaseOfDll, DWORD index, PSYMBOL_INFOW symbol)
 {
-    FIXME("hProcess = %p, BaseOfDll = %I64x, index = %ld, symbol = %p\n",
+    PSYMBOL_INFO        si;
+    BOOL                ret;
+
+    TRACE("hProcess = %p, BaseOfDll = %I64x, index = %ld, symbol = %p\n",
           hProcess, BaseOfDll, index, symbol);
 
-    return FALSE;
+    si = HeapAlloc(GetProcessHeap(), 0, sizeof(*si) + symbol->MaxNameLen * sizeof(WCHAR));
+    if (!si) return FALSE;
+
+    si->SizeOfStruct = sizeof(*si);
+    si->MaxNameLen = symbol->MaxNameLen;
+    if ((ret = SymFromIndex(hProcess, BaseOfDll, index, si)))
+        copy_symbolW(symbol, si);
+    HeapFree(GetProcessHeap(), 0, si);
+    return ret;
 }
 
 /******************************************************************

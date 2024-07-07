@@ -34,20 +34,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(d3d10);
 #define TAG_CLI4 MAKE_TAG('C', 'L', 'I', '4')
 #define TAG_CTAB MAKE_TAG('C', 'T', 'A', 'B')
 
-#define D3D10_FX10_TYPE_COLUMN_SHIFT    11
-#define D3D10_FX10_TYPE_COLUMN_MASK     (0x7 << D3D10_FX10_TYPE_COLUMN_SHIFT)
-
-#define D3D10_FX10_TYPE_ROW_SHIFT       8
-#define D3D10_FX10_TYPE_ROW_MASK        (0x7 << D3D10_FX10_TYPE_ROW_SHIFT)
-
-#define D3D10_FX10_TYPE_BASETYPE_SHIFT  3
-#define D3D10_FX10_TYPE_BASETYPE_MASK   (0x1f << D3D10_FX10_TYPE_BASETYPE_SHIFT)
-
-#define D3D10_FX10_TYPE_CLASS_SHIFT     0
-#define D3D10_FX10_TYPE_CLASS_MASK      (0x7 << D3D10_FX10_TYPE_CLASS_SHIFT)
-
-#define D3D10_FX10_TYPE_MATRIX_COLUMN_MAJOR_MASK 0x4000
-
 static inline struct d3d10_effect *impl_from_ID3D10EffectPool(ID3D10EffectPool *iface)
 {
     return CONTAINING_RECORD(iface, struct d3d10_effect, ID3D10EffectPool_iface);
@@ -207,6 +193,15 @@ struct preshader_instr
 
 typedef void (*pres_op_func)(float **args, unsigned int n, const struct preshader_instr *instr);
 
+static void pres_mov(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+        retval[i] = args[0][i];
+}
+
 static void pres_neg(float **args, unsigned int n, const struct preshader_instr *instr)
 {
     float *retval = args[1];
@@ -232,6 +227,33 @@ static void pres_frc(float **args, unsigned int n, const struct preshader_instr 
 
     for (i = 0; i < instr->comp_count; ++i)
         retval[i] = args[0][i] - floor(args[0][i]);
+}
+
+static void pres_exp(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+        retval[i] = exp2f(args[0][i]);
+}
+
+static void pres_log(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+        retval[i] = (args[0][i] == 0.0f ? 0.0f : log2f(fabsf(args[0][i])));
+}
+
+static void pres_rsq(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+        retval[i] = 1.0f / sqrtf(args[0][i]);
 }
 
 static void pres_sin(float **args, unsigned int n, const struct preshader_instr *instr)
@@ -279,6 +301,15 @@ static void pres_atan(float **args, unsigned int n, const struct preshader_instr
         retval[i] = atanf(args[0][i]);
 }
 
+static void pres_sqrt(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+        retval[i] = sqrtf(args[0][i]);
+}
+
 static void pres_ineg(float **args, unsigned int n, const struct preshader_instr *instr)
 {
     int *arg1 = (int *)args[0];
@@ -288,6 +319,19 @@ static void pres_ineg(float **args, unsigned int n, const struct preshader_instr
     for (i = 0; i < instr->comp_count; ++i)
     {
         int v = -arg1[i];
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_not(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0];
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        int v = ~arg1[0];
         retval[i] = *(float *)&v;
     }
 }
@@ -332,6 +376,28 @@ static void pres_ftob(float **args, unsigned int n, const struct preshader_instr
         unsigned int u = args[0][i] == 0.0f ? 0 : ~0u;
         retval[i] = *(float *)&u;
     }
+}
+
+/* Only first source component is used. */
+static void pres_floor(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float value = floorf(args[0][0]);
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+        retval[i] = value;
+}
+
+/* Only first source component is used. */
+static void pres_ceil(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float value = ceilf(args[0][0]);
+    float *retval = args[1];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+        retval[i] = value;
 }
 
 static void pres_min(float **args, unsigned int n, const struct preshader_instr *instr)
@@ -402,6 +468,104 @@ static void pres_iadd(float **args, unsigned int n, const struct preshader_instr
     }
 }
 
+static void pres_imul(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0];
+    int *arg2 = (int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        int v = arg1[instr->scalar ? 0 : i] * arg2[i];
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_bilt(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0];
+    int *arg2 = (int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] < arg2[i] ? ~0u : 0;
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_bige(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0];
+    int *arg2 = (int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] >= arg2[i] ? ~0u : 0;
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_bieq(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0];
+    int *arg2 = (int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] == arg2[i] ? ~0u : 0;
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_bine(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0];
+    int *arg2 = (int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] != arg2[i] ? ~0u : 0;
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_buge(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    unsigned int *arg1 = (unsigned int *)args[0];
+    unsigned int *arg2 = (unsigned int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] >= arg2[i] ? ~0u : 0;
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_bult(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    unsigned int *arg1 = (unsigned int *)args[0];
+    unsigned int *arg2 = (unsigned int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] < arg2[i] ? ~0u : 0;
+        retval[i] = *(float *)&v;
+    }
+}
+
 static void pres_udiv(float **args, unsigned int n, const struct preshader_instr *instr)
 {
     unsigned int *arg1 = (unsigned int *)args[0];
@@ -468,6 +632,88 @@ static void pres_umax(float **args, unsigned int n, const struct preshader_instr
     }
 }
 
+static void pres_and(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    unsigned int *arg1 = (unsigned int *)args[0];
+    unsigned int *arg2 = (unsigned int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] & arg2[i];
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_or(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    unsigned int *arg1 = (unsigned int *)args[0];
+    unsigned int *arg2 = (unsigned int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[0] | arg2[0];
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_xor(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    unsigned int *arg1 = (unsigned int *)args[0];
+    unsigned int *arg2 = (unsigned int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] ^ arg2[i];
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_ishl(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0], *arg2 = (int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] << (arg2[i] % 32);
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_ishr(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    int *arg1 = (int *)args[0], *arg2 = (int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] >> (arg2[i] % 32);
+        retval[i] = *(float *)&v;
+    }
+}
+
+static void pres_ushr(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    unsigned int *arg1 = (unsigned int *)args[0];
+    unsigned int *arg2 = (unsigned int *)args[1];
+    float *retval = args[2];
+    unsigned int i;
+
+    for (i = 0; i < instr->comp_count; ++i)
+    {
+        unsigned int v = arg1[instr->scalar ? 0 : i] >> (arg2[i] % 32);
+        retval[i] = *(float *)&v;
+    }
+}
+
 static void pres_movc(float **args, unsigned int n, const struct preshader_instr *instr)
 {
     float *arg1 = args[0], *arg2 = args[1], *arg3 = args[2];
@@ -478,41 +724,91 @@ static void pres_movc(float **args, unsigned int n, const struct preshader_instr
         retval[i] = arg1[i] ? arg2[i] : arg3[i];
 }
 
+static void pres_dot(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float *retval = args[2];
+    unsigned int i;
+
+    *retval = 0.0f;
+    for (i = 0; i < instr->comp_count; ++i)
+        *retval += args[0][instr->scalar ? 0 : i] * args[1][i];
+}
+
+static void pres_dotswiz(float **args, unsigned int n, const struct preshader_instr *instr)
+{
+    float *retval = args[--n];
+    unsigned int i;
+
+    *retval = 0.0f;
+
+    if (n != 6 && n != 8 && instr->comp_count == 1)
+    {
+        WARN("Unexpected argument count %u, or component count %u.\n", n, instr->comp_count);
+        return;
+    }
+
+    for (i = 0; i < n / 2; ++i)
+        *retval += args[i][0] * args[i + n / 2][0];
+}
+
 struct preshader_op_info
 {
     int opcode;
-    char name[8];
+    char name[16];
     pres_op_func func;
 };
 
 static const struct preshader_op_info preshader_ops[] =
 {
+    { 0x100, "mov",  pres_mov  },
     { 0x101, "neg",  pres_neg  },
     { 0x103, "rcp",  pres_rcp  },
     { 0x104, "frc",  pres_frc  },
+    { 0x105, "exp",  pres_exp  },
+    { 0x106, "log",  pres_log  },
+    { 0x107, "rsq",  pres_rsq  },
     { 0x108, "sin",  pres_sin  },
     { 0x109, "cos",  pres_cos  },
     { 0x10a, "asin", pres_asin },
     { 0x10b, "acos", pres_acos },
     { 0x10c, "atan", pres_atan },
+    { 0x112, "sqrt", pres_sqrt },
     { 0x120, "ineg", pres_ineg },
+    { 0x121, "not",  pres_not  },
     { 0x130, "itof", pres_itof },
     { 0x131, "utof", pres_utof },
     { 0x133, "ftou", pres_ftou },
     { 0x137, "ftob", pres_ftob },
+    { 0x139, "floor",pres_floor},
+    { 0x13a, "ceil", pres_ceil },
     { 0x200, "min",  pres_min  },
     { 0x201, "max",  pres_max  },
     { 0x204, "add",  pres_add  },
     { 0x205, "mul",  pres_mul  },
     { 0x206, "atan2",pres_atan2},
     { 0x208, "div",  pres_div  },
+    { 0x210, "bilt", pres_bilt },
+    { 0x211, "bige", pres_bige },
+    { 0x212, "bieq", pres_bieq },
+    { 0x213, "bine", pres_bine },
+    { 0x214, "buge", pres_buge },
+    { 0x215, "bult", pres_bult },
     { 0x216, "iadd", pres_iadd },
+    { 0x219, "imul", pres_imul },
     { 0x21a, "udiv", pres_udiv },
     { 0x21d, "imin", pres_imin },
     { 0x21e, "imax", pres_imax },
     { 0x21f, "umin", pres_umin },
     { 0x220, "umax", pres_umax },
+    { 0x230, "and",  pres_and  },
+    { 0x231, "or",   pres_or   },
+    { 0x233, "xor",  pres_xor  },
+    { 0x234, "ishl", pres_ishl },
+    { 0x235, "ishr", pres_ishr },
+    { 0x236, "ushr", pres_ushr },
     { 0x301, "movc", pres_movc },
+    { 0x500, "dot",  pres_dot  },
+    { 0x70e, "d3ds_dotswiz", pres_dotswiz },
 };
 
 static int __cdecl preshader_op_compare(const void *a, const void *b)
@@ -634,7 +930,7 @@ static HRESULT d3d10_effect_preshader_eval(struct d3d10_effect_preshader *p)
     unsigned int i, j, regt, offset, instr_count, arg_count;
     const DWORD *ip = ID3D10Blob_GetBufferPointer(p->code);
     struct preshader_instr ins;
-    float *dst, *args[4];
+    float *dst, *args[9];
 
     dst = d3d10_effect_preshader_get_reg_ptr(p, D3D10_REG_TABLE_RESULT, 0);
     memset(dst, 0, sizeof(float) * p->reg_tables[D3D10_REG_TABLE_RESULT].count);
@@ -1587,9 +1883,25 @@ static D3D10_SHADER_VARIABLE_TYPE d3d10_variable_type(uint32_t t, BOOL is_object
     }
 }
 
+struct numeric_type
+{
+    uint32_t type_class   : 3;
+    uint32_t base_type    : 5;
+    uint32_t rows         : 3;
+    uint32_t columns      : 3;
+    uint32_t column_major : 1;
+    uint32_t unknown      : 17;
+};
+
 static HRESULT parse_fx10_type(const char *data, size_t data_size, uint32_t offset, struct d3d10_effect_type *t)
 {
     uint32_t typeinfo, type_flags, type_kind;
+    union
+    {
+        struct numeric_type type;
+        uint32_t data;
+    } numeric;
+
     const char *ptr;
     unsigned int i;
 
@@ -1630,28 +1942,25 @@ static HRESULT parse_fx10_type(const char *data, size_t data_size, uint32_t offs
         case 1:
             TRACE("Type is numeric.\n");
 
-            if (!require_space(ptr - data, 1, sizeof(typeinfo), data_size))
+            if (!require_space(ptr - data, 1, sizeof(numeric), data_size))
             {
                 WARN("Invalid offset %#x (data size %#Ix).\n", offset, data_size);
                 return E_FAIL;
             }
 
-            typeinfo = read_u32(&ptr);
+            numeric.data = read_u32(&ptr);
             t->member_count = 0;
-            t->column_count = (typeinfo & D3D10_FX10_TYPE_COLUMN_MASK) >> D3D10_FX10_TYPE_COLUMN_SHIFT;
-            t->row_count = (typeinfo & D3D10_FX10_TYPE_ROW_MASK) >> D3D10_FX10_TYPE_ROW_SHIFT;
-            t->basetype = d3d10_variable_type((typeinfo & D3D10_FX10_TYPE_BASETYPE_MASK)
-                    >> D3D10_FX10_TYPE_BASETYPE_SHIFT, FALSE, &type_flags);
-            t->type_class = d3d10_variable_class((typeinfo & D3D10_FX10_TYPE_CLASS_MASK)
-                    >> D3D10_FX10_TYPE_CLASS_SHIFT, typeinfo & D3D10_FX10_TYPE_MATRIX_COLUMN_MAJOR_MASK);
+            t->column_count = numeric.type.columns;
+            t->row_count = numeric.type.rows;
+            t->basetype = d3d10_variable_type(numeric.type.base_type, FALSE, &type_flags);
+            t->type_class = d3d10_variable_class(numeric.type.type_class, numeric.type.column_major);
 
-            TRACE("Type description: %#x.\n", typeinfo);
+            TRACE("Type description: %#x.\n", numeric.data);
             TRACE("\tcolumns: %u.\n", t->column_count);
             TRACE("\trows: %u.\n", t->row_count);
             TRACE("\tbasetype: %s.\n", debug_d3d10_shader_variable_type(t->basetype));
             TRACE("\tclass: %s.\n", debug_d3d10_shader_variable_class(t->type_class));
-            TRACE("\tunknown bits: %#x.\n", typeinfo & ~(D3D10_FX10_TYPE_COLUMN_MASK | D3D10_FX10_TYPE_ROW_MASK
-                    | D3D10_FX10_TYPE_BASETYPE_MASK | D3D10_FX10_TYPE_CLASS_MASK | D3D10_FX10_TYPE_MATRIX_COLUMN_MAJOR_MASK));
+            TRACE("\tunknown bits: %#x.\n", numeric.type.unknown);
             break;
 
         case 2:
@@ -2543,7 +2852,7 @@ static HRESULT fxlvm_chunk_handler(const struct vkd3d_shader_dxbc_section_desc *
     size_t data_size = section->data.size;
     uint32_t tag = section->tag;
 
-    TRACE("Chunk tag: %s, size: %Iu.\n", debugstr_an((const char *)&tag, 4), data_size);
+    TRACE("Chunk tag: %s, size: %Iu.\n", debugstr_fourcc(tag), data_size);
 
     switch (tag)
     {
@@ -2557,7 +2866,7 @@ static HRESULT fxlvm_chunk_handler(const struct vkd3d_shader_dxbc_section_desc *
             return parse_fx10_ctab(ctx, data, data_size);
 
         default:
-            FIXME("Unhandled chunk %s.\n", debugstr_an((const char *)&tag, 4));
+            FIXME("Unhandled chunk %s.\n", debugstr_fourcc(tag));
             return S_OK;
     }
 }
@@ -3487,10 +3796,13 @@ static HRESULT create_buffer_object(struct d3d10_effect_variable *v)
 static HRESULT parse_fx10_buffer(const char *data, size_t data_size, const char **ptr,
         BOOL local, struct d3d10_effect_variable *l)
 {
+    enum buffer_flags
+    {
+        IS_TBUFFER = 1,
+    };
     const char *prefix = local ? "Local" : "Shared";
+    uint32_t offset, flags;
     unsigned int i;
-    uint32_t offset;
-    D3D10_CBUFFER_TYPE d3d10_cbuffer_type;
     HRESULT hr;
     unsigned int stride = 0;
 
@@ -3517,32 +3829,30 @@ static HRESULT parse_fx10_buffer(const char *data, size_t data_size, const char 
     l->data_size = read_u32(ptr);
     TRACE("%s buffer data size: %#x.\n", prefix, l->data_size);
 
-    d3d10_cbuffer_type = read_u32(ptr);
-    TRACE("%s buffer type: %#x.\n", prefix, d3d10_cbuffer_type);
+    flags = read_u32(ptr);
+    TRACE("%s buffer flags: %#x.\n", prefix, flags);
 
-    switch(d3d10_cbuffer_type)
+    if (flags & IS_TBUFFER)
     {
-        case D3D10_CT_CBUFFER:
-            l->type->basetype = D3D10_SVT_CBUFFER;
-            if (!copy_name("cbuffer", &l->type->name))
-            {
-                ERR("Failed to copy name.\n");
-                return E_OUTOFMEMORY;
-            }
-            break;
+        l->type->basetype = D3D10_SVT_TBUFFER;
+        copy_name("tbuffer", &l->type->name);
+    }
+    else
+    {
+        l->type->basetype = D3D10_SVT_CBUFFER;
+        copy_name("cbuffer", &l->type->name);
+    }
+    if (!l->type->name)
+    {
+        ERR("Failed to copy name.\n");
+        return E_OUTOFMEMORY;
+    }
 
-        case D3D10_CT_TBUFFER:
-            l->type->basetype = D3D10_SVT_TBUFFER;
-            if (!copy_name("tbuffer", &l->type->name))
-            {
-                ERR("Failed to copy name.\n");
-                return E_OUTOFMEMORY;
-            }
-            break;
-
-        default:
-            ERR("Unexpected D3D10_CBUFFER_TYPE %#x!\n", d3d10_cbuffer_type);
-            return E_FAIL;
+    flags &= ~IS_TBUFFER;
+    if (flags)
+    {
+        ERR("Unexpected buffer flags %#x.\n", flags);
+        return E_FAIL;
     }
 
     l->type->member_count = read_u32(ptr);
@@ -4015,12 +4325,12 @@ HRESULT d3d10_effect_parse(struct d3d10_effect *effect, const void *data, SIZE_T
         section = &dxbc_desc.sections[i];
 
         TRACE("Section %u: tag %s, data {%p, %#Ix}.\n",
-                i, debugstr_an((const char *)&section->tag, 4),
+                i, debugstr_fourcc(section->tag),
                 section->data.code, section->data.size);
 
         if (section->tag != TAG_FX10)
         {
-            FIXME("Unhandled chunk %s.\n", debugstr_an((const char *)&section->tag, 4));
+            FIXME("Unhandled chunk %s.\n", debugstr_fourcc(section->tag));
             continue;
         }
 

@@ -7058,7 +7058,8 @@ static void test_GetRecommendedRenderingMode(void)
         /* IDWriteFontFace3 - and another one */
         if (fontface3) {
             DWRITE_GRID_FIT_MODE gridfit, expected_gridfit;
-            DWRITE_RENDERING_MODE1 mode1, expected1;
+            DWRITE_RENDERING_MODE1 mode1;
+            unsigned int expected1;
 
             gasp = get_gasp_flags(fontface, emsize, 1.0f);
             for (i = 0; i < ARRAY_SIZE(recmode_tests1); ++i)
@@ -9295,6 +9296,9 @@ static DWORD get_sbix_formats(IDWriteFontFace4 *fontface)
                 break;
             case MS_TIFF_TAG:
                 ret |= DWRITE_GLYPH_IMAGE_FORMATS_TIFF;
+                break;
+            case DWRITE_MAKE_OPENTYPE_TAG('f','l','i','p'):
+                /* ignore macOS-specific tag */
                 break;
             default:
                 ok(0, "unexpected format, %#lx\n", GET_BE_DWORD(format));

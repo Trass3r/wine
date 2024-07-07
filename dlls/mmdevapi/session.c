@@ -34,10 +34,19 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(mmdevapi);
 
-extern void sessions_lock(void) DECLSPEC_HIDDEN;
-extern void sessions_unlock(void) DECLSPEC_HIDDEN;
+extern void sessions_lock(void);
+extern void sessions_unlock(void);
 
-extern void set_stream_volumes(struct audio_client *This) DECLSPEC_HIDDEN;
+static WCHAR *duplicate_wstr(const WCHAR *str)
+{
+    const WCHAR *source = str ? str : L"";
+    int len = (wcslen(source) + 1) * sizeof(WCHAR);
+    WCHAR *ret = CoTaskMemAlloc(len);
+    memcpy(ret, source, len);
+    return ret;
+}
+
+extern void set_stream_volumes(struct audio_client *This);
 
 static struct list sessions = LIST_INIT(sessions);
 
@@ -99,7 +108,7 @@ static ULONG WINAPI control_Release(IAudioSessionControl2 *iface)
             IAudioClient3_Release(&This->client->IAudioClient3_iface);
         }
 
-        HeapFree(GetProcessHeap(), 0, This);
+        free(This);
     }
 
     return ref;
@@ -144,46 +153,99 @@ static HRESULT WINAPI control_GetState(IAudioSessionControl2 *iface, AudioSessio
 static HRESULT WINAPI control_GetDisplayName(IAudioSessionControl2 *iface, WCHAR **name)
 {
     struct audio_session_wrapper *This = impl_from_IAudioSessionControl2(iface);
-    FIXME("(%p)->(%p) - stub\n", This, name);
-    return E_NOTIMPL;
+    struct audio_session *session = This->session;
+
+    TRACE("(%p)->(%p) - stub\n", This, name);
+
+    if (!name)
+        return E_POINTER;
+
+    *name = duplicate_wstr(session->display_name);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI control_SetDisplayName(IAudioSessionControl2 *iface, const WCHAR *name,
-                                         const GUID *session)
+                                         const GUID *event_context)
 {
     struct audio_session_wrapper *This = impl_from_IAudioSessionControl2(iface);
-    FIXME("(%p)->(%p, %s) - stub\n", This, name, debugstr_guid(session));
-    return E_NOTIMPL;
+    struct audio_session *session = This->session;
+
+    TRACE("(%p)->(%p, %s) - stub\n", This, name, debugstr_guid(event_context));
+    FIXME("Ignoring event_context\n");
+
+    if (!name)
+        return HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER);
+
+    free(session->display_name);
+    session->display_name = wcsdup(name);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI control_GetIconPath(IAudioSessionControl2 *iface, WCHAR **path)
 {
     struct audio_session_wrapper *This = impl_from_IAudioSessionControl2(iface);
-    FIXME("(%p)->(%p) - stub\n", This, path);
-    return E_NOTIMPL;
+    struct audio_session *session = This->session;
+
+    TRACE("(%p)->(%p) - stub\n", This, path);
+
+    if (!path)
+        return E_POINTER;
+
+    *path = duplicate_wstr(session->icon_path);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI control_SetIconPath(IAudioSessionControl2 *iface, const WCHAR *path,
-                                      const GUID *session)
+                                      const GUID *event_context)
 {
     struct audio_session_wrapper *This = impl_from_IAudioSessionControl2(iface);
-    FIXME("(%p)->(%s, %s) - stub\n", This, debugstr_w(path), debugstr_guid(session));
-    return E_NOTIMPL;
+    struct audio_session *session = This->session;
+
+    TRACE("(%p)->(%s, %s) - stub\n", This, debugstr_w(path), debugstr_guid(event_context));
+    FIXME("Ignoring event_context\n");
+
+    if (!path)
+        return HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER);
+
+    free(session->icon_path);
+    session->icon_path = wcsdup(path);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI control_GetGroupingParam(IAudioSessionControl2 *iface, GUID *group)
 {
     struct audio_session_wrapper *This = impl_from_IAudioSessionControl2(iface);
-    FIXME("(%p)->(%p) - stub\n", This, group);
-    return E_NOTIMPL;
+    struct audio_session *session = This->session;
+
+    TRACE("(%p)->(%p) - stub\n", This, group);
+
+    if (!group)
+        return HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER);
+
+    *group = session->grouping_param;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI control_SetGroupingParam(IAudioSessionControl2 *iface, const GUID *group,
-                                           const GUID *session)
+                                           const GUID *event_context)
 {
     struct audio_session_wrapper *This = impl_from_IAudioSessionControl2(iface);
-    FIXME("(%p)->(%s, %s) - stub\n", This, debugstr_guid(group), debugstr_guid(session));
-    return E_NOTIMPL;
+    struct audio_session *session = This->session;
+
+    TRACE("(%p)->(%s, %s) - stub\n", This, debugstr_guid(group), debugstr_guid(event_context));
+    FIXME("Ignoring event_context\n");
+
+    if (!group)
+        return HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER);
+
+    session->grouping_param = *group;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI control_RegisterAudioSessionNotification(IAudioSessionControl2 *iface,
@@ -557,12 +619,7 @@ static void session_init_vols(struct audio_session *session, UINT channels)
     if (session->channel_count < channels) {
         UINT i;
 
-        if (session->channel_vols)
-            session->channel_vols = HeapReAlloc(GetProcessHeap(), 0, session->channel_vols,
-                                                sizeof(float) * channels);
-        else
-            session->channel_vols = HeapAlloc(GetProcessHeap(), 0, sizeof(float) * channels);
-
+        session->channel_vols = realloc(session->channel_vols, sizeof(float) * channels);
         if (!session->channel_vols)
             return;
 
@@ -575,8 +632,7 @@ static void session_init_vols(struct audio_session *session, UINT channels)
 
 static struct audio_session *session_create(const GUID *guid, IMMDevice *device, UINT channels)
 {
-    struct audio_session *ret = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-                                          sizeof(struct audio_session));
+    struct audio_session *ret = calloc(1, sizeof(struct audio_session));
     if (!ret)
         return NULL;
 
@@ -592,6 +648,8 @@ static struct audio_session *session_create(const GUID *guid, IMMDevice *device,
 
     ret->master_vol = 1.f;
 
+    CoCreateGuid(&ret->grouping_param);
+
     return ret;
 }
 
@@ -599,7 +657,7 @@ struct audio_session_wrapper *session_wrapper_create(struct audio_client *client
 {
     struct audio_session_wrapper *ret;
 
-    ret = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(struct audio_session_wrapper));
+    ret = calloc(1, sizeof(struct audio_session_wrapper));
     if (!ret)
         return NULL;
 

@@ -278,7 +278,7 @@ void free_dc_ptr( DC *dc )
     if (dc->hBitmap)
     {
         if (dc->is_display)
-            NtGdiDeleteClientObj( dc->hBitmap );
+            NtGdiDeleteObjectApp( dc->hBitmap );
         else
             GDI_dec_ref_count( dc->hBitmap );
     }
@@ -731,7 +731,7 @@ HDC WINAPI NtGdiOpenDCW( UNICODE_STRING *device, const DEVMODEW *devmode, UNICOD
     hdc = dc->hSelf;
 
     if (is_display)
-        dc->hBitmap = NtGdiCreateClientObj( NTGDI_OBJ_SURF );
+        dc->hBitmap = NtGdiCreateCompatibleBitmap( hdc, 1, 1 );
     else
         dc->hBitmap = GDI_inc_ref_count( GetStockObject( DEFAULT_BITMAP ));
 
@@ -765,12 +765,6 @@ HDC WINAPI NtGdiOpenDCW( UNICODE_STRING *device, const DEVMODEW *devmode, UNICOD
     DC_InitDC( dc );
     release_dc_ptr( dc );
 
-    if (driver_info && driver_info->cVersion == NTGDI_WIN16_DIB &&
-        !create_dib_surface( hdc, pdev ))
-    {
-        NtGdiDeleteObjectApp( hdc );
-        return 0;
-    }
     return hdc;
 }
 
@@ -1490,7 +1484,7 @@ BOOL WINAPI __wine_get_icm_profile( HDC hdc, BOOL allow_default, DWORD *size, WC
 /***********************************************************************
  *      __wine_get_wgl_driver  (win32u.@)
  */
-struct opengl_funcs *__wine_get_wgl_driver( HDC hdc, UINT version )
+const struct opengl_funcs *__wine_get_wgl_driver( HDC hdc, UINT version )
 {
     BOOL is_display, is_memdc;
     DC *dc;

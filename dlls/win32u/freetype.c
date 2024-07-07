@@ -46,6 +46,7 @@
 #define CompareString __carbon_CompareString
 #define GetCurrentThread __carbon_GetCurrentThread
 #define GetCurrentProcess __carbon_GetCurrentProcess
+#define GetProcessInformation __carbon_GetProcessInformation
 #define AnimatePalette __carbon_AnimatePalette
 #define DeleteMenu __carbon_DeleteMenu
 #define DrawMenu __carbon_DrawMenu
@@ -72,6 +73,7 @@
 #undef GetCurrentThread
 #undef _CDECL
 #undef GetCurrentProcess
+#undef GetProcessInformation
 #undef AnimatePalette
 #undef CheckMenuItem
 #undef DeleteMenu
@@ -330,7 +332,7 @@ static char *find_cache_dir(void)
 {
     FSRef ref;
     OSErr err;
-    static char cached_path[MAX_PATH];
+    static char cached_path[PATH_MAX];
     static const char *wine = "/Wine", *fonts = "/Fonts";
 
     if(*cached_path) return cached_path;
@@ -485,7 +487,7 @@ static char **expand_mac_font(const char *path)
             {
                 int fd;
 
-                sprintf(output, "%s/%s_%04x.ttf", out_dir, filename, font_id);
+                snprintf(output, output_len, "%s/%s_%04x.ttf", out_dir, filename, font_id);
 
                 fd = open(output, O_CREAT | O_EXCL | O_WRONLY, 0600);
                 if(fd != -1 || errno == EEXIST)
@@ -1437,7 +1439,7 @@ static BOOL ReadFontDir(const char *dirname, BOOL external_fonts)
 {
     DIR *dir;
     struct dirent *dent;
-    char path[MAX_PATH];
+    char path[PATH_MAX];
 
     TRACE("Loading fonts from %s\n", debugstr_a(dirname));
 
@@ -1454,7 +1456,7 @@ static BOOL ReadFontDir(const char *dirname, BOOL external_fonts)
 
 	TRACE("Found %s in %s\n", debugstr_a(dent->d_name), debugstr_a(dirname));
 
-	sprintf(path, "%s/%s", dirname, dent->d_name);
+	snprintf(path, sizeof(path), "%s/%s", dirname, dent->d_name);
 
 	if(stat(path, &statbuf) == -1)
 	{
@@ -2058,7 +2060,7 @@ static UINT freetype_get_font_data( struct gdi_font *font, UINT table, UINT offs
     err = pFT_Load_Sfnt_Table(ft_face, RtlUlongByteSwap(table), offset, buf, &len);
     if (err)
     {
-        TRACE("Can't find table %s\n", debugstr_an((char*)&table, 4));
+        TRACE("Can't find table %s\n", debugstr_fourcc(table));
 	return GDI_ERROR;
     }
     return len;
@@ -4010,7 +4012,7 @@ static UINT freetype_get_unicode_ranges( struct gdi_font *font, GLYPHSET *gs )
     else
     {
         DWORD encoding = RtlUlongByteSwap(ft_face->charmap->encoding);
-        FIXME("encoding %s not supported\n", debugstr_an((char *)&encoding, 4));
+        FIXME("encoding %s not supported\n", debugstr_fourcc(encoding));
     }
 
     return num_ranges;
@@ -4175,7 +4177,7 @@ static UINT freetype_get_kerning_pairs( struct gdi_font *font, KERNINGPAIR **pai
         DWORD encoding = RtlUlongByteSwap(ft_face->charmap->encoding);
         ULONG n;
 
-        FIXME("encoding %s not supported\n", debugstr_an((char *)&encoding, 4));
+        FIXME("encoding %s not supported\n", debugstr_fourcc(encoding));
         for (n = 0; n <= 65535; n++)
             glyph_to_char[n] = (USHORT)n;
     }

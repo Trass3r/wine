@@ -192,45 +192,114 @@ static BOOL dump_subkeys(unsigned int hive_off, unsigned int off)
 
 static BOOL dump_value(unsigned int hive_off, unsigned int off)
 {
+    unsigned int i, len, data_size;
     const void *data = NULL;
+    const char *name, *str;
     const value_key *val;
-    const char *name;
 
     val = PRD(hive_off + off, sizeof(*val));
     if (!val || memcmp(&val->signature, "vk", 2))
         return FALSE;
 
-    if (!(val->flags & VAL_COMP_NAME))
+    if (!(val->data_size & 0x80000000) && val->data_size > 4 * BLOCK_SIZE)
     {
-        printf("unsupported value flags: %x\n", val->flags);
-        return FALSE;
+        printf("Warning: data blocks not supported\n");
+        return TRUE;
     }
 
-    if (val->name_size)
+    if (val->name_size && !(val->flags & VAL_COMP_NAME))
     {
         name = PRD(hive_off + off + sizeof(*val), val->name_size);
         if (!name)
             return FALSE;
+        name = get_unicode_str((WCHAR *)name, val->name_size / sizeof(WCHAR));
+        len = strlen(name) + 1;
 
-        printf("\"%*s\"=", val->name_size, name);
+        printf("%s=", name);
+    }
+    else if (val->name_size)
+    {
+        name = PRD(hive_off + off + sizeof(*val), val->name_size);
+        if (!name)
+            return FALSE;
+        len = val->name_size + 3;
+
+        printf("\"%.*s\"=", val->name_size, name);
     }
     else
     {
+        len = 2;
         printf("@=");
     }
 
-    if (val->data_size)
+    data_size = val->data_size;
+    if (data_size & 0x80000000)
     {
-        data = PRD(hive_off + val->data_off + sizeof(unsigned int), val->data_size);
+        data = &val->data_off;
+        data_size &= ~0x80000000;
+    }
+    else if (data_size)
+    {
+        data = PRD(hive_off + val->data_off + sizeof(unsigned int), data_size);
         if (!data)
             return FALSE;
     }
 
     switch (val->data_type)
     {
+    case REG_NONE:
+        /* TODO: dump as REG_NONE value. */
+        printf("hex:");
+        break;
+    case REG_EXPAND_SZ:
+        printf("str(2):");
+        /* fall through */
     case REG_SZ:
-        printf("%s", !data ? "" :
-                get_unicode_str((const WCHAR *)data, val->data_size / sizeof(WCHAR)));
+        printf("%s", !data ? "\"\"" :
+                get_unicode_str((const WCHAR *)data, data_size / sizeof(WCHAR)));
+        break;
+    case REG_QWORD:
+    case REG_BINARY:
+        printf("hex%s:", val->data_type == REG_QWORD ? "(b)" : "");
+        len += 4 + (val->data_type == REG_QWORD ? 3 : 0);
+        for (i = 0; i < data_size; i++)
+        {
+            if (i)
+            {
+                printf(",");
+                len += 1;
+            }
+            if (len > 76)
+            {
+                printf("\\\n  ");
+                len = 2;
+            }
+            printf("%02x", ((BYTE *)data)[i]);
+            len += 2;
+        }
+        break;
+    case REG_DWORD:
+        assert(data_size == sizeof(DWORD) || !data_size);
+        if (data_size)
+            printf("dword:%08x", *(unsigned int *)data);
+        else
+            printf("hex(4):");
+        break;
+    case REG_MULTI_SZ:
+        printf("str(7):\"");
+
+        while(data_size > sizeof(WCHAR))
+        {
+            for (len = 0; len < data_size / sizeof(WCHAR); len++)
+                if (!((WCHAR *)data)[len])
+                    break;
+            str = get_unicode_str(data, len);
+
+            printf("%.*s\\0", (unsigned int)strlen(str + 1) - 1, str + 1);
+            data = ((WCHAR *)data) + len + 1;
+            data_size -= (len + 1) * sizeof(WCHAR);
+        }
+        printf("\"");
         break;
     default:
         printf("unhandled data type %d", val->data_type);
@@ -288,7 +357,7 @@ static BOOL dump_key(unsigned int hive_off, unsigned int off)
         }
         else
         {
-            printf("@=""\n");
+            printf("@=\"\"\n");
         }
         if (!ret)
             return FALSE;
@@ -298,8 +367,6 @@ static BOOL dump_key(unsigned int hive_off, unsigned int off)
 
     if (key->sub_keys)
         ret = dump_subkeys(hive_off, key->sub_keys_list_off);
-    if (ret && key->volatile_sub_keys)
-        ret = dump_subkeys(hive_off, key->volatile_sub_keys_list_off);
 
     path_len -= key->name_size + 1;
     path[path_len] = 0;
@@ -315,7 +382,7 @@ void reg_dump(void)
         return;
 
     printf("File Header\n");
-    printf("  %-20s %4s\n", "signature:", (char*)&hdr->signature);
+    printf("  %-20s %.4s\n", "signature:", (char*)&hdr->signature);
     printf("  %-20s %u\n", "primary sequence:", hdr->seq_prim);
     printf("  %-20s %u\n", "secondary sequence:", hdr->seq_sec);
     printf("  %-20s %s\n", "modification time:", filetime_str(hdr->modif_time));

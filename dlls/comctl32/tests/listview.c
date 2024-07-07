@@ -115,7 +115,6 @@ static const struct message redraw_listview_seq[] = {
     { WM_NCPAINT,    sent|id|defwinproc, 0, 0, HEADER_ID },
     { WM_ERASEBKGND, sent|id|defwinproc|optional, 0, 0, HEADER_ID },
     { WM_NOTIFY,     sent|id|defwinproc, 0, 0, LISTVIEW_ID },
-    { WM_NCPAINT,    sent|id|defwinproc, 0, 0, LISTVIEW_ID },
     { WM_ERASEBKGND, sent|id|defwinproc|optional, 0, 0, LISTVIEW_ID },
     { 0 }
 };
@@ -810,6 +809,8 @@ static HWND create_listview_control(DWORD style)
 
     if (!hwnd) return NULL;
 
+    UpdateWindow(hwnd);
+
     oldproc = (WNDPROC)SetWindowLongPtrA(hwnd, GWLP_WNDPROC,
                                         (LONG_PTR)listview_subclass_proc);
     SetWindowLongPtrA(hwnd, GWLP_USERDATA, (LONG_PTR)oldproc);
@@ -832,6 +833,8 @@ static HWND create_listview_controlW(DWORD style, HWND parent)
     ok(hwnd != NULL, "gle=%ld\n", GetLastError());
 
     if (!hwnd) return NULL;
+
+    UpdateWindow(hwnd);
 
     oldproc = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
                                         (LONG_PTR)listview_subclass_proc);
@@ -1888,7 +1891,10 @@ static void test_create(BOOL is_version_6)
 
     /* WM_MEASUREITEM should be sent when created with LVS_OWNERDRAWFIXED */
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
-    hList = create_listview_control(LVS_OWNERDRAWFIXED | LVS_REPORT);
+    hList = CreateWindowExA(0, WC_LISTVIEWA, NULL,
+        WS_CHILD | WS_BORDER | WS_VISIBLE | LVS_OWNERDRAWFIXED | LVS_REPORT,
+        0, 0, 100, 100, hwndparent, NULL, GetModuleHandleA(NULL), NULL);
+    ok(hList != NULL, "Failed to create ListView window.\n");
     ok_sequence(sequences, PARENT_SEQ_INDEX, create_ownerdrawfixed_parent_seq,
                 "created with LVS_OWNERDRAWFIXED|LVS_REPORT - parent seq", FALSE);
     DestroyWindow(hList);
@@ -2198,8 +2204,8 @@ static void test_color(void)
 
     rect.right = rect.bottom = 1;
     r = GetUpdateRect(hwnd, &rect, TRUE);
-    todo_wine expect(FALSE, r);
-    ok(rect.right == 0 && rect.bottom == 0, "got update rectangle\n");
+    expect(FALSE, r);
+    ok(rect.right == 0 && rect.bottom == 0, "got update rectangle %s\n", wine_dbgstr_rect(&rect));
 
     r = ValidateRect(hwnd, NULL);
     expect(TRUE, r);
@@ -2208,8 +2214,8 @@ static void test_color(void)
 
     rect.right = rect.bottom = 1;
     r = GetUpdateRect(hwnd, &rect, TRUE);
-    todo_wine expect(FALSE, r);
-    ok(rect.right == 0 && rect.bottom == 0, "got update rectangle\n");
+    expect(FALSE, r);
+    ok(rect.right == 0 && rect.bottom == 0, "got update rectangle %s\n", wine_dbgstr_rect(&rect));
 
     r = ValidateRect(hwnd, NULL);
     expect(TRUE, r);
@@ -2218,8 +2224,8 @@ static void test_color(void)
 
     rect.right = rect.bottom = 1;
     r = GetUpdateRect(hwnd, &rect, TRUE);
-    todo_wine expect(FALSE, r);
-    ok(rect.right == 0 && rect.bottom == 0, "got update rectangle\n");
+    expect(FALSE, r);
+    ok(rect.right == 0 && rect.bottom == 0, "got update rectangle %s\n", wine_dbgstr_rect(&rect));
 
     DestroyWindow(hwnd);
 }
@@ -5978,6 +5984,60 @@ static void test_LVM_REDRAWITEMS(void)
     DestroyWindow(list);
 }
 
+static void test_WM_PRINTCLIENT(void)
+{
+    static const int states[] = {SW_HIDE, SW_SHOW};
+    static const LPARAM params[] = {0, PRF_CHECKVISIBLE, PRF_NONCLIENT, PRF_CLIENT, PRF_ERASEBKGND,
+                                    PRF_CHILDREN, PRF_OWNED};
+    const DWORD list_background = RGB(255, 0, 0);
+    const DWORD text_background = RGB(0, 0, 255);
+    HWND hList;
+    COLORREF clr;
+    LONG ret;
+    RECT rc;
+    HDC hdc;
+    int i, j;
+
+    hList = create_listview_control(LVS_LIST);
+    insert_item(hList, 0);
+
+    ret = SendMessageA(hList, LVM_SETBKCOLOR, 0, list_background);
+    ok(ret == TRUE, "got 0x%lx, expected 0x%x\n", ret, TRUE);
+
+    ret = SendMessageA(hList, LVM_SETTEXTBKCOLOR, 0, text_background);
+    ok(ret == TRUE, "got 0x%lx, expected 0x%x\n", ret, TRUE);
+
+    hdc = GetDC(hwndparent);
+    GetClientRect(hwndparent, &rc);
+
+    for (i = 0; i < ARRAY_SIZE(states); i++)
+    {
+        ShowWindow(hList, states[i]);
+
+        for (j = 0; j < ARRAY_SIZE(params); j++)
+        {
+            winetest_push_context("state=%d lParam=0x%Ix", states[i], params[j]);
+
+            FillRect(hdc, &rc, GetStockObject(BLACK_BRUSH));
+            clr = GetPixel(hdc, 1, 1);
+            ok(clr == RGB(0, 0, 0), "got 0x%lx\n", clr);
+            clr = GetPixel(hdc, 50, 1);
+            ok(clr == RGB(0, 0, 0), "got 0x%lx\n", clr);
+            ret = SendMessageA(hList, WM_PRINTCLIENT, (WPARAM)hdc, params[j]);
+            ok(ret == 0, "got %ld\n", ret);
+            clr = GetPixel(hdc, 1, 1);
+            ok(clr == text_background, "got 0x%lx\n", clr);
+            clr = GetPixel(hdc, 50, 1);
+            ok(clr == RGB(0, 0, 0), "got 0x%lx\n", clr);
+
+            winetest_pop_context();
+        }
+    }
+
+    ReleaseDC(hwndparent, hdc);
+    DestroyWindow(hList);
+}
+
 static void test_imagelists(void)
 {
     HWND hwnd, header;
@@ -7153,6 +7213,7 @@ START_TEST(listview)
     test_dispinfo();
     test_LVM_SETITEMTEXT();
     test_LVM_REDRAWITEMS();
+    test_WM_PRINTCLIENT();
     test_imagelists();
     test_deleteitem();
     test_insertitem();
@@ -7205,6 +7266,7 @@ START_TEST(listview)
     test_dispinfo();
     test_LVM_SETITEMTEXT();
     test_LVM_REDRAWITEMS();
+    test_WM_PRINTCLIENT();
     test_oneclickactivate();
     test_state_image();
     test_LVSCW_AUTOSIZE();

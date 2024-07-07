@@ -1,6 +1,6 @@
 /* FAudio - XAudio Reimplementation for FNA
  *
- * Copyright (c) 2011-2023 Ethan Lee, Luigi Auriemma, and the MonoGame Team
+ * Copyright (c) 2011-2024 Ethan Lee, Luigi Auriemma, and the MonoGame Team
  *
  * This software is provided 'as-is', without any express or implied warranty.
  * In no event will the authors be held liable for any damages arising from
@@ -39,6 +39,8 @@
 #define FACT_CONTENT_VERSION_3_4 45
 #define FACT_CONTENT_VERSION_3_1 44
 #define FACT_CONTENT_VERSION_3_0 43
+#define FACT_CONTENT_VERSION_2_4 41
+#define FACT_CONTENT_VERSION_2_0 37
 
 static inline int FACT_INTERNAL_SupportedContent(uint16_t version)
 {
@@ -83,7 +85,7 @@ static inline float FACT_INTERNAL_CalculateFilterFrequency(
 	 *
 	 * -@Woflox
 	 */
-	float freq = 2 * FAudio_sin(
+	float freq = 2.0f * FAudio_sinf(
 		F3DAUDIO_PI *
 		FAudio_min(desiredFrequency / sampleRate, 0.5f)
 	);
@@ -513,7 +515,7 @@ uint8_t FACT_INTERNAL_CreateSound(FACTCue *cue, uint16_t fadeInMS)
 		/* Sound */
 		baseSound = cue->sound;
 	}
-	else
+	else if (cue->variation)
 	{
 		/* Variation */
 		if (cue->variation->flags == 3)
@@ -1025,21 +1027,21 @@ float FACT_INTERNAL_CalculateRPC(
 			}
 			else if (rpc->points[i].type == 1) /* Fast */
 			{
-				result += maxY * (1.0f - FAudio_pow(1.0f - FAudio_pow(deltaXNormalized, 1.0f / 1.5f), 1.5f));
+				result += maxY * (1.0f - FAudio_powf(1.0f - FAudio_powf(deltaXNormalized, 1.0f / 1.5f), 1.5f));
 			}
 			else if (rpc->points[i].type == 2) /* Slow */
 			{
-				result += maxY * (1.0f - FAudio_pow(1.0f - FAudio_pow(deltaXNormalized, 1.5f), 1.0f / 1.5f));
+				result += maxY * (1.0f - FAudio_powf(1.0f - FAudio_powf(deltaXNormalized, 1.5f), 1.0f / 1.5f));
 			}
 			else if (rpc->points[i].type == 3) /* SinCos */
 			{
 				if (maxY > 0.0f)
 				{
-					result += maxY * (1.0f - FAudio_pow(1.0f - FAudio_sqrtf(deltaXNormalized), 2.0f));
+					result += maxY * (1.0f - FAudio_powf(1.0f - FAudio_sqrtf(deltaXNormalized), 2.0f));
 				}
 				else
 				{
-					result += maxY * (1.0f - FAudio_sqrtf(1.0f - FAudio_pow(deltaXNormalized, 2.0f)));
+					result += maxY * (1.0f - FAudio_sqrtf(1.0f - FAudio_powf(deltaXNormalized, 2.0f)));
 				}
 			}
 			else
@@ -1660,7 +1662,7 @@ void FACT_INTERNAL_UpdateCue(FACTCue *cue)
 	FACTSoundInstance *sound;
 
 	/* Interactive sound selection */
-	if (!(cue->data->flags & 0x04) && cue->variation->flags == 3)
+	if (!(cue->data->flags & 0x04) && cue->variation && cue->variation->flags == 3)
 	{
 		/* Interactive */
 		if (cue->parentBank->parentEngine->variables[cue->variation->variable].accessibility & 0x04)
@@ -2064,8 +2066,8 @@ uint32_t FACT_INTERNAL_ParseAudioEngine(
 			rpcOffset,
 			dspPresetOffset,
 			dspParameterOffset;
-	uint16_t blob1Count, blob2Count;
-	uint8_t version, tool;
+	uint16_t blob1Count, blob2Count, tool;
+	uint8_t version;
 	uint8_t se;
 	uint32_t magic;
 	size_t memsize;
@@ -3105,7 +3107,17 @@ uint32_t FACT_INTERNAL_ParseWaveBank(
 	#define DOSWAP_64(x) x = FAudio_swap64BE(x)
 
 	fileOffset = offset;
-	READ(&header, sizeof(header))
+
+	FAudio_zero(&header, sizeof(header));
+	READ(&header.dwSignature, sizeof(header.dwSignature));
+	READ(&header.dwVersion, sizeof(header.dwVersion));
+	if (header.dwVersion > FACT_CONTENT_VERSION_2_4)
+	{
+		READ(&header.dwHeaderVersion, sizeof(header.dwHeaderVersion));
+	}
+
+	READ(&header.Segments, sizeof(header.Segments));
+
 	se = header.dwSignature == 0x57424E44;
 	if (se)
 	{
@@ -3123,12 +3135,20 @@ uint32_t FACT_INTERNAL_ParseWaveBank(
 		return -1; /* TODO: NOT XACT FILE */
 	}
 
-	if (!FACT_INTERNAL_SupportedContent(header.dwVersion))
+	/* We support all Wavebank versions - Restore when SoundBank support them also. */
+	/*if (!FACT_INTERNAL_SupportedContent(header.dwVersion))
+	{
+		return -2;
+	}
+	*/
+	if (	header.dwVersion < FACT_CONTENT_VERSION_2_4 ||
+		header.dwVersion > FACT_CONTENT_VERSION	)
 	{
 		return -2;
 	}
 
-	if (!FACT_INTERNAL_SupportedWBContent(header.dwHeaderVersion))
+	if (	header.dwVersion > FACT_CONTENT_VERSION_2_4 &&
+		!FACT_INTERNAL_SupportedWBContent(header.dwHeaderVersion)	)
 	{
 		return -3;
 	}

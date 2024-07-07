@@ -2568,30 +2568,13 @@ typedef struct _PDB_SYMBOLS
     unsigned int   resvd4;
 } PDB_SYMBOLS, *PPDB_SYMBOLS;
 
-typedef struct
+/* FIXME other entries are unknown */
+enum PDB_STREAM_INDEX
 {
-    unsigned short FPO;
-    unsigned short unk0;
-    unsigned short unk1;
-    unsigned short unk2;
-    unsigned short unk3;
-    unsigned short sections_stream;
-} PDB_STREAM_INDEXES_OLD;
-
-typedef struct
-{
-    unsigned short FPO;
-    unsigned short unk0;
-    unsigned short unk1;
-    unsigned short unk2;
-    unsigned short unk3;
-    unsigned short sections_stream;
-    unsigned short unk4;
-    unsigned short unk5;
-    unsigned short unk6;
-    unsigned short FPO_EXT;
-    unsigned short unk7;
-} PDB_STREAM_INDEXES;
+    PDB_SIDX_FPO,
+    PDB_SIDX_SECTIONS = 5,
+    PDB_SIDX_FPOEXT = 9
+};
 
 typedef struct _PDB_FPO_DATA
 {
@@ -2820,3 +2803,13 @@ typedef struct OMFSourceModule
     unsigned short  cSeg;
     unsigned int    baseSrcFile[1];
 } OMFSourceModule;
+
+
+/* undocumented. IMAGE_DEBUG_TYPE_REPRO directory entry */
+typedef struct
+{
+    unsigned        flags;           /* only seen 0x20 */
+    GUID            guid;            /* guid used in CODEVIEW debug entry */
+    unsigned        unk[3];          /* unknown, potentially hash of some internal parts of image */
+    unsigned        debug_timestamp; /* used in all DEBUG entries as timestamp (including this one) */
+} IMAGE_DEBUG_REPRO;

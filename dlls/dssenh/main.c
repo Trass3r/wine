@@ -162,7 +162,8 @@ static void destroy_key( struct key *key )
 {
     if (!key) return;
     BCryptDestroyKey( key->handle );
-    key->magic = 0;
+    /* Ensure compiler doesn't optimize out the assignment with 0. */
+    SecureZeroMemory( &key->magic, sizeof(key->magic) );
     free( key );
 }
 
@@ -213,7 +214,8 @@ static void destroy_container( struct container *container )
     if (!container) return;
     destroy_key( container->exch_key );
     destroy_key( container->sign_key );
-    container->magic = 0;
+    /* Ensure compiler doesn't optimize out the assignment with 0. */
+    SecureZeroMemory( &container->magic, sizeof(container->magic) );
     free( container );
 }
 
@@ -747,6 +749,17 @@ BOOL WINAPI CPGetUserKey( HCRYPTPROV hprov, DWORD keyspec, HCRYPTKEY *ret_key )
     return ret;
 }
 
+BOOL WINAPI CPSetKeyParam( HCRYPTPROV hprov, HCRYPTKEY hkey, DWORD param, BYTE *data, DWORD flags )
+{
+    if (!data)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+
+    return FALSE;
+}
+
 BOOL WINAPI CPGenRandom( HCRYPTPROV hprov, DWORD len, BYTE *buffer )
 {
     struct container *container = (struct container *)hprov;
@@ -821,7 +834,8 @@ static void destroy_hash( struct hash *hash )
 {
     if (!hash) return;
     BCryptDestroyHash( hash->handle );
-    hash->magic = 0;
+    /* Ensure compiler doesn't optimize out the assignment with 0. */
+    SecureZeroMemory( &hash->magic, sizeof(hash->magic) );
     free( hash );
 }
 
@@ -1007,6 +1021,12 @@ BOOL WINAPI CPVerifySignature( HCRYPTPROV hprov, HCRYPTHASH hhash, const BYTE *s
     {
         FIXME( "flags %08lx not supported\n", flags );
         return FALSE;
+    }
+
+    if (!hash->finished)
+    {
+        if (BCryptFinishHash( hash->handle, hash->value, hash->len, 0 )) return FALSE;
+        hash->finished = TRUE;
     }
 
     return !BCryptVerifySignature( key->handle, NULL, hash->value, hash->len, (UCHAR *)sig, siglen, 0 );

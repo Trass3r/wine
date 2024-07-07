@@ -113,7 +113,7 @@ static inline BOOL is_broadcast( HWND hwnd )
  */
 HWND WIN_IsCurrentProcess( HWND hwnd )
 {
-    return UlongToHandle( NtUserCallHwnd( hwnd, NtUserIsCurrehtProcessWindow ));
+    return UlongToHandle( NtUserCallHwnd( hwnd, NtUserIsCurrentProcessWindow ));
 }
 
 
@@ -124,7 +124,7 @@ HWND WIN_IsCurrentProcess( HWND hwnd )
  */
 HWND WIN_IsCurrentThread( HWND hwnd )
 {
-    return UlongToHandle( NtUserCallHwnd( hwnd, NtUserIsCurrehtThreadWindow ));
+    return UlongToHandle( NtUserCallHwnd( hwnd, NtUserIsCurrentThreadWindow ));
 }
 
 
@@ -612,7 +612,17 @@ BOOL WINAPI IsWindowUnicode( HWND hwnd )
  */
 DPI_AWARENESS_CONTEXT WINAPI GetWindowDpiAwarenessContext( HWND hwnd )
 {
-    return NtUserGetWindowDpiAwarenessContext( hwnd );
+    return LongToHandle( NtUserGetWindowDpiAwarenessContext( hwnd ) );
+}
+
+
+/***********************************************************************
+ *		GetWindowDpiHostingBehavior  (USER32.@)
+ */
+DPI_HOSTING_BEHAVIOR WINAPI GetWindowDpiHostingBehavior( HWND hwnd )
+{
+    FIXME("(%p): stub\n", hwnd);
+    return DPI_HOSTING_BEHAVIOR_DEFAULT;
 }
 
 
@@ -663,7 +673,8 @@ void WINAPI SwitchToThisWindow( HWND hwnd, BOOL alt_tab )
  */
 BOOL WINAPI GetWindowRect( HWND hwnd, RECT *rect )
 {
-    BOOL ret = NtUserGetWindowRect( hwnd, rect );
+    UINT dpi = NTUSER_DPI_CONTEXT_GET_DPI( (UINT_PTR)GetThreadDpiAwarenessContext() );
+    BOOL ret = NtUserGetWindowRect( hwnd, rect, dpi );
     if (ret) TRACE( "hwnd %p %s\n", hwnd, wine_dbgstr_rect(rect) );
     return ret;
 }
@@ -705,7 +716,8 @@ int WINAPI GetWindowRgnBox( HWND hwnd, RECT *rect )
  */
 BOOL WINAPI GetClientRect( HWND hwnd, RECT *rect )
 {
-    return NtUserGetClientRect( hwnd, rect );
+    UINT dpi = NTUSER_DPI_CONTEXT_GET_DPI( (UINT_PTR)GetThreadDpiAwarenessContext() );
+    return NtUserGetClientRect( hwnd, rect, dpi );
 }
 
 
@@ -748,7 +760,8 @@ HWND WINAPI ChildWindowFromPointEx( HWND parent, POINT pt, UINT flags )
  */
 INT WINAPI MapWindowPoints( HWND hwnd_from, HWND hwnd_to, POINT *points, UINT count )
 {
-    return NtUserMapWindowPoints( hwnd_from, hwnd_to, points, count );
+    UINT dpi = NTUSER_DPI_CONTEXT_GET_DPI( (UINT_PTR)GetThreadDpiAwarenessContext() );
+    return NtUserMapWindowPoints( hwnd_from, hwnd_to, points, count, dpi );
 }
 
 
@@ -888,7 +901,28 @@ WORD WINAPI GetWindowWord( HWND hwnd, INT offset )
 /**********************************************************************
  *		GetWindowLongA (USER32.@)
  */
-LONG WINAPI GetWindowLongA( HWND hwnd, INT offset )
+
+#ifdef __i386__
+
+/* This wrapper is here to workaround a ntlea quirk. First of all, ntlea
+ * checks whether GetWindowLongA starts with the Win32 hotpatchable prologue,
+ * if it can find that, it will use a hooking strategy more difficult for us
+ * to deal with. Secondly, it assumes what follows the prologue is a `pushl $-2`,
+ * and will try to skip over this instruction when calling `GetWindowLongA`,
+ * (i.e. it tries to jump to `GetWindowLongA + 7`, 5 bytes for the prologue, 2
+ * bytes for the `pushl`.). We have to anticipate that and make sure the result
+ * of doing this won't be a messed up stack, or a desynced PC.
+ */
+__ASM_STDCALL_FUNC( GetWindowLongA, 8,
+        ".byte 0x8b, 0xff, 0x55, 0x8b, 0xec\n" /* Win32 hotpatchable prologue. */
+        "pushl $-2\n"
+        "addl $4, %esp\n"
+        "popl %ebp\n"
+        "jmp " __ASM_STDCALL("get_window_longA", 8) )
+LONG WINAPI get_window_longA( HWND hwnd, INT offset )
+#else
+LONG WINAPI DECLSPEC_HOTPATCH GetWindowLongA( HWND hwnd, INT offset )
+#endif
 {
     switch (offset)
     {
@@ -1539,18 +1573,6 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetWindowInfo( HWND hwnd, WINDOWINFO *info )
 {
     return NtUserGetWindowInfo( hwnd, info );
 }
-
-/******************************************************************************
- *              SwitchDesktop (USER32.@)
- *
- * NOTES: Sets the current input or interactive desktop.
- */
-BOOL WINAPI SwitchDesktop( HDESK hDesktop)
-{
-    FIXME("(hwnd %p) stub!\n", hDesktop);
-    return TRUE;
-}
-
 
 /*****************************************************************************
  *              UpdateLayeredWindowIndirect  (USER32.@)

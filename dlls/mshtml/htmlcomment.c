@@ -43,59 +43,8 @@ static inline HTMLCommentElement *impl_from_IHTMLCommentElement(IHTMLCommentElem
     return CONTAINING_RECORD(iface, HTMLCommentElement, IHTMLCommentElement_iface);
 }
 
-static HRESULT WINAPI HTMLCommentElement_QueryInterface(IHTMLCommentElement *iface,
-        REFIID riid, void **ppv)
-{
-    HTMLCommentElement *This = impl_from_IHTMLCommentElement(iface);
-
-    return IHTMLDOMNode_QueryInterface(&This->element.node.IHTMLDOMNode_iface, riid, ppv);
-}
-
-static ULONG WINAPI HTMLCommentElement_AddRef(IHTMLCommentElement *iface)
-{
-    HTMLCommentElement *This = impl_from_IHTMLCommentElement(iface);
-
-    return IHTMLDOMNode_AddRef(&This->element.node.IHTMLDOMNode_iface);
-}
-
-static ULONG WINAPI HTMLCommentElement_Release(IHTMLCommentElement *iface)
-{
-    HTMLCommentElement *This = impl_from_IHTMLCommentElement(iface);
-
-    return IHTMLDOMNode_Release(&This->element.node.IHTMLDOMNode_iface);
-}
-
-static HRESULT WINAPI HTMLCommentElement_GetTypeInfoCount(IHTMLCommentElement *iface, UINT *pctinfo)
-{
-    HTMLCommentElement *This = impl_from_IHTMLCommentElement(iface);
-    return IDispatchEx_GetTypeInfoCount(&This->element.node.event_target.dispex.IDispatchEx_iface, pctinfo);
-}
-
-static HRESULT WINAPI HTMLCommentElement_GetTypeInfo(IHTMLCommentElement *iface, UINT iTInfo,
-        LCID lcid, ITypeInfo **ppTInfo)
-{
-    HTMLCommentElement *This = impl_from_IHTMLCommentElement(iface);
-    return IDispatchEx_GetTypeInfo(&This->element.node.event_target.dispex.IDispatchEx_iface, iTInfo, lcid,
-            ppTInfo);
-}
-
-static HRESULT WINAPI HTMLCommentElement_GetIDsOfNames(IHTMLCommentElement *iface, REFIID riid,
-                                                LPOLESTR *rgszNames, UINT cNames,
-                                                LCID lcid, DISPID *rgDispId)
-{
-    HTMLCommentElement *This = impl_from_IHTMLCommentElement(iface);
-    return IDispatchEx_GetIDsOfNames(&This->element.node.event_target.dispex.IDispatchEx_iface, riid, rgszNames,
-            cNames, lcid, rgDispId);
-}
-
-static HRESULT WINAPI HTMLCommentElement_Invoke(IHTMLCommentElement *iface, DISPID dispIdMember,
-                            REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams,
-                            VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
-{
-    HTMLCommentElement *This = impl_from_IHTMLCommentElement(iface);
-    return IDispatchEx_Invoke(&This->element.node.event_target.dispex.IDispatchEx_iface, dispIdMember, riid,
-            lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
-}
+DISPEX_IDISPATCH_IMPL(HTMLCommentElement, IHTMLCommentElement,
+                      impl_from_IHTMLCommentElement(iface)->element.node.event_target.dispex)
 
 static HRESULT WINAPI HTMLCommentElement_put_text(IHTMLCommentElement *iface, BSTR v)
 {
@@ -146,30 +95,6 @@ static inline HTMLCommentElement *impl_from_HTMLDOMNode(HTMLDOMNode *iface)
     return CONTAINING_RECORD(iface, HTMLCommentElement, element.node);
 }
 
-static HRESULT HTMLCommentElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
-{
-    HTMLCommentElement *This = impl_from_HTMLDOMNode(iface);
-
-    *ppv =  NULL;
-
-    if(IsEqualGUID(&IID_IHTMLCommentElement, riid)) {
-        TRACE("(%p)->(IID_IHTMLCommentElement %p)\n", This, ppv);
-        *ppv = &This->IHTMLCommentElement_iface;
-    }else {
-        return HTMLElement_QI(&This->element.node, riid, ppv);
-    }
-
-    IUnknown_AddRef((IUnknown*)*ppv);
-    return S_OK;
-}
-
-static void HTMLCommentElement_destructor(HTMLDOMNode *iface)
-{
-    HTMLCommentElement *This = impl_from_HTMLDOMNode(iface);
-
-    HTMLElement_destructor(&This->element.node);
-}
-
 static HRESULT HTMLCommentElement_clone(HTMLDOMNode *iface, nsIDOMNode *nsnode, HTMLDOMNode **ret)
 {
     HTMLCommentElement *This = impl_from_HTMLDOMNode(iface);
@@ -184,14 +109,38 @@ static HRESULT HTMLCommentElement_clone(HTMLDOMNode *iface, nsIDOMNode *nsnode, 
     return S_OK;
 }
 
+static inline HTMLCommentElement *impl_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLCommentElement, element.node.event_target.dispex);
+}
+
+static void *HTMLCommentElement_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLCommentElement *This = impl_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLCommentElement, riid))
+        return &This->IHTMLCommentElement_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
 static const NodeImplVtbl HTMLCommentElementImplVtbl = {
-    &CLSID_HTMLCommentElement,
-    HTMLCommentElement_QI,
-    HTMLCommentElement_destructor,
-    HTMLElement_cpc,
-    HTMLCommentElement_clone,
-    HTMLElement_handle_event,
-    HTMLElement_get_attr_col
+    .clsid                 = &CLSID_HTMLCommentElement,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLCommentElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const event_target_vtbl_t HTMLCommentElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLCommentElement_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
 };
 
 static const tid_t HTMLCommentElement_iface_tids[] = {
@@ -200,8 +149,8 @@ static const tid_t HTMLCommentElement_iface_tids[] = {
     0
 };
 static dispex_static_data_t HTMLCommentElement_dispex = {
-    L"Comment",
-    &HTMLElement_event_target_vtbl.dispex_vtbl,
+    "Comment",
+    &HTMLCommentElement_event_target_vtbl.dispex_vtbl,
     DispHTMLCommentElement_tid,
     HTMLCommentElement_iface_tids,
     HTMLElement_init_dispex_info

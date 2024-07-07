@@ -450,6 +450,183 @@ if 1==0 (echo o1) else echo o2&&echo o3
 if 1==0 (echo p1) else echo p2||echo p3
 echo ---
 if 1==0 (echo q1) else echo q2&echo q3
+echo ------------- Testing internal commands return codes
+setlocal EnableDelayedExpansion
+
+echo --- call and IF/FOR blocks
+call :setError 0 &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!
+call :setError 33 &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!
+call :setError 666 & (echo foo &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (echo foo >> h:\i\dont\exist\at\all.txt &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & echo foo >> h:\i\dont\exist\at\all.txt & echo ERRORLEVEL !errorlevel!
+call :setError 666 & ((if 1==1 echo "">NUL) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & ((if 1==0 echo "">NUL) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & ((if 1==1 (call :setError 33)) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & ((if 1==0 (call :setError 33) else call :setError 34) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & ((for %%i in () do echo "") &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & ((for %%i in () do call :setError 33) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & ((for %%i in (a) do call :setError 0) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & ((for %%i in (a) do call :setError 33) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+
+echo --- success/failure for TYPE command
+mkdir foo & cd foo
+echo a > fileA
+echo b > fileB
+call :setError 666 & (type &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (type NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (type i\dont\exist\at\all.txt &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (type file* i\dont\exist\at\all.txt &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+echo ---
+call :setError 666 & (type i\dont\exist\at\all.txt file* &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+
+echo --- success/failure for COPY command
+mkdir foo & cd foo
+echo a > fileA
+echo b > fileB
+call :setError 666 & (copy fileA >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (copy fileA fileZ >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (copy fileA fileZ /-Y >NUL <NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (copy fileA+fileD fileZ /-Y >NUL <NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (copy fileD+fileA fileZ /-Y >NUL <NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+if exist fileD echo Unexpected fileD
+cd .. && rd /q /s foo
+
+echo --- success/failure for MOVE command
+mkdir foo & cd foo
+echo a > fileA
+echo b > fileB
+call :setError 666 & (move >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (move fileA fileC >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (move fileC nowhere\fileC >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (move fileD fileE >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (move fileC fileB /-Y >NUL <NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+
+echo --- success/failure for RENAME command
+mkdir foo & cd foo
+echo a > fileA
+echo b > fileB
+call :setError 666 & (rename fileB >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (rename fileB fileA >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (rename fileB nowhere\fileB >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (rename fileD fileC >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (rename fileB fileC >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+
+echo --- success/failure for ERASE command
+mkdir foo & cd foo
+echo a > fileA
+echo b > fileB
+echo e > fileE
+call :setError 666 & (erase &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (erase fileE &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (erase i\dont\exist\at\all.txt &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (erase file* i\dont\exist\at\all.txt &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+
+echo --- success/failure for MKDIR,MD command
+mkdir foo & cd foo
+call :setError 666 & (mkdir &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (mkdir abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (mkdir abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (mkdir @:\cba\abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (mkdir NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+
+echo --- success/failure for CD command
+mkdir foo & cd foo
+mkdir abc
+call :setError 666 & (cd abc >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (cd abc >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (cd ..  >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (cd     >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+
+echo --- success/failure for PUSHD/POPD commands
+mkdir foo & cd foo
+mkdir abc
+call :setError 666 & (pushd &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (pushd abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (pushd abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (popd abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (popd &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & popd & echo ERRORLEVEL !errorlevel!
+cd .. && rd /q /s foo
+
+echo --- success/failure for DIR command
+mkdir foo & cd foo
+echo a > fileA
+echo b > fileB
+mkdir dir
+echo b > dir\fileB
+call :setError 666 & (dir /e >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (dir zzz >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (dir fileA zzz >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (dir zzz fileA >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (dir dir\zzz >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (dir file* >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+echo --- success/failure for RMDIR/RD command
+mkdir foo & cd foo
+mkdir abc
+call :setError 666 & (rmdir &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+echo "">abc\abc
+call :setError 666 & (rmdir abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (rmdir abc\abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+erase abc\abc
+call :setError 666 & (rmdir abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (rmdir abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (rmdir @:\cba\abc &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+cd .. && rd /q /s foo
+mkdir foo & cd foo
+mkdir abc
+call :setError 666 & rmdir & echo ERRORLEVEL !errorlevel!
+echo "">abc\abc
+call :setError 666 & rmdir abc & echo ERRORLEVEL !errorlevel!
+call :setError 666 & rmdir abc\abc & echo ERRORLEVEL !errorlevel!
+erase abc\abc
+call :setError 666 & rmdir abc & echo ERRORLEVEL !errorlevel!
+call :setError 666 & rmdir abc & echo ERRORLEVEL !errorlevel!
+call :setError 666 & rmdir @:\cba\abc & echo ERRORLEVEL !errorlevel!
+cd .. && rd /q /s foo
+
+echo --- success/failure for SETLOCAL/ENDLOCAL commands
+call :setError 666 & (setlocal foobar &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (setlocal &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (endlocal foobar &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (setlocal DisableExtensions &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (setlocal EnableExtensions &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+echo --- success/failure for DATE command
+call :setError 666 & (date /t >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (date AAAA >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+rem need evelated priviledges to set the date
+echo --- success/failure for TIME command
+call :setError 666 & (time /t >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (time AAAA >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+rem need evelated priviledges to set the time
+echo --- success/failure for BREAK command
+call :setError 666 & (break &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (break 345 &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+echo --- success/failure for VER command
+call :setError 666 & (ver >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (ver foo >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (ver /f >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+echo --- success/failure for VERIFY command
+call :setError 666 & (verify >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (verify on >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (verify foobar >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+echo --- success/failure for VOL command
+call :setError 666 & (vol >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (vol c: >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (vol foobar >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+call :setError 666 & (vol /Z >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+echo --- success/failure for LABEL command
+call :setError 666 & (<NUL label >NUL &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+rem need evelated priviledges to test
+
+echo ---
+setlocal DisableDelayedExpansion
 echo ------------ Testing 'set' ------------
 call :setError 0
 rem Remove any WINE_FOO* WINE_BA* environment variables from shell before proceeding
@@ -622,7 +799,13 @@ echo %WINE_VAR:~2,-1%
 echo %WINE_VAR:~2,-3%
 echo '%WINE_VAR:~-2,-4%'
 echo %WINE_VAR:~-3,-2%
+echo %WINE_VAR:~4,4%
 set WINE_VAR=
+mkdir dummydir
+cd dummydir
+echo %CD:~-6,6%
+cd ..
+rmdir dummydir
 
 echo ------------ Testing variable substitution ------------
 echo --- in FOR variables
@@ -738,6 +921,14 @@ echo '%~xs1'
 goto :eof
 :endEchoFuns
 
+setlocal EnableDelayedExpansion
+set WINE_FOO=foo bar
+for %%i in ("!WINE_FOO!") do echo %%i
+for %%i in (!WINE_FOO!) do echo %%i
+setlocal DisableDelayedExpansion
+
+echo --- in digit variables
+for %%0 in (a b) do echo %%0 %%1 %%2
 echo ------------ Testing parameter zero ------------
 call :func parm1 parm2
 goto :endParm0
@@ -779,6 +970,12 @@ if %WINE_FOO% == foo (
     set WINE_FOO=bar
     if !WINE_FOO! == bar (echo bar) else echo foo
 )
+set WINE_FOO=32
+if %WINE_FOO% == 32 (
+  set WINE_FOO=33
+  call :setError 33
+  if errorlevel !WINE_FOO! (echo gotitright) else echo gotitwrong
+)
 echo %ErrorLevel%
 setlocal DisableDelayedExpansion
 echo %ErrorLevel%
@@ -786,6 +983,12 @@ set WINE_FOO=foo
 echo %WINE_FOO%
 echo !WINE_FOO!
 set WINE_FOO=
+
+setlocal EnableDelayedExpansion
+set WINE_FOO=foo bar
+if !WINE_FOO!=="" (echo empty) else echo not empty
+setlocal DisableDelayedExpansion
+
 echo --- using /V cmd flag
 echo @echo off> tmp.cmd
 echo set WINE_FOO=foo>> tmp.cmd
@@ -1029,6 +1232,56 @@ if not exist %windir% (
 ) else (
   echo windir does exist
 )
+if 1 == 0 (
+   echo 1 == 0 should not be true
+@space@
+) else echo block containing a line with just space seems to work
+if 1 == 0 (
+   echo 1 == 0 should not be true
+@tab@
+) else echo block containing a line with just tab seems to work
+if 1 == 0 (
+   echo 1 == 0 should not be true
+@space@@tab@
+) else echo block containing a line with just space and tab seems to work
+if 1 == 0 (
+   echo 1 == 0 should not be true
+@tab@@space@
+) else echo block containing a line with just tab and space seems to work
+if 1 == 0 (
+   echo 1 == 0 should not be true
+@space@
+@space@
+) else echo block containing two lines with just space seems to work
+if 1 == 0 (
+   echo 1 == 0 should not be true
+@tab@
+@tab@
+) else echo block containing two lines with just tab seems to work
+::
+echo @if 1 == 1 (> blockclosing.cmd
+echo   echo with closing bracket>> blockclosing.cmd
+echo )>> blockclosing.cmd
+cmd.exe /Q /C blockclosing.cmd
+echo %ERRORLEVEL% ok
+::
+echo @if 1 == 1 (> blockclosing.cmd
+echo   echo without closing bracket first>> blockclosing.cmd
+echo   echo without closing bracket second>> blockclosing.cmd
+cmd.exe /Q /C blockclosing.cmd
+echo %ERRORLEVEL% two lines
+::
+echo echo before both blocks> blockclosing.cmd
+echo @if 1 == 1 (>> blockclosing.cmd
+echo   echo before nested block without closing bracket>> blockclosing.cmd
+echo   @if 2 == 2 (>> blockclosing.cmd
+echo     echo without closing bracket>> blockclosing.cmd
+echo )>> blockclosing.cmd
+echo echo outside of block without closing bracket>> blockclosing.cmd
+cmd.exe /Q /C blockclosing.cmd
+echo %ERRORLEVEL% nested
+::
+del blockclosing.cmd
 echo --- case sensitivity with and without /i option
 if bar==BAR echo if does not default to case sensitivity
 if not bar==BAR echo if seems to default to case sensitivity
@@ -1176,6 +1429,11 @@ if exist "subdir/" (
 ) else (
    echo ERROR exist subdir with / and quotes not working
 )
+if not exist "" (
+    echo exist empty string works
+) else (
+    echo exist empty string broken
+)
 del foo subdir\bar
 rd subdir
 
@@ -1271,9 +1529,32 @@ if ""=="" for %%i in (A) DO (echo %%i)
 if not ""=="" for %%i in (B) DO (echo %%i)
 
 echo ------------ Testing if/set ------------
+rem a left parenthesis is part of the value, not the start of an 'if' block
 set x=C:\Program Files (x86)
 if ""=="" set y=%x%\dummy
 echo %y%
+if 1 == 1 set z= (
+echo '%z%'
+rem 'set' in one-line 'if' statement does not interfere with other 'if' blocks
+setlocal enableDelayedExpansion
+if 1 == 1 (
+    if 1 == 1 set z=zeta
+    if 1 == 1 (
+         echo !z!
+    )
+)
+endlocal
+
+echo --- Testing if + var subst in delayed expansion mode
+setlocal enableDelayedExpansion
+for %%i in (abc 10.0 11.0) do (
+    set result=%%i
+    echo [DEBUG] checking {!result!}
+    if "!result:~0,3!"=="10." (
+        echo SDKVER=!result!
+    )
+)
+endlocal
 
 echo ------------ Testing for ------------
 echo --- plain FOR
@@ -1317,6 +1598,35 @@ goto :endForTestFun2
 echo %1 %2
 goto :eof
 :endForTestFun2
+echo --- nested FORs and args tempering
+set "WINE_ARGS= -foo=bar -x=y"
+:test_for_loop_params_parse
+for /F "tokens=1,* delims= " %%a in ("%WINE_ARGS%") do (
+    for /F "tokens=1,2 delims==" %%1 in ("%%a") do (
+        echo inner argument {%%1, %%2}
+    )
+    set "WINE_ARGS=%%b"
+    goto :test_for_loop_params_parse
+)
+set "WINE_ARGS="
+echo --- nesting and delayed expansion
+setlocal enabledelayedexpansion
+set WINE_ARGS=1
+for %%a in (a b) do (
+  set /a WINE_ARGS+=1
+  echo %%a %WINE_ARGS% !WINE_ARGS!
+  for /l %%b in (1 1 !WINE_ARGS!) do (
+    if !WINE_ARGS!==%%b (echo %%b-A1) else echo %%b-A2
+    if %WINE_ARGS%==%%b (echo %%b-B1) else echo %%b-B2
+  )
+)
+setlocal disabledelayedexpansion
+echo --- nesting if/for
+for %%a in ("f"
+"g"
+"h"
+) do if #==# (echo %%a)
+
 mkdir foobar & cd foobar
 mkdir foo
 mkdir bar
@@ -1866,6 +2176,21 @@ echo.>> bar
 echo kkk>>bar
 for /f %%k in (foo bar) do echo %%k
 for /f %%k in (bar foo) do echo %%k
+echo ------ quoting and file access
+echo a >  f.zzz
+echo b >> f.zzz
+erase f2.zzz
+for /f %%a in (f.zzz) do echo A%%a
+for /f %%a in ("f.zzz") do echo B%%a
+for /f %%a in (f2.zzz) do echo C%%a
+for /f %%a in ("f2.zzz") do echo D%%a
+for /f "usebackq" %%a in (f.zzz) do echo E%%a
+for /f "usebackq" %%a in ("f.zzz") do echo F%%a
+for /f "usebackq" %%a in (f2.zzz) do echo G%%a
+for /f "usebackq" %%a in ("f2.zzz") do echo H%%a
+for /f %%a in (f*.zzz) do echo I%%a
+for /f %%a in ("f*.zzz") do echo J%%a
+erase f.zzz
 echo ------ command argument
 rem Not implemented on NT4, need to skip it as no way to get output otherwise
 if "%CD%"=="" goto :SkipFORFcmdNT4
@@ -1961,7 +2286,7 @@ echo 3.14>testfile
 FOR /F "tokens=*"  %%A IN (testfile) DO @echo 1:%%A,%%B
 FOR /F "tokens=1*" %%A IN (testfile) DO @echo 2:%%A,%%B
 FOR /F "tokens=2*" %%A IN (testfile) DO @echo 3:%%A,%%B
-FOR /F "tokens=1,* delims=." %%A IN (testfile) DO @echo 4:%%A,%%B
+FOR /F "tokens=1,*@tab@delims=." %%A IN (testfile) DO @echo 4:%%A,%%B
 del testfile
 cd ..
 rd /s/q foobar
@@ -2596,7 +2921,13 @@ echo>robinfile
 if 1==1 call del batfile
 dir /b
 if exist batfile echo batfile shouldn't exist
+rem arcane command, first resets errorlevel, second sets it to one
+(call )
+echo %ErrorLevel%
+(call)
+echo %ErrorLevel%
 rem ... but not for 'if' or 'for'
+call :setError 0
 call if 1==1 echo bar 2> nul
 echo %ErrorLevel%
 call :setError 0
@@ -2621,7 +2952,42 @@ call if 1==1 (
   echo ... and else!
 )
 call call call echo passed
+set WINE_FOO=WINE_BAR
+set WINE_BAR=abc
+call echo %%%WINE_FOO%%%
+call cmd.exe /c echo %%%WINE_FOO%%%
+call echo %%%%%WINE_FOO%%%%%
+call cmd.exe /c echo %%%%%WINE_FOO%%%%%
+
+set WINE_BAR=abc
+set WINE_FOO=%%WINE_BAR%%
+
+call :call_expand %WINE_FOO% %%WINE_FOO%% %%%WINE_FOO%%%
+goto :call_expand_done
+
+:call_expand
+set WINE_BAR=def
+echo %1 %2 %3
+call echo %1 %2 %3
+exit /b 0
+
+:call_expand_done
+
 cd .. & rd /s/q foobar
+
+echo --- mixing batch and builtins
+erase /q echo.bat test.bat 2> NUL
+echo @echo foo> echo.bat
+echo @echo bar> test.bat & call test.bat
+echo @echo.bat bar> test.bat & call test.bat
+echo @call echo bar> test.bat & call test.bat
+echo @call echo.bat bar> test.bat & call test.bat
+erase /q echo.bat 2> NUL
+echo @echo bar> test.bat & call test.bat
+echo @echo.bat bar> test.bat & call test.bat
+echo @call echo bar> test.bat & call test.bat
+echo @call echo.bat bar> test.bat & call test.bat
+erase /q test.bat 2> NUL
 
 echo ------------ Testing SHIFT ------------
 
@@ -3166,6 +3532,8 @@ should_not_exist 2> nul > nul
 echo %ErrorLevel%
 rem nt 4.0 doesn't really support a way of setting errorlevel, so this is weak
 rem See http://www.robvanderwoude.com/exit.php
+call :setError -9999
+echo %ErrorLevel%
 call :setError 1
 echo %ErrorLevel%
 if errorlevel 2 echo errorlevel too high, bad

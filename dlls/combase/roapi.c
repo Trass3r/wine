@@ -24,6 +24,8 @@
 #include "roerrorapi.h"
 #include "winstring.h"
 
+#include "combase_private.h"
+
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(combase);
@@ -141,7 +143,7 @@ void WINAPI RoUninitialize(void)
 /***********************************************************************
  *      RoGetActivationFactory (combase.@)
  */
-HRESULT WINAPI RoGetActivationFactory(HSTRING classid, REFIID iid, void **class_factory)
+HRESULT WINAPI DECLSPEC_HOTPATCH RoGetActivationFactory(HSTRING classid, REFIID iid, void **class_factory)
 {
     PFNGETACTIVATIONFACTORY pDllGetActivationFactory;
     IActivationFactory *factory;
@@ -153,6 +155,9 @@ HRESULT WINAPI RoGetActivationFactory(HSTRING classid, REFIID iid, void **class_
 
     if (!iid || !class_factory)
         return E_INVALIDARG;
+
+    if (FAILED(hr = ensure_mta()))
+        return hr;
 
     hr = get_library_for_classid(WindowsGetStringRawBuffer(classid, NULL), &library);
     if (FAILED(hr))

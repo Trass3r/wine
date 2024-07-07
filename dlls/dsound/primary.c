@@ -26,8 +26,6 @@
 #include <stdarg.h>
 
 #define COBJMACROS
-#define NONAMELESSUNION
-
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
@@ -466,6 +464,9 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passe
 		if(passed_fmtex->Samples.wValidBitsPerSample > passed_fmtex->Format.wBitsPerSample)
 			return DSERR_INVALIDPARAM;
 	}
+
+        if (passed_fmt->nChannels > 2 && passed_fmt->wFormatTag != WAVE_FORMAT_EXTENSIBLE)
+            return DSERR_ALLOCATED;
 
 	/* **** */
 	AcquireSRWLockExclusive(&device->buffer_list_lock);

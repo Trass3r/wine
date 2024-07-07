@@ -368,6 +368,7 @@ typedef struct
     PSDRV_DEVMODE	*Devmode;
     PRINTERINFO		*pi;
     int                 pathdepth;
+    RECT                bbox;
 } print_ctx;
 
 extern print_ctx *create_print_ctx( HDC hdc, const WCHAR *device,
@@ -465,6 +466,7 @@ extern char PSDRV_UnicodeToANSI(int u);
 
 extern INT PSDRV_WriteHeader( print_ctx *ctx, LPCWSTR title );
 extern INT PSDRV_WriteFooter( print_ctx *ctx );
+extern INT PSDRV_WritePageSize( print_ctx *ctx );
 extern INT PSDRV_WriteNewPage( print_ctx *ctx );
 extern INT PSDRV_WriteEndPage( print_ctx *ctx );
 extern BOOL PSDRV_WriteMoveTo(print_ctx *ctx, INT x, INT y);
@@ -508,9 +510,6 @@ extern BOOL PSDRV_WriteArrayDef(print_ctx *ctx, CHAR *pszArrayName, INT nSize);
 
 extern INT PSDRV_StartPage( print_ctx *ctx );
 
-INT PSDRV_GlyphListInit(void);
-const GLYPHNAME *PSDRV_GlyphName(LPCSTR szName);
-VOID PSDRV_IndexGlyphList(void);
 BOOL PSDRV_GetType1Metrics(void);
 SHORT PSDRV_CalcAvgCharWidth(const AFM *afm);
 

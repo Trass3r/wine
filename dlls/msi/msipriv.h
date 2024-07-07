@@ -456,7 +456,7 @@ typedef struct tagMSIPACKAGE
     float center_y;
 
     UINT WordCount;
-    UINT Context;
+    MSIINSTALLCONTEXT Context;
 
     struct list subscriptions;
 
@@ -532,7 +532,8 @@ typedef struct tagMSICOMPONENT
     INSTALLSTATE Action;
     BOOL ForceLocalState;
     BOOL Enabled;
-    INT  Cost;
+    /* Cost is in 512-byte units, as returned from MsiEnumComponentCosts() et al. */
+    int cost;
     INT  RefCount;
     LPWSTR FullKeypath;
     LPWSTR AdvertiseString;
@@ -1166,6 +1167,39 @@ static inline LPWSTR strdupAtoW( LPCSTR str )
     if (ret)
         MultiByteToWideChar( CP_ACP, 0, str, -1, ret, len );
     return ret;
+}
+
+static inline char *strdupWtoU( LPCWSTR str )
+{
+    LPSTR ret = NULL;
+    DWORD len;
+
+    if (!str) return ret;
+    len = WideCharToMultiByte( CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
+    ret = malloc( len );
+    if (ret)
+        WideCharToMultiByte( CP_UTF8, 0, str, -1, ret, len, NULL, NULL );
+    return ret;
+}
+
+static inline LPWSTR strdupUtoW( LPCSTR str )
+{
+    LPWSTR ret = NULL;
+    DWORD len;
+
+    if (!str) return ret;
+    len = MultiByteToWideChar( CP_UTF8, 0, str, -1, NULL, 0 );
+    ret = malloc( len * sizeof(WCHAR) );
+    if (ret)
+        MultiByteToWideChar( CP_UTF8, 0, str, -1, ret, len );
+    return ret;
+}
+
+static inline int cost_from_size( int size )
+{
+    /* Cost is size rounded up to the nearest 4096 bytes,
+     * expressed in units of 512 bytes. */
+    return ((size + 4095) & ~4095) / 512;
 }
 
 #endif /* __WINE_MSI_PRIVATE__ */

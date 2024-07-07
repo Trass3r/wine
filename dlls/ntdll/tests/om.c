@@ -19,13 +19,18 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "ntdll_test.h"
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
+#include "windef.h"
+#include "winbase.h"
 #include "winternl.h"
 #include "winuser.h"
 #include "ddk/wdm.h"
-#include "stdio.h"
-#include "winnt.h"
-#include "stdlib.h"
+#include "wine/test.h"
 
 static VOID     (WINAPI *pRtlInitUnicodeString)( PUNICODE_STRING, LPCWSTR );
 static NTSTATUS (WINAPI *pNtCreateEvent) ( PHANDLE, ACCESS_MASK, const POBJECT_ATTRIBUTES, EVENT_TYPE, BOOLEAN);
@@ -412,6 +417,16 @@ static void test_name_collisions(void)
     ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", iosb.Information );
     pNtClose(h1);
 
+    memset( &iosb, 0xcc, sizeof(iosb) );
+    status = pNtCreateNamedPipeFile( &h1, GENERIC_READ|GENERIC_WRITE, &attr, &iosb,
+                                     FILE_SHARE_READ|FILE_SHARE_WRITE,
+                                     FILE_OPEN_IF, FILE_PIPE_FULL_DUPLEX,
+                                     FALSE, FALSE, FALSE, 10, 256, 256, NULL );
+    ok(status == STATUS_SUCCESS, "failed to create pipe %08lx\n", status);
+    ok( iosb.Status == STATUS_SUCCESS, "wrong status %08lx\n", status);
+    ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", iosb.Information );
+    pNtClose(h1);
+
     h1 = CreateNamedPipeA( "\\\\.\\pipe\\named_pipe", PIPE_ACCESS_DUPLEX,
                           PIPE_READMODE_BYTE, 10, 256, 256, 1000, NULL );
     winerr = GetLastError();
@@ -746,7 +761,7 @@ static void test_name_limits(void)
     test_all_kernel_objects( __LINE__, &attr2, STATUS_ACCESS_VIOLATION, STATUS_ACCESS_VIOLATION );
     test_all_kernel_objects( __LINE__, &attr3, STATUS_ACCESS_VIOLATION, STATUS_ACCESS_VIOLATION );
     attr2.ObjectName = attr3.ObjectName = &str2;
-    str2.Buffer = (WCHAR *)0xdeadbeef;
+    str2.Buffer = (WCHAR *)((char *)pipeW + 1); /* misaligned buffer */
     str2.Length = 3;
     test_all_kernel_objects( __LINE__, &attr2, STATUS_DATATYPE_MISALIGNMENT, STATUS_DATATYPE_MISALIGNMENT );
     test_all_kernel_objects( __LINE__, &attr3, STATUS_DATATYPE_MISALIGNMENT, STATUS_DATATYPE_MISALIGNMENT );
@@ -1398,9 +1413,15 @@ static void test_symboliclink(void)
     pNtClose(link);
 
     RtlInitUnicodeString(&str, L"\\");
+    attr.Attributes = OBJ_OPENIF;
     status = pNtCreateSymbolicLinkObject(&h, SYMBOLIC_LINK_QUERY, &attr, &target);
-    todo_wine ok(status == STATUS_OBJECT_TYPE_MISMATCH,
-                 "NtCreateSymbolicLinkObject should have failed with STATUS_OBJECT_TYPE_MISMATCH got(%08lx)\n", status);
+    ok(status == STATUS_OBJECT_TYPE_MISMATCH,
+       "NtCreateSymbolicLinkObject should have failed with STATUS_OBJECT_TYPE_MISMATCH got(%08lx)\n", status);
+    attr.Attributes = 0;
+    status = pNtCreateSymbolicLinkObject(&h, SYMBOLIC_LINK_QUERY, &attr, &target);
+    todo_wine
+    ok(status == STATUS_OBJECT_TYPE_MISMATCH,
+       "NtCreateSymbolicLinkObject should have failed with STATUS_OBJECT_TYPE_MISMATCH got(%08lx)\n", status);
 
     RtlInitUnicodeString( &target, L"->Somewhere");
 
@@ -1468,6 +1489,16 @@ static void test_symboliclink(void)
 
     status = pNtOpenSymbolicLinkObject( &h, SYMBOLIC_LINK_QUERY, &attr );
     ok(status == STATUS_SUCCESS, "Got unexpected status %#lx.\n", status);
+    pNtClose(h);
+
+    attr.Attributes = OBJ_OPENIF;
+    status = pNtCreateSymbolicLinkObject( &h, SYMBOLIC_LINK_QUERY, &attr, &target );
+    ok(status == STATUS_SUCCESS || broken( status == STATUS_OBJECT_NAME_EXISTS ), /* <= win10 1507 */
+       "Got unexpected status %#lx.\n", status);
+    pNtClose(h);
+    attr.Attributes = 0;
+    status = pNtCreateSymbolicLinkObject( &h, SYMBOLIC_LINK_QUERY, &attr, &target );
+    ok(status == STATUS_OBJECT_NAME_COLLISION, "Got unexpected status %#lx.\n", status);
     pNtClose(h);
 
     InitializeObjectAttributes(&attr, &str, 0, 0, NULL);
@@ -2237,7 +2268,7 @@ static void test_token(void)
 
 static void *align_ptr( void *ptr )
 {
-    ULONG align = sizeof(DWORD_PTR) - 1;
+    ULONG_PTR align = sizeof(DWORD_PTR) - 1;
     return (void *)(((DWORD_PTR)ptr + align) & ~align);
 }
 
@@ -2601,9 +2632,9 @@ static void test_query_directory(void)
     context = 0xdeadbeef;
     size = 0xdeadbeef;
     status = NtQueryDirectoryObject( dir, info, 0, FALSE, TRUE, &context, &size );
-    todo_wine ok( status == STATUS_NO_MORE_ENTRIES, "got %#lx\n", status );
+    ok( status == STATUS_NO_MORE_ENTRIES, "got %#lx\n", status );
     ok( context == 0xdeadbeef, "got context %#lx\n", context );
-    todo_wine ok( size == sizeof(*info) || (is_wow64 && !size), "got size %lu\n", size );
+    ok( size == sizeof(*info) || (is_wow64 && !size), "got size %lu\n", size );
 
     context = 0xdeadbeef;
     size = 0xdeadbeef;
@@ -2619,9 +2650,9 @@ static void test_query_directory(void)
     size = 0xdeadbeef;
     memset( buffer, 0xcc, sizeof(buffer) );
     status = NtQueryDirectoryObject( dir, info, sizeof(buffer), FALSE, TRUE, &context, &size );
-    todo_wine ok( status == STATUS_NO_MORE_ENTRIES, "got %#lx\n", status );
+    ok( status == STATUS_NO_MORE_ENTRIES, "got %#lx\n", status );
     ok( context == 0xdeadbeef, "got context %#lx\n", context );
-    todo_wine ok( size == sizeof(*info) || (is_wow64 && !size), "got size %lu\n", size );
+    ok( size == sizeof(*info) || (is_wow64 && !size), "got size %lu\n", size );
     if (size == sizeof(*info))
         ok( !memcmp( &info[0], &empty_info, sizeof(*info) ), "entry was not cleared\n" );
 
@@ -2717,37 +2748,31 @@ static void test_query_directory(void)
 
     memset( buffer, 0xcc, sizeof(buffer) );
     status = NtQueryDirectoryObject( dir, info, sizeof(buffer), FALSE, TRUE, &context, &size );
-    todo_wine ok( !status, "got %#lx\n", status );
-    if (!status)
-    {
-        ok( context == 2, "got context %#lx\n", context );
-        check_unicode_string( &info[0].ObjectName, name1 );
-        check_unicode_string( &info[0].ObjectTypeName, L"Mutant" );
-        check_unicode_string( &info[1].ObjectName, name2 );
-        check_unicode_string( &info[1].ObjectTypeName, L"Mutant" );
-        ok( !memcmp( &info[2], &empty_info, sizeof(*info) ), "entry was not cleared\n" );
-    }
+    ok( !status, "got %#lx\n", status );
+    ok( context == 2, "got context %#lx\n", context );
+    check_unicode_string( &info[0].ObjectName, name1 );
+    check_unicode_string( &info[0].ObjectTypeName, L"Mutant" );
+    check_unicode_string( &info[1].ObjectName, name2 );
+    check_unicode_string( &info[1].ObjectTypeName, L"Mutant" );
+    ok( !memcmp( &info[2], &empty_info, sizeof(*info) ), "entry was not cleared\n" );
 
     needed_size = size;
     size = 0xdeadbeef;
     context = 0xdeadbeef;
     memset( buffer, 0xcc, sizeof(buffer) );
     status = NtQueryDirectoryObject( dir, info, needed_size - 1, FALSE, TRUE, &context, &size );
-    todo_wine ok( status == STATUS_MORE_ENTRIES, "got %#lx\n", status );
-    if (status == STATUS_MORE_ENTRIES)
-    {
-        ok( context == 1, "got context %#lx\n", context );
-        ok( size > 0 && size < needed_size, "got size %lu\n", size );
-        check_unicode_string( &info[0].ObjectName, name1 );
-        check_unicode_string( &info[0].ObjectTypeName, L"Mutant" );
-        ok( !memcmp( &info[1], &empty_info, sizeof(*info) ), "entry was not cleared\n" );
-    }
+    ok( status == STATUS_MORE_ENTRIES, "got %#lx\n", status );
+    ok( context == 1, "got context %#lx\n", context );
+    ok( size > 0 && size < needed_size, "got size %lu\n", size );
+    check_unicode_string( &info[0].ObjectName, name1 );
+    check_unicode_string( &info[0].ObjectTypeName, L"Mutant" );
+    ok( !memcmp( &info[1], &empty_info, sizeof(*info) ), "entry was not cleared\n" );
 
     size = 0xdeadbeef;
     context = 0xdeadbeef;
     memset( buffer, 0xcc, sizeof(buffer) );
     status = NtQueryDirectoryObject( dir, info, sizeof(*info), FALSE, TRUE, &context, &size );
-    todo_wine ok( status == STATUS_MORE_ENTRIES
+    ok( status == STATUS_MORE_ENTRIES
             || broken(status == STATUS_BUFFER_TOO_SMALL) /* wow64 */, "got %#lx\n", status );
     if (status == STATUS_MORE_ENTRIES)
     {
@@ -2759,7 +2784,7 @@ static void test_query_directory(void)
     size = 0xdeadbeef;
     context = 0xdeadbeef;
     status = NtQueryDirectoryObject( dir, info, 0, FALSE, TRUE, &context, &size );
-    todo_wine ok( status == STATUS_MORE_ENTRIES
+    ok( status == STATUS_MORE_ENTRIES
             || broken(status == STATUS_BUFFER_TOO_SMALL) /* wow64 */, "got %#lx\n", status );
     if (status == STATUS_MORE_ENTRIES)
     {
@@ -2770,14 +2795,11 @@ static void test_query_directory(void)
     context = 1;
     memset( buffer, 0xcc, sizeof(buffer) );
     status = NtQueryDirectoryObject( dir, info, sizeof(buffer), FALSE, FALSE, &context, &size );
-    todo_wine ok( !status, "got %#lx\n", status );
-    if (!status)
-    {
-        ok( context == 2, "got context %#lx\n", context );
-        check_unicode_string( &info[0].ObjectName, name2 );
-        check_unicode_string( &info[0].ObjectTypeName, L"Mutant" );
-        ok( !memcmp( &info[1], &empty_info, sizeof(*info) ), "entry was not cleared\n" );
-    }
+    ok( !status, "got %#lx\n", status );
+    ok( context == 2, "got context %#lx\n", context );
+    check_unicode_string( &info[0].ObjectName, name2 );
+    check_unicode_string( &info[0].ObjectTypeName, L"Mutant" );
+    ok( !memcmp( &info[1], &empty_info, sizeof(*info) ), "entry was not cleared\n" );
 
     pNtClose( child1 );
     pNtClose( child2 );
@@ -3130,6 +3152,234 @@ static void test_null_in_object_name(void)
         skip("Limited access to \\Registry\\Machine\\Software key, skipping the tests\n");
 }
 
+static void test_object_permanence(void)
+{
+    static const struct object_permanence_test {
+        const char *name;
+        ULONG initial_attr;
+        ACCESS_MASK access;
+        BOOLEAN make_temporary;
+        BOOLEAN make_permanent;
+        NTSTATUS make_temp_status;
+    } tests[] = {
+        {
+            .name = "permanent object persists",
+            .initial_attr     = OBJ_PERMANENT,
+            .access           = GENERIC_ALL,
+        },
+        {
+            .name = "NtMakeTemporaryObject() succeeds",
+            .initial_attr     = OBJ_PERMANENT,
+            .access           = GENERIC_ALL,
+            .make_temporary   = TRUE,
+            .make_temp_status = STATUS_SUCCESS,
+        },
+        {
+            .name = "NtMakeTemporaryObject() fails w/o DELETE access",
+            .initial_attr     = OBJ_PERMANENT,
+            .access           = EVENT_ALL_ACCESS & ~DELETE,
+            .make_temporary   = TRUE,
+            .make_temp_status = STATUS_ACCESS_DENIED,
+        },
+        {
+            .name = "NtMakePermanentObject() succeeds even if already permanent",
+            .initial_attr     = OBJ_PERMANENT,
+            .access           = EVENT_ALL_ACCESS & ~DELETE,
+            .make_permanent   = TRUE,
+        },
+        {
+            .name = "NtMakePermanentObject() reverses effect of NtMakeTemporaryObject()",
+            .initial_attr     = OBJ_PERMANENT,
+            .access           = GENERIC_ALL,
+            .make_temporary   = TRUE,
+            .make_temp_status = STATUS_SUCCESS,
+            .make_permanent   = TRUE,
+        },
+
+        {
+            .name = "temporary object disappears",
+            .initial_attr     = 0,
+            .access           = GENERIC_ALL,
+        },
+        {
+            .name = "NtMakeTemporaryObject() succeeds even if already temporary",
+            .initial_attr     = 0,
+            .access           = GENERIC_ALL,
+            .make_temporary   = TRUE,
+            .make_temp_status = STATUS_SUCCESS,
+        },
+        {
+            .name = "NtMakeTemporaryObject() fails w/o DELETE access even if already temporary",
+            .initial_attr     = 0,
+            .access           = EVENT_ALL_ACCESS & ~DELETE,
+            .make_temporary   = TRUE,
+            .make_temp_status = STATUS_ACCESS_DENIED,
+        },
+        {
+            .name = "NtMakePermanentObject() makes an object persist",
+            .initial_attr     = 0,
+            .access           = EVENT_ALL_ACCESS & ~DELETE,
+            .make_permanent   = TRUE,
+        },
+        {
+            .name = "NtMakePermanentObject() is not annulled by calling NtMakeTemporaryObject() on an already temporary object",
+            .initial_attr     = 0,
+            .access           = GENERIC_ALL,
+            .make_temporary   = TRUE,
+            .make_temp_status = STATUS_SUCCESS,
+            .make_permanent   = TRUE,
+        },
+    };
+    const struct object_permanence_test *test;
+    HANDLE process_token = NULL, thread_token = NULL;
+    SECURITY_QUALITY_OF_SERVICE token_qos = {
+        .Length = sizeof(token_qos),
+        .ImpersonationLevel = SecurityDelegation,
+        .ContextTrackingMode = SECURITY_STATIC_TRACKING,
+        .EffectiveOnly = FALSE,
+    };
+    OBJECT_ATTRIBUTES token_attr = {
+        .Length = sizeof(token_attr),
+        .SecurityQualityOfService = &token_qos,
+    };
+    TOKEN_PRIVILEGES new_privs = {
+        .PrivilegeCount = 1,
+        .Privileges = {
+            {
+                .Luid = { .LowPart = SE_CREATE_PERMANENT_PRIVILEGE },
+                .Attributes = SE_PRIVILEGE_ENABLED,
+            },
+        },
+    };
+    NTSTATUS status;
+    BOOL creatpermapriv = FALSE;
+
+    status = NtOpenProcessToken( GetCurrentProcess(), TOKEN_DUPLICATE, &process_token );
+    ok( status == STATUS_SUCCESS, "NtOpenProcessToken returned %08lx\n", status );
+
+    status = NtDuplicateToken( process_token, TOKEN_IMPERSONATE | TOKEN_ADJUST_PRIVILEGES,
+                               &token_attr, FALSE, TokenImpersonation, &thread_token );
+    ok( status == STATUS_SUCCESS, "NtDuplicateToken returned %08lx\n", status );
+    NtClose( process_token );
+
+    status = NtAdjustPrivilegesToken( thread_token, FALSE, &new_privs, sizeof(new_privs), NULL, NULL );
+    ok( status == STATUS_SUCCESS || status == STATUS_NOT_ALL_ASSIGNED, "NtAdjustPrivilegesToken returned %08lx\n", status );
+    creatpermapriv = (status == STATUS_SUCCESS);
+
+    status = NtSetInformationThread( GetCurrentThread(), ThreadImpersonationToken, &thread_token, sizeof(thread_token) );
+    ok( status == STATUS_SUCCESS, "NtSetInformationThread returned %08lx\n", status );
+    NtClose( thread_token );
+
+    if (!creatpermapriv) skip( "no privileges, tests may be limited\n" );
+
+    for (test = &tests[0]; test != &tests[ARRAY_SIZE(tests)]; test++)
+    {
+        NTSTATUS make_perma_status = creatpermapriv ? STATUS_SUCCESS : STATUS_PRIVILEGE_NOT_HELD;
+        HANDLE handle, handle2;
+        OBJECT_BASIC_INFORMATION obi;
+        OBJECT_ATTRIBUTES attr;
+        UNICODE_STRING name;
+        BOOL is_permanent;
+        ULONG len = 0;
+
+        winetest_push_context( "test#%Iu", test - &tests[0] );
+        trace( "(%s)\n", test->name );
+
+        RtlInitUnicodeString( &name, L"\\BaseNamedObjects\\test_object_permanence" );
+        InitializeObjectAttributes( &attr, &name, test->initial_attr, 0, NULL );
+        status = NtCreateEvent( &handle, test->access, &attr, NotificationEvent, FALSE );
+        if (test->initial_attr & OBJ_PERMANENT)
+        {
+            todo_wine_if(status == STATUS_SUCCESS || status == STATUS_PRIVILEGE_NOT_HELD)
+            ok( status == make_perma_status, "NtCreateEvent returned %08lx (expected %08lx)\n", status, make_perma_status );
+        }
+        else
+        {
+            ok( status == STATUS_SUCCESS, "NtCreateEvent returned %08lx\n", status );
+        }
+        if (NT_ERROR(status))
+        {
+            winetest_pop_context();
+            continue;
+        }
+        is_permanent = (test->initial_attr & OBJ_PERMANENT) != 0;
+
+        status = NtQueryObject( handle, ObjectBasicInformation, &obi, sizeof(obi), &len );
+        ok( status == STATUS_SUCCESS, "NtQueryObject returned %08lx\n", status );
+        todo_wine_if(test->initial_attr != 0)
+        ok( obi.Attributes == test->initial_attr, "expected attr %08lx, got %08lx\n", test->initial_attr, obi.Attributes );
+
+        if (test->make_temporary)
+        {
+            if (test->make_temp_status == STATUS_ACCESS_DENIED)
+                ok( !(obi.GrantedAccess & DELETE), "expected no DELETE access in %08lx\n", obi.GrantedAccess );
+            if (test->make_temp_status == STATUS_SUCCESS)
+                ok( !!(obi.GrantedAccess & DELETE), "expected DELETE access in %08lx\n", obi.GrantedAccess );
+
+            status = NtMakeTemporaryObject( handle );
+            ok( status == test->make_temp_status, "NtMakeTemporaryObject returned %08lx\n", status );
+            if (!NT_ERROR(status)) is_permanent = FALSE;
+        }
+
+        if (winetest_debug > 1)
+            trace( "NOTE: object still has unclosed handle (%p) and shouldn't be deleted", handle );
+
+        winetest_push_context( "first handle (%p) still open", handle );
+        status = NtOpenEvent( &handle2, GENERIC_ALL, &attr );
+        ok( status == STATUS_SUCCESS, "NtOpenEvent returned %08lx\n", status );
+        if (!NT_ERROR(status))
+        {
+            ULONG expect_attr = (obi.Attributes & ~OBJ_PERMANENT) | (is_permanent ? OBJ_PERMANENT : 0);
+            OBJECT_BASIC_INFORMATION obi2;
+
+            status = NtQueryObject( handle2, ObjectBasicInformation, &obi2, sizeof(obi2), &len );
+            ok( status == STATUS_SUCCESS, "NtQueryObject returned %08lx\n", status );
+            todo_wine_if(expect_attr != 0)
+            ok( obi2.Attributes == expect_attr, "expected attr %08lx, got %08lx\n", expect_attr, obi2.Attributes );
+
+            NtClose( handle2 );
+        }
+        winetest_pop_context();
+
+        if (test->make_permanent)
+        {
+            status = NtMakePermanentObject( handle );
+            todo_wine_if(status == STATUS_SUCCESS || status == STATUS_PRIVILEGE_NOT_HELD)
+            ok( status == make_perma_status, "NtMakePermanentObject returned %08lx expected (%08lx)\n", status, make_perma_status );
+            if (!NT_ERROR(status)) is_permanent = TRUE;
+        }
+
+        if (winetest_debug > 1)
+            trace( "NOTE: about to close earlier handle (%p) which should be the last", handle );
+        NtClose( handle );
+
+        winetest_push_context( "first handle closed" );
+        status = NtOpenEvent( &handle, GENERIC_ALL, &attr );
+        ok( status == (is_permanent ? STATUS_SUCCESS : STATUS_OBJECT_NAME_NOT_FOUND), "NtOpenEvent returned %08lx\n", status );
+        if (!NT_ERROR(status))
+        {
+            ULONG expect_attr = (obi.Attributes & ~OBJ_PERMANENT) | (is_permanent ? OBJ_PERMANENT : 0);
+            OBJECT_BASIC_INFORMATION obi_new;
+
+            status = NtQueryObject( handle, ObjectBasicInformation, &obi_new, sizeof(obi_new), &len );
+            ok( status == STATUS_SUCCESS, "NtQueryObject returned %08lx\n", status );
+            todo_wine_if(expect_attr != 0)
+            ok( obi_new.Attributes == expect_attr, "expected attr %08lx, got %08lx\n", expect_attr, obi_new.Attributes );
+
+            /* ensure object is deleted */
+            NtMakeTemporaryObject( handle );
+            NtClose( handle );
+        }
+        winetest_pop_context();
+
+        winetest_pop_context();
+    }
+
+    thread_token = NULL;
+    status = NtSetInformationThread( GetCurrentThread(), ThreadImpersonationToken, &thread_token, sizeof(thread_token) );
+    ok( status == STATUS_SUCCESS, "NtSetInformationThread returned %08lx\n", status );
+}
+
 START_TEST(om)
 {
     HMODULE hntdll = GetModuleHandleA("ntdll.dll");
@@ -3193,4 +3443,5 @@ START_TEST(om)
     test_globalroot();
     test_object_identity();
     test_query_directory();
+    test_object_permanence();
 }

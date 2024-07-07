@@ -25,6 +25,7 @@
 #include "windef.h"
 #include "winbase.h"
 #include "ntgdi.h"
+#include "ddk/d3dkmthk.h"
 #include "wow64win_private.h"
 
 typedef struct
@@ -506,6 +507,28 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIDestroyDevice( UINT *args )
     return NtGdiDdDDIDestroyDevice( desc );
 }
 
+NTSTATUS WINAPI wow64_NtGdiDdDDIEnumAdapters2( UINT *args )
+{
+    struct
+    {
+        ULONG NumAdapters;
+        ULONG pAdapters;
+    } *desc32 = get_ptr( &args );
+    D3DKMT_ENUMADAPTERS2 desc;
+    NTSTATUS status;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+
+    desc.NumAdapters = desc32->NumAdapters;
+    desc.pAdapters = UlongToPtr( desc32->pAdapters );
+
+    status = NtGdiDdDDIEnumAdapters2( &desc );
+
+    desc32->NumAdapters = desc.NumAdapters;
+
+    return status;
+}
+
 NTSTATUS WINAPI wow64_NtGdiDdDDIEscape( UINT *args )
 {
     const struct
@@ -583,6 +606,27 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenAdapterFromLuid( UINT *args )
     D3DKMT_OPENADAPTERFROMLUID *desc = get_ptr( &args );
 
     return NtGdiDdDDIOpenAdapterFromLuid( desc );
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIQueryAdapterInfo( UINT *args )
+{
+    struct _D3DKMT_QUERYADAPTERINFO
+    {
+        D3DKMT_HANDLE           hAdapter;
+        KMTQUERYADAPTERINFOTYPE Type;
+        ULONG                   pPrivateDriverData;
+        UINT                    PrivateDriverDataSize;
+    } *desc32 = get_ptr( &args );
+    D3DKMT_QUERYADAPTERINFO desc;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+
+    desc.hAdapter = desc32->hAdapter;
+    desc.Type = desc32->Type;
+    desc.pPrivateDriverData = UlongToPtr( desc32->pPrivateDriverData );
+    desc.PrivateDriverDataSize = desc32->PrivateDriverDataSize;
+
+    return NtGdiDdDDIQueryAdapterInfo( &desc );
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDIQueryStatistics( UINT *args )
@@ -1136,7 +1180,7 @@ NTSTATUS WINAPI wow64_NtGdiGetFontFileData( UINT *args )
     DWORD file_index = get_ulong( &args );
     UINT64 *offset = get_ptr( &args );
     void *buff = get_ptr( &args );
-    DWORD buff_size = get_ulong( &args );
+    SIZE_T buff_size = get_ulong( &args );
 
     return NtGdiGetFontFileData( instance_id, file_index, offset, buff, buff_size );
 }

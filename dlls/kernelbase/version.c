@@ -154,7 +154,7 @@ static const struct
     },
     /* Windows 10 */
     {
-        { 10, 0, 18362 },
+        { 10, 0, 19043 },
         {0x8e0f7a12,0xbfb3,0x4fe8,{0xb9,0xa5,0x48,0xfd,0x50,0xa1,0x5a,0x9a}}
     }
 };
@@ -1616,6 +1616,19 @@ LONG WINAPI DECLSPEC_HOTPATCH GetPackagesByPackageFamily(const WCHAR *family_nam
     *count = 0;
     *buffer_len = 0;
     return ERROR_SUCCESS;
+}
+
+/***********************************************************************
+ *         GetPackagePathByFullName   (kernelbase.@)
+ */
+LONG WINAPI GetPackagePathByFullName(const WCHAR *name, UINT32 *len, WCHAR *path)
+{
+    if (!len || !name)
+        return ERROR_INVALID_PARAMETER;
+
+    FIXME( "(%s %p %p): stub\n", debugstr_w(name), len, path );
+
+    return APPMODEL_ERROR_NO_PACKAGE;
 }
 
 static const struct

@@ -751,7 +751,11 @@ unsigned int server_select( const select_op_t *select_op, data_size_t size, UINT
 
     if (ret == STATUS_USER_APC) *user_apc = reply_data.call.user;
     if (reply_size > sizeof(reply_data.call))
+    {
         memcpy( context, reply_data.context, reply_size - sizeof(reply_data.call) );
+        context[0].flags &= ~SERVER_CTX_EXEC_SPACE;
+        context[1].flags &= ~SERVER_CTX_EXEC_SPACE;
+    }
     return ret;
 }
 
@@ -872,35 +876,30 @@ void wine_server_send_fd( int fd )
     struct send_fd data;
     struct msghdr msghdr;
     struct iovec vec;
-    int ret;
-
-#ifdef HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS
-    msghdr.msg_accrights    = (void *)&fd;
-    msghdr.msg_accrightslen = sizeof(fd);
-#else  /* HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS */
     char cmsg_buffer[256];
     struct cmsghdr *cmsg;
-    msghdr.msg_control    = cmsg_buffer;
-    msghdr.msg_controllen = sizeof(cmsg_buffer);
-    msghdr.msg_flags      = 0;
-    cmsg = CMSG_FIRSTHDR( &msghdr );
-    cmsg->cmsg_len   = CMSG_LEN( sizeof(fd) );
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type  = SCM_RIGHTS;
-    *(int *)CMSG_DATA(cmsg) = fd;
-    msghdr.msg_controllen = cmsg->cmsg_len;
-#endif  /* HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS */
+    int ret;
 
     msghdr.msg_name    = NULL;
     msghdr.msg_namelen = 0;
     msghdr.msg_iov     = &vec;
     msghdr.msg_iovlen  = 1;
+    msghdr.msg_control = cmsg_buffer;
+    msghdr.msg_controllen = sizeof(cmsg_buffer);
+    msghdr.msg_flags   = 0;
 
     vec.iov_base = (void *)&data;
     vec.iov_len  = sizeof(data);
 
     data.tid = GetCurrentThreadId();
     data.fd  = fd;
+
+    cmsg = CMSG_FIRSTHDR( &msghdr );
+    cmsg->cmsg_len   = CMSG_LEN( sizeof(fd) );
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type  = SCM_RIGHTS;
+    *(int *)CMSG_DATA(cmsg) = fd;
+    msghdr.msg_controllen = cmsg->cmsg_len;
 
     for (;;)
     {
@@ -922,22 +921,17 @@ static int receive_fd( obj_handle_t *handle )
 {
     struct iovec vec;
     struct msghdr msghdr;
-    int ret, fd = -1;
-
-#ifdef HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS
-    msghdr.msg_accrights    = (void *)&fd;
-    msghdr.msg_accrightslen = sizeof(fd);
-#else  /* HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS */
     char cmsg_buffer[256];
-    msghdr.msg_control    = cmsg_buffer;
-    msghdr.msg_controllen = sizeof(cmsg_buffer);
-    msghdr.msg_flags      = 0;
-#endif  /* HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS */
+    int ret, fd = -1;
 
     msghdr.msg_name    = NULL;
     msghdr.msg_namelen = 0;
     msghdr.msg_iov     = &vec;
     msghdr.msg_iovlen  = 1;
+    msghdr.msg_control = cmsg_buffer;
+    msghdr.msg_controllen = sizeof(cmsg_buffer);
+    msghdr.msg_flags   = 0;
+
     vec.iov_base = (void *)handle;
     vec.iov_len  = sizeof(*handle);
 
@@ -945,7 +939,6 @@ static int receive_fd( obj_handle_t *handle )
     {
         if ((ret = recvmsg( fd_socket, &msghdr, MSG_CMSG_CLOEXEC )) > 0)
         {
-#ifndef HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS
             struct cmsghdr *cmsg;
             for (cmsg = CMSG_FIRSTHDR( &msghdr ); cmsg; cmsg = CMSG_NXTHDR( &msghdr, cmsg ))
             {
@@ -959,7 +952,6 @@ static int receive_fd( obj_handle_t *handle )
                 }
 #endif
             }
-#endif  /* HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS */
             if (fd != -1) fcntl( fd, F_SETFD, FD_CLOEXEC ); /* in case MSG_CMSG_CLOEXEC is not supported */
             return fd;
         }
@@ -1243,29 +1235,13 @@ int server_pipe( int fd[2] )
  */
 static const char *init_server_dir( dev_t dev, ino_t ino )
 {
-    char *p, *dir;
-    size_t len = sizeof("/server-") + 2 * sizeof(dev) + 2 * sizeof(ino) + 2;
+    char *dir = NULL;
 
 #ifdef __ANDROID__  /* there's no /tmp dir on Android */
-    len += strlen( config_dir ) + sizeof("/.wineserver");
-    dir = malloc( len );
-    strcpy( dir, config_dir );
-    strcat( dir, "/.wineserver/server-" );
+    asprintf( &dir, "%s/.wineserver/server-%llx-%llx", config_dir, (unsigned long long)dev, (unsigned long long)ino );
 #else
-    len += sizeof("/tmp/.wine-") + 12;
-    dir = malloc( len );
-    sprintf( dir, "/tmp/.wine-%u/server-", getuid() );
+    asprintf( &dir, "/tmp/.wine-%u/server-%llx-%llx", getuid(), (unsigned long long)dev, (unsigned long long)ino );
 #endif
-    p = dir + strlen( dir );
-    if (dev != (unsigned long)dev)
-        p += sprintf( p, "%lx%08lx-", (unsigned long)((unsigned long long)dev >> 32), (unsigned long)dev );
-    else
-        p += sprintf( p, "%lx-", (unsigned long)dev );
-
-    if (ino != (unsigned long)ino)
-        sprintf( p, "%lx%08lx", (unsigned long)((unsigned long long)ino >> 32), (unsigned long)ino );
-    else
-        sprintf( p, "%lx", (unsigned long)ino );
     return dir;
 }
 
@@ -1569,6 +1545,8 @@ size_t server_init_process(void)
     {
         const char *arch = getenv( "WINEARCH" );
 
+        if (is_win64 && arch && !strcmp( arch, "win32" ))
+            fatal_error( "WINEARCH is set to 'win32' but this is not supported in wow64 mode.\n" );
         if (arch && strcmp( arch, "win32" ) && strcmp( arch, "win64" ))
             fatal_error( "WINEARCH set to invalid value '%s', it must be either win32 or win64.\n", arch );
 
@@ -1675,7 +1653,7 @@ size_t server_init_process(void)
  */
 void server_init_process_done(void)
 {
-    void *entry, *teb;
+    void *teb;
     unsigned int status;
     int suspend;
     FILE_FS_DEVICE_INFORMATION info;
@@ -1687,8 +1665,6 @@ void server_init_process_done(void)
 #ifdef __APPLE__
     send_server_task_port();
 #endif
-    if (main_image_info.ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE)
-        virtual_set_large_address_space();
 
     /* Install signal handlers; this cannot be done earlier, since we cannot
      * send exceptions to the debugger before the create process event that
@@ -1708,12 +1684,11 @@ void server_init_process_done(void)
 #endif
         status = wine_server_call( req );
         suspend = reply->suspend;
-        entry = wine_server_get_ptr( reply->entry );
     }
     SERVER_END_REQ;
 
     assert( !status );
-    signal_start_thread( entry, peb, suspend, NtCurrentTeb() );
+    signal_start_thread( main_image_info.TransferAddress, peb, suspend, NtCurrentTeb() );
 }
 
 
@@ -1823,6 +1798,16 @@ NTSTATUS WINAPI NtCompareObjects( HANDLE first, HANDLE second )
     SERVER_END_REQ;
 
     return status;
+}
+
+
+/**************************************************************************
+ *           NtCompareTokens   (NTDLL.@)
+ */
+NTSTATUS WINAPI NtCompareTokens( HANDLE first, HANDLE second, BOOLEAN *equal )
+{
+    FIXME( "%p,%p,%p: stub\n", first, second, equal );
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 

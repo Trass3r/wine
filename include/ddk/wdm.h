@@ -83,15 +83,21 @@ typedef struct _KSEMAPHORE {
 } KSEMAPHORE, *PKSEMAPHORE, *PRKSEMAPHORE;
 
 typedef struct _KDPC {
-  CSHORT  Type;
-  UCHAR  Number;
-  UCHAR  Importance;
-  LIST_ENTRY  DpcListEntry;
+  union {
+    ULONG TargetInfoAsUlong;
+    struct {
+      UCHAR  Type;
+      UCHAR  Importance;
+      volatile USHORT  Number;
+    } DUMMYSTRUCTNAME;
+  } DUMMYUNIONNAME;
+  SINGLE_LIST_ENTRY  DpcListEntry;
+  KAFFINITY  ProcessorHistory;
   PKDEFERRED_ROUTINE  DeferredRoutine;
   PVOID  DeferredContext;
   PVOID  SystemArgument1;
   PVOID  SystemArgument2;
-  PULONG_PTR  Lock;
+  PVOID  DpcData;
 } KDPC, *PKDPC, *RESTRICTED_POINTER PRKDPC;
 
 typedef enum _KDPC_IMPORTANCE {
@@ -299,6 +305,23 @@ typedef enum _POOL_TYPE {
   NonPagedPoolCacheAlignedMustS,
   MaxPoolType
 } POOL_TYPE;
+
+typedef ULONG64 POOL_FLAGS;
+
+#define POOL_FLAG_REQUIRED_START        0x00000001
+#define POOL_FLAG_USE_QUOTA             0x00000001
+#define POOL_FLAG_UNINITIALIZED         0x00000002
+#define POOL_FLAG_SESSION               0x00000004
+#define POOL_FLAG_CACHE_ALIGNED         0x00000008
+#define POOL_FLAG_RESERVED1             0x00000010
+#define POOL_FLAG_RAISE_ON_FAILURE      0x00000020
+#define POOL_FLAG_NON_PAGED             0x00000040
+#define POOL_FLAG_NON_PAGED_EXECUTE     0x00000080
+#define POOL_FLAG_PAGED                 0x00000100
+#define POOL_FLAG_RESERVED2             0x00000200
+#define POOL_FLAG_RESERVED3             0x00000400
+#define POOL_FLAG_LAST_KNOWN_REQUIRED   POOL_FLAG_RESERVED3
+#define POOL_FLAG_REQUIRED_END          0x80000000
 
 typedef struct _WAIT_CONTEXT_BLOCK {
   KDEVICE_QUEUE_ENTRY  WaitQueueEntry;
@@ -1407,8 +1430,8 @@ typedef struct _KLOCK_QUEUE_HANDLE {
     KIRQL OldIrql;
 } KLOCK_QUEUE_HANDLE, *PKLOCK_QUEUE_HANDLE;
 
-typedef void * (NTAPI *PALLOCATE_FUNCTION)(POOL_TYPE, SIZE_T, ULONG);
-typedef void * (NTAPI *PALLOCATE_FUNCTION_EX)(POOL_TYPE, SIZE_T, ULONG, PLOOKASIDE_LIST_EX);
+typedef void * (__WINE_ALLOC_SIZE(2) NTAPI *PALLOCATE_FUNCTION)(POOL_TYPE, SIZE_T, ULONG);
+typedef void * (__WINE_ALLOC_SIZE(2) NTAPI *PALLOCATE_FUNCTION_EX)(POOL_TYPE, SIZE_T, ULONG, PLOOKASIDE_LIST_EX);
 typedef void (NTAPI *PFREE_FUNCTION)(void *);
 typedef void (NTAPI *PFREE_FUNCTION_EX)(void *, PLOOKASIDE_LIST_EX);
 typedef void (NTAPI *PCALLBACK_FUNCTION)(void *, void *, void *);
@@ -1651,8 +1674,12 @@ static inline void IoCopyCurrentIrpStackLocationToNext(IRP *irp)
     next->Control = 0;
 }
 
-#define KernelMode 0
-#define UserMode   1
+typedef enum _MODE
+{
+    KernelMode,
+    UserMode,
+    MaximumMode
+} MODE;
 
 /* directory object access rights */
 #define DIRECTORY_QUERY                 0x0001
@@ -1677,6 +1704,7 @@ BOOLEAN   WINAPI ExAcquireSharedStarveExclusive(ERESOURCE*,BOOLEAN);
 BOOLEAN   WINAPI ExAcquireSharedWaitForExclusive(ERESOURCE*,BOOLEAN);
 void      WINAPI ExFreePool(PVOID);
 PVOID     WINAPI ExAllocatePool(POOL_TYPE,SIZE_T) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePool) __WINE_MALLOC;
+PVOID     WINAPI ExAllocatePool2(POOL_FLAGS,SIZE_T,ULONG) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePool) __WINE_MALLOC;
 PVOID     WINAPI ExAllocatePoolWithQuota(POOL_TYPE,SIZE_T) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePool) __WINE_MALLOC;
 void      WINAPI ExFreePoolWithTag(PVOID,ULONG);
 PVOID     WINAPI ExAllocatePoolWithTag(POOL_TYPE,SIZE_T,ULONG) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePoolWithTag) __WINE_MALLOC;
@@ -1843,7 +1871,7 @@ BOOLEAN   WINAPI PsGetVersion(ULONG*,ULONG*,ULONG*,UNICODE_STRING*);
 NTSTATUS  WINAPI PsTerminateSystemThread(NTSTATUS);
 
 #ifdef __x86_64__
-void      WINAPI RtlCopyMemoryNonTemporal(void*,const void*,SIZE_T);
+NTSYSAPI void WINAPI RtlCopyMemoryNonTemporal(void*,const void*,SIZE_T);
 #else
 #define RtlCopyMemoryNonTemporal RtlCopyMemory
 #endif

@@ -1082,11 +1082,8 @@ static BOOL elf_load_debug_info_from_map(struct module* module,
         }
         lret = dwarf2_parse(module, module->reloc_delta, thunks, fmap);
         ret = ret || lret;
-    }
-    if (wcsstr(module->modulename, S_ElfW) || !wcscmp(module->modulename, S_WineLoaderW))
-    {
         /* add the thunks for native libraries */
-        if (!(dbghelp_options & SYMOPT_PUBLICS_ONLY))
+        if (module->is_wine_builtin)
             elf_new_wine_thunks(module, ht_symtab, thunks);
     }
     /* add all the public symbols from symtab */
@@ -1241,7 +1238,8 @@ static BOOL elf_load_file_from_fmap(struct process* pcs, const WCHAR* filename,
         modfmt = HeapAlloc(GetProcessHeap(), 0,
                           sizeof(struct module_format) + sizeof(struct elf_module_info));
         if (!modfmt) return FALSE;
-        elf_info->module = module_new(pcs, filename, DMT_ELF, FALSE, modbase,
+        elf_info->module = module_new(pcs, filename, DMT_ELF,
+                                      module_is_wine_host(filename, L".so"), FALSE, modbase,
                                       fmap->u.elf.elf_size, 0, calc_crc32(fmap->u.elf.handle),
                                       elf_get_machine(fmap->u.elf.elfhdr.e_machine));
         if (!elf_info->module)
@@ -1345,7 +1343,7 @@ static BOOL elf_search_auxv(const struct process* pcs, unsigned type, ULONG_PTR*
 {
     char        buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME];
     SYMBOL_INFO*si = (SYMBOL_INFO*)buffer;
-    const unsigned ptr_size = pcs->is_system_64bit ? 8 : 4;
+    const unsigned ptr_size = pcs->is_host_64bit ? 8 : 4;
     UINT64      envp;
     UINT64      addr;
     UINT64      str;
@@ -1385,7 +1383,7 @@ static BOOL elf_search_auxv(const struct process* pcs, unsigned type, ULONG_PTR*
         if (str) break;
     }
 
-    if (pcs->is_system_64bit)
+    if (pcs->is_host_64bit)
     {
         struct
         {
@@ -1479,7 +1477,7 @@ static BOOL elf_enum_modules_internal(const struct process* pcs,
     char bufstr[256];
     ULONG_PTR lm_addr;
 
-    if (pcs->is_system_64bit)
+    if (pcs->is_host_64bit)
     {
         struct
         {

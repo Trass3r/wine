@@ -551,7 +551,7 @@ static HRESULT setup_oss_device(AUDCLNT_SHAREMODE share, int fd,
     if(ret == S_FALSE && !out)
         ret = AUDCLNT_E_UNSUPPORTED_FORMAT;
 
-    if(ret == S_FALSE && out){
+    if(ret == S_FALSE){
         closest->Format.nBlockAlign =
             closest->Format.nChannels * closest->Format.wBitsPerSample / 8;
         closest->Format.nAvgBytesPerSec =
@@ -575,36 +575,6 @@ static NTSTATUS oss_create_stream(void *args)
     SIZE_T size;
 
     params->result = S_OK;
-
-    if (params->share == AUDCLNT_SHAREMODE_SHARED) {
-        params->period = def_period;
-        if (params->duration < 3 * params->period)
-            params->duration = 3 * params->period;
-    } else {
-        if (fmtex->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
-           (fmtex->dwChannelMask == 0 || fmtex->dwChannelMask & SPEAKER_RESERVED))
-            params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
-        else {
-            if (!params->period)
-                params->period = def_period;
-            if (params->period < min_period || params->period > 5000000)
-                params->result = AUDCLNT_E_INVALID_DEVICE_PERIOD;
-            else if (params->duration > 20000000) /* The smaller the period, the lower this limit. */
-                params->result = AUDCLNT_E_BUFFER_SIZE_ERROR;
-            else if (params->flags & AUDCLNT_STREAMFLAGS_EVENTCALLBACK) {
-                if (params->duration != params->period)
-                    params->result = AUDCLNT_E_BUFDURATION_PERIOD_NOT_EQUAL;
-
-                FIXME("EXCLUSIVE mode with EVENTCALLBACK\n");
-
-                params->result = AUDCLNT_E_DEVICE_IN_USE;
-            } else if (params->duration < 8 * params->period)
-                params->duration = 8 * params->period; /* May grow above 2s. */
-        }
-    }
-
-    if (FAILED(params->result))
-        return STATUS_SUCCESS;
 
     stream = calloc(1, sizeof(*stream));
     if(!stream){
@@ -1478,6 +1448,15 @@ static NTSTATUS oss_is_started(void *args)
     return oss_unlock_result(stream, &params->result, stream->playing ? S_OK : S_FALSE);
 }
 
+static NTSTATUS oss_get_prop_value(void *args)
+{
+    struct get_prop_value_params *params = args;
+
+    params->result = E_NOTIMPL;
+
+    return STATUS_SUCCESS;
+}
+
 /* Aux driver */
 
 static unsigned int num_aux;
@@ -1695,7 +1674,7 @@ static NTSTATUS oss_aux_message(void *args)
     return STATUS_SUCCESS;
 }
 
-unixlib_entry_t __wine_unix_call_funcs[] =
+const unixlib_entry_t __wine_unix_call_funcs[] =
 {
     oss_process_attach,
     oss_not_implemented,
@@ -1712,6 +1691,7 @@ unixlib_entry_t __wine_unix_call_funcs[] =
     oss_get_capture_buffer,
     oss_release_capture_buffer,
     oss_is_format_supported,
+    oss_not_implemented,
     oss_get_mix_format,
     oss_get_device_period,
     oss_get_buffer_size,
@@ -1724,7 +1704,7 @@ unixlib_entry_t __wine_unix_call_funcs[] =
     oss_set_event_handle,
     oss_test_connect,
     oss_is_started,
-    oss_not_implemented,
+    oss_get_prop_value,
     oss_not_implemented,
     oss_midi_release,
     oss_midi_out_message,
@@ -1732,6 +1712,8 @@ unixlib_entry_t __wine_unix_call_funcs[] =
     oss_midi_notify_wait,
     oss_aux_message,
 };
+
+C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == funcs_count);
 
 #ifdef _WIN64
 
@@ -2109,6 +2091,62 @@ static NTSTATUS oss_wow64_set_event_handle(void *args)
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS oss_wow64_get_prop_value(void *args)
+{
+    struct propvariant32
+    {
+        WORD vt;
+        WORD pad1, pad2, pad3;
+        union
+        {
+            ULONG ulVal;
+            PTR32 ptr;
+            ULARGE_INTEGER uhVal;
+        };
+    } *value32;
+    struct
+    {
+        PTR32 device;
+        EDataFlow flow;
+        PTR32 guid;
+        PTR32 prop;
+        HRESULT result;
+        PTR32 value;
+        PTR32 buffer; /* caller allocated buffer to hold value's strings */
+        PTR32 buffer_size;
+    } *params32 = args;
+    PROPVARIANT value;
+    struct get_prop_value_params params =
+    {
+        .device = ULongToPtr(params32->device),
+        .flow = params32->flow,
+        .guid = ULongToPtr(params32->guid),
+        .prop = ULongToPtr(params32->prop),
+        .value = &value,
+        .buffer = ULongToPtr(params32->buffer),
+        .buffer_size = ULongToPtr(params32->buffer_size)
+    };
+    oss_get_prop_value(&params);
+    params32->result = params.result;
+    if (SUCCEEDED(params.result))
+    {
+        value32 = UlongToPtr(params32->value);
+        value32->vt = value.vt;
+        switch (value.vt)
+        {
+        case VT_UI4:
+            value32->ulVal = value.ulVal;
+            break;
+        case VT_LPWSTR:
+            value32->ptr = params32->buffer;
+            break;
+        default:
+            FIXME("Unhandled vt %04x\n", value.vt);
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS oss_wow64_aux_message(void *args)
 {
     struct
@@ -2132,7 +2170,7 @@ static NTSTATUS oss_wow64_aux_message(void *args)
     return oss_aux_message(&params);
 }
 
-unixlib_entry_t __wine_unix_call_wow64_funcs[] =
+const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
 {
     oss_process_attach,
     oss_not_implemented,
@@ -2149,6 +2187,7 @@ unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     oss_wow64_get_capture_buffer,
     oss_release_capture_buffer,
     oss_wow64_is_format_supported,
+    oss_not_implemented,
     oss_wow64_get_mix_format,
     oss_wow64_get_device_period,
     oss_wow64_get_buffer_size,
@@ -2161,7 +2200,7 @@ unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     oss_wow64_set_event_handle,
     oss_wow64_test_connect,
     oss_is_started,
-    oss_not_implemented,
+    oss_wow64_get_prop_value,
     oss_not_implemented,
     oss_midi_release,
     oss_wow64_midi_out_message,
@@ -2169,5 +2208,7 @@ unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     oss_wow64_midi_notify_wait,
     oss_wow64_aux_message,
 };
+
+C_ASSERT(ARRAYSIZE(__wine_unix_call_wow64_funcs) == funcs_count);
 
 #endif /* _WIN64 */

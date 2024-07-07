@@ -976,17 +976,21 @@ struct test_stack_size_thread_args
     DWORD expect_reserved;
 };
 
-static void force_stack_grow(void)
+static void DECLSPEC_NOINLINE force_stack_grow(void)
 {
     volatile int buffer[0x2000];
-    buffer[0] = 0xdeadbeef;
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(buffer); i++) buffer[i] = 0xdeadbeef;
     (void)buffer[0];
 }
 
-static void force_stack_grow_small(void)
+static void DECLSPEC_NOINLINE force_stack_grow_small(void)
 {
     volatile int buffer[0x400];
-    buffer[0] = 0xdeadbeef;
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(buffer); i++) buffer[i] = 0xdeadbeef;
     (void)buffer[0];
 }
 
@@ -2003,18 +2007,19 @@ static void test_user_shared_data(void)
         return;
     }
 
-    trace("XState EnabledFeatures %s.\n", wine_dbgstr_longlong(xstate.EnabledFeatures));
+    trace("XState EnabledFeatures %#I64x, EnabledSupervisorFeatures %#I64x, EnabledVolatileFeatures %I64x.\n",
+            xstate.EnabledFeatures, xstate.EnabledSupervisorFeatures, xstate.EnabledVolatileFeatures);
     feature_mask = pRtlGetEnabledExtendedFeatures(0);
     ok(!feature_mask, "Got unexpected feature_mask %s.\n", wine_dbgstr_longlong(feature_mask));
     feature_mask = pRtlGetEnabledExtendedFeatures(~(ULONG64)0);
-    ok(feature_mask == xstate.EnabledFeatures, "Got unexpected feature_mask %s.\n",
+    ok(feature_mask == (xstate.EnabledFeatures | xstate.EnabledSupervisorFeatures), "Got unexpected feature_mask %s.\n",
             wine_dbgstr_longlong(feature_mask));
     feature_mask = pGetEnabledXStateFeatures();
-    ok(feature_mask == xstate.EnabledFeatures, "Got unexpected feature_mask %s.\n",
+    ok(feature_mask == (xstate.EnabledFeatures | xstate.EnabledSupervisorFeatures), "Got unexpected feature_mask %s.\n",
             wine_dbgstr_longlong(feature_mask));
     ok((xstate.EnabledFeatures & SUPPORTED_XSTATE_FEATURES) == SUPPORTED_XSTATE_FEATURES,
             "Got unexpected EnabledFeatures %s.\n", wine_dbgstr_longlong(xstate.EnabledFeatures));
-    ok((xstate.EnabledVolatileFeatures & SUPPORTED_XSTATE_FEATURES) == xstate.EnabledFeatures,
+    ok((xstate.EnabledVolatileFeatures & SUPPORTED_XSTATE_FEATURES) == (xstate.EnabledFeatures & SUPPORTED_XSTATE_FEATURES),
             "Got unexpected EnabledVolatileFeatures %s.\n", wine_dbgstr_longlong(xstate.EnabledVolatileFeatures));
     ok(xstate.Size >= 512 + sizeof(XSTATE), "Got unexpected Size %lu.\n", xstate.Size);
     if (xstate.CompactionEnabled)
@@ -2049,8 +2054,7 @@ static void perform_relocations( void *module, INT_PTR delta )
     nt = RtlImageNtHeader( module );
     relocs = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
     if (!relocs->VirtualAddress || !relocs->Size) return;
-    sec = (const IMAGE_SECTION_HEADER *)((const char *)&nt->OptionalHeader +
-                                         nt->FileHeader.SizeOfOptionalHeader);
+    sec = IMAGE_FIRST_SECTION( nt );
     for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
     {
         void *addr = (char *)module + sec[i].VirtualAddress;
@@ -2116,13 +2120,13 @@ static void test_syscalls(void)
     ptr = MapViewOfFile( mapping, FILE_MAP_READ, 0, 0, 0 );
     ok( ptr != NULL, "MapViewOfFile failed err %lu\n", GetLastError() );
     CloseHandle( mapping );
-    CloseHandle( file );
     delta = (char *)ptr - (char *)module;
 
     if (memcmp( ptr, module, 0x1000 ))
     {
         skip( "modules are not identical (non-PE build?)\n" );
         UnmapViewOfFile( ptr );
+        CloseHandle( file );
         return;
     }
     perform_relocations( ptr, delta );
@@ -2149,12 +2153,40 @@ static void test_syscalls(void)
     }
     else
     {
-#ifdef __x86_64__
+#ifdef __i386__
+        NTSTATUS (WINAPI *pNtQueryInformationProcess)(HANDLE, PROCESSINFOCLASS, void *, ULONG, ULONG *);
+        PROCESS_BASIC_INFORMATION pbi;
+        void *exec_mem, *va_ptr;
+        ULONG size;
+        BOOL ret;
+
+        exec_mem = VirtualAlloc( NULL, 4096, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE );
+        ok( !!exec_mem, "got NULL.\n" );
+
+        /* NtQueryInformationProcess is special. */
+        pNtQueryInformationProcess = (void *)GetProcAddress( module, "NtQueryInformationProcess" );
+        va_ptr = RtlImageRvaToVa( RtlImageNtHeader(module), module,
+                                  (char *)pNtQueryInformationProcess - (char *)module, NULL );
+        ok( !!va_ptr, "offset not found %p / %p\n", pNtQueryInformationProcess, module );
+        ret = SetFilePointer( file, (char *)va_ptr - (char *)module, NULL, FILE_BEGIN );
+        ok( ret, "got %d, err %lu.\n", ret, GetLastError() );
+        ret = ReadFile( file, exec_mem, 32, NULL, NULL );
+        ok( ret, "got %d, err %lu.\n", ret, GetLastError() );
+        pNtQueryInformationProcess = exec_mem;
+        /* The thunk still works without relocation. */
+        status = pNtQueryInformationProcess( GetCurrentProcess(), ProcessBasicInformation, &pbi, sizeof(pbi), &size );
+        ok( !status, "got %#lx.\n", status );
+        ok( size == sizeof(pbi), "got %lu.\n", size );
+        ok( pbi.PebBaseAddress == NtCurrentTeb()->Peb, "got %p, %p.\n", pbi.PebBaseAddress, NtCurrentTeb()->Peb );
+
+        VirtualFree( exec_mem, 0, MEM_RELEASE );
+#elif defined __x86_64__
         ok( 0, "syscall thunk relocated\n" );
 #else
         skip( "syscall thunk relocated\n" );
 #endif
     }
+    CloseHandle( file );
     UnmapViewOfFile( ptr );
 }
 

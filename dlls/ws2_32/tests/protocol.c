@@ -96,7 +96,7 @@ static void test_WSAEnumProtocolsA(void)
     error = WSAGetLastError();
     ok( error == WSAENOBUFS, "Expected 10055, received %ld\n", error);
 
-    buffer = HeapAlloc( GetProcessHeap(), 0, len );
+    buffer = malloc( len );
 
     if (buffer)
     {
@@ -113,7 +113,7 @@ static void test_WSAEnumProtocolsA(void)
                                 buffer[i].dwServiceFlags1);
         }
 
-        HeapFree( GetProcessHeap(), 0, buffer );
+        free( buffer );
     }
 
     /* Test invalid protocols in the list */
@@ -123,7 +123,7 @@ static void test_WSAEnumProtocolsA(void)
     ok( error == WSAENOBUFS || broken(error == WSAEFAULT) /* NT4 */,
        "Expected 10055, received %ld\n", error);
 
-    buffer = HeapAlloc( GetProcessHeap(), 0, len );
+    buffer = malloc( len );
 
     if (buffer)
     {
@@ -141,7 +141,7 @@ static void test_WSAEnumProtocolsA(void)
                 }
         ok(found == 0x0A, "Expected 2 bits represented as 0xA, received 0x%x\n", found);
 
-        HeapFree( GetProcessHeap(), 0, buffer );
+        free( buffer );
     }
 }
 
@@ -164,7 +164,7 @@ static void test_WSAEnumProtocolsW(void)
     error = WSAGetLastError();
     ok( error == WSAENOBUFS, "Expected 10055, received %ld\n", error);
 
-    buffer = HeapAlloc( GetProcessHeap(), 0, len );
+    buffer = malloc( len );
 
     if (buffer)
     {
@@ -181,7 +181,7 @@ static void test_WSAEnumProtocolsW(void)
                                 buffer[i].dwServiceFlags1);
         }
 
-        HeapFree( GetProcessHeap(), 0, buffer );
+        free( buffer );
     }
 
     /* Test invalid protocols in the list */
@@ -191,7 +191,7 @@ static void test_WSAEnumProtocolsW(void)
     ok( error == WSAENOBUFS || broken(error == WSAEFAULT) /* NT4 */,
        "Expected 10055, received %ld\n", error);
 
-    buffer = HeapAlloc( GetProcessHeap(), 0, len );
+    buffer = malloc( len );
 
     if (buffer)
     {
@@ -209,7 +209,7 @@ static void test_WSAEnumProtocolsW(void)
                 }
         ok(found == 0x0A, "Expected 2 bits represented as 0xA, received 0x%x\n", found);
 
-        HeapFree( GetProcessHeap(), 0, buffer );
+        free( buffer );
     }
 }
 
@@ -1917,8 +1917,8 @@ static void test_GetAddrInfoW(void)
     SetLastError(0xdeadbeef);
     result2 = NULL;
     ret = GetAddrInfoW(idn_domain, NULL, &hint, &result2);
-    ok(ret == WSAHOST_NOT_FOUND, "got %d expected WSAHOST_NOT_FOUND\n", ret);
-    ok(WSAGetLastError() == WSAHOST_NOT_FOUND, "expected 11001, got %d\n", WSAGetLastError());
+    ok(ret == WSAHOST_NOT_FOUND || ret == WSATRY_AGAIN, "got %d\n", ret);
+    ok(WSAGetLastError() == ret, "got %d\n", WSAGetLastError());
     ok(result2 == NULL, "got %p\n", result2);
 }
 
@@ -1926,6 +1926,7 @@ static struct completion_routine_test
 {
     WSAOVERLAPPED  *overlapped;
     DWORD           error;
+    DWORD           error2;
     ADDRINFOEXW   **result;
     HANDLE          event;
     DWORD           called;
@@ -1935,7 +1936,7 @@ static void CALLBACK completion_routine(DWORD error, DWORD byte_count, WSAOVERLA
 {
     struct completion_routine_test *test = &completion_routine_test;
 
-    ok(error == test->error, "got %lu\n", error);
+    ok(error == test->error || (test->error2 && error == test->error2), "got %lu\n", error);
     ok(!byte_count, "got %lu\n", byte_count);
     ok(overlapped == test->overlapped, "got %p\n", overlapped);
     ok(overlapped->Internal == test->error, "got %Iu\n", overlapped->Internal);
@@ -2073,6 +2074,7 @@ static void test_GetAddrInfoExW(void)
     overlapped.hEvent = NULL;
     completion_routine_test.overlapped = &overlapped;
     completion_routine_test.error = ERROR_SUCCESS;
+    completion_routine_test.error2 = ERROR_SUCCESS;
     completion_routine_test.result = &result;
     completion_routine_test.event = event;
     completion_routine_test.called = 0;
@@ -2093,6 +2095,7 @@ static void test_GetAddrInfoExW(void)
     result = (void *)0xdeadbeef;
     completion_routine_test.overlapped = &overlapped;
     completion_routine_test.error = WSAHOST_NOT_FOUND;
+    completion_routine_test.error2 = WSANO_DATA;
     completion_routine_test.called = 0;
     ResetEvent(event);
     ret = pGetAddrInfoExW(nxdomain, NULL, NS_DNS, NULL, NULL, &result, NULL, &overlapped, completion_routine, NULL);
@@ -2595,8 +2598,8 @@ static void test_gethostbyname(void)
     ret = GetIpForwardTable(NULL, &route_size, FALSE);
     ok(ret == ERROR_INSUFFICIENT_BUFFER, "GetIpForwardTable failed with a different error: %d\n", ret);
 
-    adapters = HeapAlloc(GetProcessHeap(), 0, adap_size);
-    routes = HeapAlloc(GetProcessHeap(), 0, route_size);
+    adapters = malloc(adap_size);
+    routes = malloc(route_size);
 
     ret = GetAdaptersInfo(adapters, &adap_size);
     ok(ret  == NO_ERROR, "GetAdaptersInfo failed, error: %d\n", ret);
@@ -2633,8 +2636,8 @@ static void test_gethostbyname(void)
     ok(found_default, "failed to find the first IP from gethostbyname!\n");
 
 cleanup:
-    HeapFree(GetProcessHeap(), 0, adapters);
-    HeapFree(GetProcessHeap(), 0, routes);
+    free(adapters);
+    free(routes);
 }
 
 static void test_gethostbyname_hack(void)
@@ -2792,13 +2795,13 @@ static void test_WSAEnumNameSpaceProvidersA(void)
     todo_wine
     ok(error == WSAEFAULT, "Expected 10014, got %lu\n", error);
 
-    name = HeapAlloc(GetProcessHeap(), 0, len);
+    name = malloc(len);
 
     ret = WSAEnumNameSpaceProvidersA(&len, name);
     todo_wine
     ok(ret > 0, "Expected more than zero name space providers\n");
 
-    HeapFree(GetProcessHeap(), 0, name);
+    free(name);
 }
 
 static void test_WSAEnumNameSpaceProvidersW(void)
@@ -2839,7 +2842,7 @@ static void test_WSAEnumNameSpaceProvidersW(void)
     todo_wine
     ok(error == WSAEFAULT, "Expected 10014, got %lu\n", error);
 
-    name = HeapAlloc(GetProcessHeap(), 0, len);
+    name = malloc(len);
 
     ret = WSAEnumNameSpaceProvidersW(&len, name);
     todo_wine
@@ -2868,7 +2871,7 @@ static void test_WSAEnumNameSpaceProvidersW(void)
         }
     }
 
-    HeapFree(GetProcessHeap(), 0, name);
+    free(name);
 }
 
 static void test_WSCGetProviderInfo(void)

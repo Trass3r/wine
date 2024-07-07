@@ -187,6 +187,13 @@ enum file_type {
     type_unknown
 };
 
+static BOOL compare_uint(unsigned int x, unsigned int y, unsigned int max_diff)
+{
+    unsigned int diff = x > y ? x - y : y - x;
+
+    return diff <= max_diff;
+}
+
 static BOOL compare_float(float f, float g, unsigned int ulps)
 {
     int x = *(int *)&f;
@@ -197,10 +204,7 @@ static BOOL compare_float(float f, float g, unsigned int ulps)
     if (y < 0)
         y = INT_MIN - y;
 
-    if (abs(x - y) > ulps)
-        return FALSE;
-
-    return TRUE;
+    return compare_uint(x, y, ulps);
 }
 
 static char* (__cdecl *p_setlocale)(int, const char*);
@@ -765,7 +769,7 @@ static BOOL init(void)
         SET(p_vector_base_v4__Internal_reserve,
                 "?_Internal_reserve@_Concurrent_vector_base_v4@details@Concurrency@@IAAXIII@Z");
         SET(p_vector_base_v4__Internal_resize,
-                "?_Internal_resize@_Concurrent_vector_base_v4@details@Concurrency@@IAEXIIIP6AXPAXI@ZP6AX0PBXI@Z2@Z");
+                "?_Internal_resize@_Concurrent_vector_base_v4@details@Concurrency@@IAAXIIIP6AXPAXI@ZP6AX0PBXI@Z2@Z");
 #endif
     }
     SET(p__Thrd_equal,
@@ -2425,18 +2429,28 @@ static void test__Mtx(void)
 
         r = p__Mtx_init(&mtx, flags[i]);
         ok(!r, "failed to init mtx (flags %x)\n", flags[i]);
+        ok(mtx->thread_id == -1, "mtx.thread_id = %lx (flags %x)\n", mtx->thread_id, flags[i]);
+        ok(mtx->count == 0, "mtx.count = %lu (flags %x)\n", mtx->count, flags[i]);
 
         r = p__Mtx_trylock(&mtx);
         ok(!r, "_Mtx_trylock returned %x (flags %x)\n", r, flags[i]);
+        ok(mtx->thread_id == GetCurrentThreadId(), "mtx.thread_id = %lx (flags %x)\n", mtx->thread_id, flags[i]);
+        ok(mtx->count == 1, "mtx.count = %lu (flags %x)\n", mtx->count, flags[i]);
         r = p__Mtx_trylock(&mtx);
         ok(r == expect, "_Mtx_trylock returned %x (flags %x)\n", r, flags[i]);
+        ok(mtx->thread_id == GetCurrentThreadId(), "mtx.thread_id = %lx (flags %x)\n", mtx->thread_id, flags[i]);
+        ok(mtx->count == r ? 1 : 2, "mtx.count = %lu, expected %u (flags %x)\n", mtx->count, r ? 1 : 2, flags[i]);
         if(!r) p__Mtx_unlock(&mtx);
 
         r = p__Mtx_lock(&mtx);
         ok(r == expect, "_Mtx_lock returned %x (flags %x)\n", r, flags[i]);
+        ok(mtx->thread_id == GetCurrentThreadId(), "mtx.thread_id = %lx (flags %x)\n", mtx->thread_id, flags[i]);
+        ok(mtx->count == r ? 1 : 2, "mtx.count = %lu, expected %u (flags %x)\n", mtx->count, r ? 1 : 2, flags[i]);
         if(!r) p__Mtx_unlock(&mtx);
 
         p__Mtx_unlock(&mtx);
+        ok(mtx->thread_id == -1, "mtx.thread_id = %lx (flags %x)\n", mtx->thread_id, flags[i]);
+        ok(mtx->count == 0, "mtx.count = %lu (flags %x)\n", mtx->count, flags[i]);
         p__Mtx_destroy(&mtx);
     }
 }

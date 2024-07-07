@@ -93,6 +93,7 @@
 @ stub NetFileClose
 @ stdcall NetFileEnum(wstr wstr wstr long ptr long ptr ptr ptr)
 @ stub NetFileGetInfo
+@ stdcall NetGetAadJoinInformation(wstr ptr)
 @ stdcall NetGetAnyDCName(wstr wstr ptr)
 @ stdcall NetGetDCName(wstr wstr ptr)
 @ stub NetGetDisplayInformationIndex
@@ -124,7 +125,7 @@
 @ stub NetMessageNameGetInfo
 @ stdcall NetQueryDisplayInformation(wstr long long long long ptr ptr)
 @ stub NetRemoteComputerSupports
-@ stub NetRemoteTOD
+@ stdcall NetRemoteTOD(wstr ptr)
 @ stub NetReplExportDirAdd
 @ stub NetReplExportDirDel
 @ stub NetReplExportDirEnum

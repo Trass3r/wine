@@ -306,6 +306,28 @@ const char *debug_d3dshaderinstructionhandler(enum WINED3D_SHADER_INSTRUCTION_HA
     return shader_opcode_names[handler_idx];
 }
 
+enum vkd3d_shader_visibility vkd3d_shader_visibility_from_wined3d(enum wined3d_shader_type shader_type)
+{
+    switch (shader_type)
+    {
+        case WINED3D_SHADER_TYPE_VERTEX:
+            return VKD3D_SHADER_VISIBILITY_VERTEX;
+        case WINED3D_SHADER_TYPE_HULL:
+            return VKD3D_SHADER_VISIBILITY_HULL;
+        case WINED3D_SHADER_TYPE_DOMAIN:
+            return VKD3D_SHADER_VISIBILITY_DOMAIN;
+        case WINED3D_SHADER_TYPE_GEOMETRY:
+            return VKD3D_SHADER_VISIBILITY_GEOMETRY;
+        case WINED3D_SHADER_TYPE_PIXEL:
+            return VKD3D_SHADER_VISIBILITY_PIXEL;
+        case WINED3D_SHADER_TYPE_COMPUTE:
+            return VKD3D_SHADER_VISIBILITY_COMPUTE;
+        default:
+            ERR("Invalid shader type %s.\n", debug_shader_type(shader_type));
+            return VKD3D_SHADER_VISIBILITY_ALL;
+    }
+}
+
 static const char *shader_semantic_name_from_usage(enum wined3d_decl_usage usage)
 {
     if (usage >= ARRAY_SIZE(semantic_names))
@@ -395,7 +417,7 @@ void string_buffer_clear(struct wined3d_string_buffer *buffer)
 BOOL string_buffer_init(struct wined3d_string_buffer *buffer)
 {
     buffer->buffer_size = 32;
-    if (!(buffer->buffer = heap_alloc(buffer->buffer_size)))
+    if (!(buffer->buffer = malloc(buffer->buffer_size)))
     {
         ERR("Failed to allocate shader buffer memory.\n");
         return FALSE;
@@ -407,7 +429,7 @@ BOOL string_buffer_init(struct wined3d_string_buffer *buffer)
 
 void string_buffer_free(struct wined3d_string_buffer *buffer)
 {
-    heap_free(buffer->buffer);
+    free(buffer->buffer);
 }
 
 BOOL string_buffer_resize(struct wined3d_string_buffer *buffer, int rc)
@@ -417,7 +439,7 @@ BOOL string_buffer_resize(struct wined3d_string_buffer *buffer, int rc)
 
     while (rc > 0 && (unsigned int)rc >= new_buffer_size - buffer->content_size)
         new_buffer_size *= 2;
-    if (!(new_buffer = heap_realloc(buffer->buffer, new_buffer_size)))
+    if (!(new_buffer = realloc(buffer->buffer, new_buffer_size)))
     {
         ERR("Failed to grow buffer.\n");
         buffer->buffer[buffer->content_size] = '\0';
@@ -465,11 +487,11 @@ struct wined3d_string_buffer *string_buffer_get(struct wined3d_string_buffer_lis
 
     if (list_empty(&list->list))
     {
-        buffer = heap_alloc(sizeof(*buffer));
+        buffer = malloc(sizeof(*buffer));
         if (!buffer || !string_buffer_init(buffer))
         {
             ERR("Couldn't allocate buffer for temporary string.\n");
-            heap_free(buffer);
+            free(buffer);
             return NULL;
         }
     }
@@ -526,7 +548,7 @@ void string_buffer_list_cleanup(struct wined3d_string_buffer_list *list)
     LIST_FOR_EACH_ENTRY_SAFE(buffer, buffer_next, &list->list, struct wined3d_string_buffer, entry)
     {
         string_buffer_free(buffer);
-        heap_free(buffer);
+        free(buffer);
     }
     list_init(&list->list);
 }
@@ -536,7 +558,7 @@ static void shader_delete_constant_list(struct list *clist)
     struct wined3d_shader_lconst *constant, *constant_next;
 
     LIST_FOR_EACH_ENTRY_SAFE(constant, constant_next, clist, struct wined3d_shader_lconst, entry)
-        heap_free(constant);
+        free(constant);
     list_init(clist);
 }
 
@@ -637,9 +659,10 @@ static void shader_set_limits(struct wined3d_shader *shader)
     }
     if (!shader->limits)
     {
-        FIXME("Unexpected shader version \"%u.%u\".\n",
+        FIXME("Unexpected shader version \"%u.%u\" (shader type %u).\n",
                 shader->reg_maps.shader_version.major,
-                shader->reg_maps.shader_version.minor);
+                shader->reg_maps.shader_version.minor,
+                shader->reg_maps.shader_version.type);
         shader->limits = &limits_array[max(0, i - 1)].limits;
     }
 }
@@ -756,6 +779,10 @@ static BOOL shader_record_register_usage(struct wined3d_shader *shader, struct w
             reg_maps->sample_mask = 1;
             break;
 
+        case WINED3DSPR_STENCILREF:
+            reg_maps->stencil_ref = 1;
+            break;
+
         default:
             TRACE("Not recording register of type %#x and [%#x][%#x].\n",
                     reg->type, reg->idx[0].offset, reg->idx[1].offset);
@@ -781,7 +808,7 @@ static void shader_record_sample(struct wined3d_shader_reg_maps *reg_maps,
 
     if (!map->size)
     {
-        if (!(entries = heap_calloc(4, sizeof(*entries))))
+        if (!(entries = calloc(4, sizeof(*entries))))
         {
             ERR("Failed to allocate sampler map entries.\n");
             return;
@@ -794,7 +821,7 @@ static void shader_record_sample(struct wined3d_shader_reg_maps *reg_maps,
         size_t new_size = map->size * 2;
 
         if (sizeof(*entries) * new_size <= sizeof(*entries) * map->size
-                || !(entries = heap_realloc(entries, sizeof(*entries) * new_size)))
+                || !(entries = realloc(entries, sizeof(*entries) * new_size)))
         {
             ERR("Failed to resize sampler map entries.\n");
             return;
@@ -880,9 +907,9 @@ static HRESULT shader_record_shader_phase(struct wined3d_shader *shader,
             if (shader->u.hs.phases.control_point)
             {
                 FIXME("Multiple control point phases.\n");
-                heap_free(shader->u.hs.phases.control_point);
+                free(shader->u.hs.phases.control_point);
             }
-            if (!(shader->u.hs.phases.control_point = heap_alloc_zero(sizeof(*shader->u.hs.phases.control_point))))
+            if (!(shader->u.hs.phases.control_point = calloc(1, sizeof(*shader->u.hs.phases.control_point))))
                 return E_OUTOFMEMORY;
             phase = shader->u.hs.phases.control_point;
             break;
@@ -1001,7 +1028,7 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
 
     shader_set_limits(shader);
 
-    if (!(reg_maps->constf = heap_calloc(((min(shader->limits->constant_float, constf_size) + 31) / 32),
+    if (!(reg_maps->constf = calloc(((min(shader->limits->constant_float, constf_size) + 31) / 32),
             sizeof(*reg_maps->constf))))
     {
         ERR("Failed to allocate constant map memory.\n");
@@ -1156,7 +1183,7 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
             {
                 struct wined3d_shader_indexable_temp *reg;
 
-                if (!(reg = heap_alloc(sizeof(*reg))))
+                if (!(reg = malloc(sizeof(*reg))))
                     return E_OUTOFMEMORY;
 
                 *reg = ins.declaration.indexable_temp;
@@ -1341,7 +1368,7 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
             struct wined3d_shader_lconst *lconst;
             float *value;
 
-            if (!(lconst = heap_alloc(sizeof(*lconst))))
+            if (!(lconst = malloc(sizeof(*lconst))))
                 return E_OUTOFMEMORY;
 
             lconst->idx = ins.dst[0].reg.idx[0].offset;
@@ -1373,7 +1400,7 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
         {
             struct wined3d_shader_lconst *lconst;
 
-            if (!(lconst = heap_alloc(sizeof(*lconst))))
+            if (!(lconst = malloc(sizeof(*lconst))))
                 return E_OUTOFMEMORY;
 
             lconst->idx = ins.dst[0].reg.idx[0].offset;
@@ -1386,7 +1413,7 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
         {
             struct wined3d_shader_lconst *lconst;
 
-            if (!(lconst = heap_alloc(sizeof(*lconst))))
+            if (!(lconst = malloc(sizeof(*lconst))))
                 return E_OUTOFMEMORY;
 
             lconst->idx = ins.dst[0].reg.idx[0].offset;
@@ -1451,7 +1478,7 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
 
                                 case 2: /* oPts */
                                     reg_maps->output_registers |= 1u << 11;
-                                    shader_signature_from_usage(&output_signature_elements[11],
+                                    shader_signature_from_usage(&output_signature_elements[12],
                                             WINED3D_DECL_USAGE_PSIZE, 0, 11, WINED3DSP_WRITEMASK_1);
                                     break;
                             }
@@ -1774,7 +1801,7 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
         struct wined3d_shader_signature_element *e;
         unsigned int i;
 
-        if (!(input_signature->elements = heap_calloc(count, sizeof(*input_signature->elements))))
+        if (!(input_signature->elements = calloc(count, sizeof(*input_signature->elements))))
             return E_OUTOFMEMORY;
         input_signature->element_count = count;
 
@@ -1795,19 +1822,24 @@ static HRESULT shader_get_registers_used(struct wined3d_shader *shader, DWORD co
     }
     else if (reg_maps->output_registers)
     {
-        unsigned int count = wined3d_popcount(reg_maps->output_registers);
         struct wined3d_shader_signature_element *e;
+        unsigned int count = 0;
 
-        if (!(output_signature->elements = heap_calloc(count, sizeof(*output_signature->elements))))
+        for (i = 0; i < ARRAY_SIZE(output_signature_elements); ++i)
+        {
+            if (output_signature_elements[i].semantic_name)
+                ++count;
+        }
+
+        if (!(output_signature->elements = calloc(count, sizeof(*output_signature->elements))))
             return E_OUTOFMEMORY;
         output_signature->element_count = count;
 
         e = output_signature->elements;
         for (i = 0; i < ARRAY_SIZE(output_signature_elements); ++i)
         {
-            if (!(reg_maps->output_registers & (1u << i)))
-                continue;
-            *e++ = output_signature_elements[i];
+            if (output_signature_elements[i].semantic_name)
+                *e++ = output_signature_elements[i];
         }
     }
 
@@ -1818,14 +1850,14 @@ static void shader_cleanup_reg_maps(struct wined3d_shader_reg_maps *reg_maps)
 {
     struct wined3d_shader_indexable_temp *reg, *reg_next;
 
-    heap_free(reg_maps->constf);
-    heap_free(reg_maps->sampler_map.entries);
+    free(reg_maps->constf);
+    free(reg_maps->sampler_map.entries);
 
     LIST_FOR_EACH_ENTRY_SAFE(reg, reg_next, &reg_maps->indexable_temps, struct wined3d_shader_indexable_temp, entry)
-        heap_free(reg);
+        free(reg);
     list_init(&reg_maps->indexable_temps);
 
-    heap_free(reg_maps->tgsm);
+    free(reg_maps->tgsm);
 }
 
 unsigned int shader_find_free_input_register(const struct wined3d_shader_reg_maps *reg_maps, unsigned int max)
@@ -1896,17 +1928,17 @@ static void shader_cleanup(struct wined3d_shader *shader)
 {
     if (shader->reg_maps.shader_version.type == WINED3D_SHADER_TYPE_HULL)
     {
-        heap_free(shader->u.hs.phases.control_point);
-        heap_free(shader->u.hs.phases.fork);
-        heap_free(shader->u.hs.phases.join);
+        free(shader->u.hs.phases.control_point);
+        free(shader->u.hs.phases.fork);
+        free(shader->u.hs.phases.join);
     }
 
-    heap_free(shader->patch_constant_signature.elements);
-    heap_free(shader->output_signature.elements);
-    heap_free(shader->input_signature.elements);
+    free(shader->patch_constant_signature.elements);
+    free(shader->output_signature.elements);
+    free(shader->input_signature.elements);
     shader->device->shader_backend->shader_destroy(shader);
     shader_cleanup_reg_maps(&shader->reg_maps);
-    heap_free(shader->byte_code);
+    free(shader->byte_code);
     shader_delete_constant_list(&shader->constantsF);
     shader_delete_constant_list(&shader->constantsB);
     shader_delete_constant_list(&shader->constantsI);
@@ -1920,29 +1952,26 @@ struct shader_none_priv
 {
     const struct wined3d_vertex_pipe_ops *vertex_pipe;
     const struct wined3d_fragment_pipe_ops *fragment_pipe;
-    BOOL ffp_proj_control;
 };
 
 static void shader_none_handle_instruction(const struct wined3d_shader_instruction *ins) {}
 static void shader_none_precompile(void *shader_priv, struct wined3d_shader *shader) {}
-static void shader_none_select_compute(void *shader_priv, struct wined3d_context *context,
+static void shader_none_apply_compute_state(void *shader_priv, struct wined3d_context *context,
         const struct wined3d_state *state) {}
 static void shader_none_update_float_vertex_constants(struct wined3d_device *device, UINT start, UINT count) {}
 static void shader_none_update_float_pixel_constants(struct wined3d_device *device, UINT start, UINT count) {}
-static void shader_none_load_constants(void *shader_priv, struct wined3d_context *context,
-        const struct wined3d_state *state) {}
 static void shader_none_destroy(struct wined3d_shader *shader) {}
 static void shader_none_free_context_data(struct wined3d_context *context) {}
 static void shader_none_init_context_state(struct wined3d_context *context) {}
 
 /* Context activation is done by the caller. */
-static void shader_none_select(void *shader_priv, struct wined3d_context *context,
+static void shader_none_apply_draw_state(void *shader_priv, struct wined3d_context *context,
         const struct wined3d_state *state)
 {
     struct shader_none_priv *priv = shader_priv;
 
-    priv->vertex_pipe->vp_enable(context, !use_vs(state));
-    priv->fragment_pipe->fp_enable(context, !use_ps(state));
+    priv->vertex_pipe->vp_apply_draw_state(context, state);
+    priv->fragment_pipe->fp_apply_draw_state(context, state);
 }
 
 /* Context activation is done by the caller. */
@@ -1950,8 +1979,8 @@ static void shader_none_disable(void *shader_priv, struct wined3d_context *conte
 {
     struct shader_none_priv *priv = shader_priv;
 
-    priv->vertex_pipe->vp_enable(context, FALSE);
-    priv->fragment_pipe->fp_enable(context, FALSE);
+    priv->vertex_pipe->vp_disable(context);
+    priv->fragment_pipe->fp_disable(context);
 
     context->shader_update_mask = (1u << WINED3D_SHADER_TYPE_PIXEL)
             | (1u << WINED3D_SHADER_TYPE_VERTEX)
@@ -1964,17 +1993,16 @@ static void shader_none_disable(void *shader_priv, struct wined3d_context *conte
 static HRESULT shader_none_alloc(struct wined3d_device *device, const struct wined3d_vertex_pipe_ops *vertex_pipe,
         const struct wined3d_fragment_pipe_ops *fragment_pipe)
 {
-    struct fragment_caps fragment_caps;
     void *vertex_priv, *fragment_priv;
     struct shader_none_priv *priv;
 
-    if (!(priv = heap_alloc(sizeof(*priv))))
+    if (!(priv = malloc(sizeof(*priv))))
         return E_OUTOFMEMORY;
 
     if (!(vertex_priv = vertex_pipe->vp_alloc(&none_shader_backend, priv)))
     {
         ERR("Failed to initialize vertex pipe.\n");
-        heap_free(priv);
+        free(priv);
         return E_FAIL;
     }
 
@@ -1982,14 +2010,12 @@ static HRESULT shader_none_alloc(struct wined3d_device *device, const struct win
     {
         ERR("Failed to initialize fragment pipe.\n");
         vertex_pipe->vp_free(device, NULL);
-        heap_free(priv);
+        free(priv);
         return E_FAIL;
     }
 
     priv->vertex_pipe = vertex_pipe;
     priv->fragment_pipe = fragment_pipe;
-    fragment_pipe->get_caps(device->adapter, &fragment_caps);
-    priv->ffp_proj_control = fragment_caps.wined3d_caps & WINED3D_FRAGMENT_CAP_PROJ_CONTROL;
 
     device->vertex_priv = vertex_priv;
     device->fragment_priv = fragment_priv;
@@ -2004,7 +2030,7 @@ static void shader_none_free(struct wined3d_device *device, struct wined3d_conte
 
     priv->fragment_pipe->free_private(device, context);
     priv->vertex_pipe->vp_free(device, context);
-    heap_free(priv);
+    free(priv);
 }
 
 static BOOL shader_none_allocate_context_data(struct wined3d_context *context)
@@ -2025,13 +2051,6 @@ static BOOL shader_none_color_fixup_supported(struct color_fixup_desc fixup)
     return TRUE;
 }
 
-static BOOL shader_none_has_ffp_proj_control(void *shader_priv)
-{
-    struct shader_none_priv *priv = shader_priv;
-
-    return priv->ffp_proj_control;
-}
-
 static uint64_t shader_none_shader_compile(struct wined3d_context *context, const struct wined3d_shader_desc *shader_desc,
         enum wined3d_shader_type shader_type)
 {
@@ -2042,12 +2061,11 @@ const struct wined3d_shader_backend_ops none_shader_backend =
 {
     shader_none_handle_instruction,
     shader_none_precompile,
-    shader_none_select,
-    shader_none_select_compute,
+    shader_none_apply_draw_state,
+    shader_none_apply_compute_state,
     shader_none_disable,
     shader_none_update_float_vertex_constants,
     shader_none_update_float_pixel_constants,
-    shader_none_load_constants,
     shader_none_destroy,
     shader_none_alloc,
     shader_none_free,
@@ -2056,7 +2074,6 @@ const struct wined3d_shader_backend_ops none_shader_backend =
     shader_none_init_context_state,
     shader_none_get_caps,
     shader_none_color_fixup_supported,
-    shader_none_has_ffp_proj_control,
     shader_none_shader_compile,
 };
 
@@ -2176,7 +2193,7 @@ static void wined3d_shader_destroy_object(void *object)
     TRACE("object %p.\n", object);
 
     shader_cleanup(object);
-    heap_free(object);
+    free(object);
 }
 
 ULONG CDECL wined3d_shader_decref(struct wined3d_shader *shader)
@@ -2248,7 +2265,7 @@ HRESULT CDECL wined3d_shader_set_local_constants_float(struct wined3d_shader *sh
         struct wined3d_shader_lconst *lconst;
         float *value;
 
-        if (!(lconst = heap_alloc(sizeof(*lconst))))
+        if (!(lconst = malloc(sizeof(*lconst))))
             return E_OUTOFMEMORY;
 
         lconst->idx = i;
@@ -2405,7 +2422,6 @@ static void shader_trace(const void *code, size_t size, enum vkd3d_shader_source
 static HRESULT shader_init(struct wined3d_shader *shader, struct wined3d_device *device,
         const struct wined3d_shader_desc *desc, void *parent, const struct wined3d_parent_ops *parent_ops)
 {
-    enum vkd3d_shader_source_type source_type;
     HRESULT hr;
 
     TRACE("byte_code %p, byte_code_size %#lx.\n", desc->byte_code, (long)desc->byte_code_size);
@@ -2434,8 +2450,8 @@ static HRESULT shader_init(struct wined3d_shader *shader, struct wined3d_device 
         const DWORD *ptr;
         void *fe_data;
 
-        source_type = VKD3D_SHADER_SOURCE_D3D_BYTECODE;
-        if (!(shader->frontend = shader_select_frontend(source_type)))
+        shader->source_type = VKD3D_SHADER_SOURCE_D3D_BYTECODE;
+        if (!(shader->frontend = shader_select_frontend(shader->source_type)))
         {
             FIXME("Unable to find frontend for shader.\n");
             hr = WINED3DERR_INVALIDCALL;
@@ -2458,7 +2474,7 @@ static HRESULT shader_init(struct wined3d_shader *shader, struct wined3d_device 
 
         shader->byte_code_size = (ptr - desc->byte_code) * sizeof(*ptr);
 
-        if (!(shader->byte_code = heap_alloc(shader->byte_code_size)))
+        if (!(shader->byte_code = malloc(shader->byte_code_size)))
         {
             hr = E_OUTOFMEMORY;
             goto fail;
@@ -2472,7 +2488,7 @@ static HRESULT shader_init(struct wined3d_shader *shader, struct wined3d_device 
     {
         unsigned int max_version;
 
-        if (!(shader->byte_code = heap_alloc(desc->byte_code_size)))
+        if (!(shader->byte_code = malloc(desc->byte_code_size)))
         {
             hr = E_OUTOFMEMORY;
             goto fail;
@@ -2481,10 +2497,10 @@ static HRESULT shader_init(struct wined3d_shader *shader, struct wined3d_device 
         shader->byte_code_size = desc->byte_code_size;
 
         max_version = shader_max_version_from_feature_level(device->cs->c.state->feature_level);
-        if (FAILED(hr = wined3d_shader_extract_from_dxbc(shader, max_version, &source_type)))
+        if (FAILED(hr = wined3d_shader_extract_from_dxbc(shader, max_version, &shader->source_type)))
             goto fail;
 
-        if (!(shader->frontend = shader_select_frontend(source_type)))
+        if (!(shader->frontend = shader_select_frontend(shader->source_type)))
         {
             FIXME("Unable to find frontend for shader.\n");
             hr = WINED3DERR_INVALIDCALL;
@@ -2494,10 +2510,10 @@ static HRESULT shader_init(struct wined3d_shader *shader, struct wined3d_device 
 
     if (TRACE_ON(d3d_shader))
     {
-        if (source_type == VKD3D_SHADER_SOURCE_D3D_BYTECODE)
-            shader_trace(shader->function, shader->functionLength, source_type);
+        if (shader->source_type == VKD3D_SHADER_SOURCE_D3D_BYTECODE)
+            shader_trace(shader->function, shader->functionLength, shader->source_type);
         else
-            shader_trace(shader->byte_code, shader->byte_code_size, source_type);
+            shader_trace(shader->byte_code, shader->byte_code_size, shader->source_type);
     }
 
 
@@ -2605,7 +2621,7 @@ static HRESULT geometry_shader_init_so_desc(struct wined3d_geometry_shader *gs, 
         if (n)
             size += strlen(n) + 1;
     }
-    if (!(s = heap_alloc(size)))
+    if (!(s = malloc(size)))
         return E_OUTOFMEMORY;
 
     s->desc = *so_desc;
@@ -2629,7 +2645,7 @@ static HRESULT geometry_shader_init_so_desc(struct wined3d_geometry_shader *gs, 
 
     if (wine_rb_put(&device->so_descs, &s->desc, &s->entry) == -1)
     {
-        heap_free(s);
+        free(s);
         return E_FAIL;
     }
     gs->so_desc = &s->desc;
@@ -2751,8 +2767,6 @@ void find_ds_compile_args(const struct wined3d_state *state, const struct wined3
             : pixel_shader ? pixel_shader->limits->packed_input : shader->limits->packed_output;
     args->next_shader_type = geometry_shader ? WINED3D_SHADER_TYPE_GEOMETRY : WINED3D_SHADER_TYPE_PIXEL;
 
-    args->render_offscreen = context->render_offscreen;
-
     init_interpolation_compile_args(args->interpolation_mode,
             args->next_shader_type == WINED3D_SHADER_TYPE_PIXEL ? pixel_shader : NULL, context->d3d_info);
 
@@ -2776,6 +2790,7 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
         BOOL position_transformed, struct ps_compile_args *args, const struct wined3d_context *context)
 {
     const struct wined3d_d3d_info *d3d_info = context->d3d_info;
+    struct wined3d_shader_resource_view *view;
     struct wined3d_texture *texture;
     unsigned int i;
 
@@ -2851,29 +2866,36 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
     {
         for (i = 0; i < shader->limits->sampler; ++i)
         {
+            enum wined3d_shader_tex_types type = WINED3D_SHADER_TEX_2D;
+
             if (!shader->reg_maps.resource_info[i].type)
                 continue;
 
             /* Treat unbound textures as 2D. The dummy texture will provide
              * the proper sample value. The tex_types bitmap defaults to
              * 2D because of the memset. */
-            if (!(texture = state->textures[i]))
+            if (!(view = state->shader_resource_view[WINED3D_SHADER_TYPE_PIXEL][i]))
                 continue;
+            texture = texture_from_resource(view->resource);
 
-            switch (wined3d_texture_gl(texture)->target)
+            switch (texture->resource.type)
             {
-                /* RECT textures are distinguished from 2D textures via np2_fixup */
-                default:
+                case WINED3D_RTYPE_NONE:
+                case WINED3D_RTYPE_BUFFER:
+                case WINED3D_RTYPE_TEXTURE_1D:
+                    assert(0);
+
+                case WINED3D_RTYPE_TEXTURE_2D:
+                    if (texture->resource.usage & WINED3DUSAGE_LEGACY_CUBEMAP)
+                        type = WINED3D_SHADER_TEX_CUBE;
                     break;
 
-                case GL_TEXTURE_3D:
-                    args->tex_types |= WINED3D_SHADER_TEX_3D << i * WINED3D_PSARGS_TEXTYPE_SHIFT;
-                    break;
-
-                case GL_TEXTURE_CUBE_MAP_ARB:
-                    args->tex_types |= WINED3D_SHADER_TEX_CUBE << i * WINED3D_PSARGS_TEXTYPE_SHIFT;
+                case WINED3D_RTYPE_TEXTURE_3D:
+                    type = WINED3D_SHADER_TEX_3D;
                     break;
             }
+
+            args->tex_types |= (type << (i * WINED3D_PSARGS_TEXTYPE_SHIFT));
         }
     }
     else if (shader->reg_maps.shader_version.major <= 3)
@@ -2899,8 +2921,9 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
                     break;
             }
 
-            if ((texture = state->textures[i]))
+            if ((view = state->shader_resource_view[WINED3D_SHADER_TYPE_PIXEL][i]))
             {
+                texture = texture_from_resource(view->resource);
                 /* Star Wars: The Old Republic uses mismatched samplers for rendering water. */
                 if (texture->resource.type == WINED3D_RTYPE_TEXTURE_2D
                         && resource_type == WINED3D_SHADER_RESOURCE_TEXTURE_3D
@@ -2920,7 +2943,6 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
         args->shadow = 0;
         for (i = 0 ; i < WINED3D_MAX_FRAGMENT_SAMPLERS; ++i)
             args->color_fixup[i] = COLOR_FIXUP_IDENTITY;
-        args->np2_fixup = 0;
     }
     else
     {
@@ -2929,12 +2951,13 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
             if (!shader->reg_maps.resource_info[i].type)
                 continue;
 
-            texture = state->textures[i];
-            if (!texture)
+            if (!(view = state->shader_resource_view[WINED3D_SHADER_TYPE_PIXEL][i]))
             {
                 args->color_fixup[i] = COLOR_FIXUP_IDENTITY;
                 continue;
             }
+            texture = texture_from_resource(view->resource);
+
             if (can_use_texture_swizzle(d3d_info, texture->resource.format))
                 args->color_fixup[i] = COLOR_FIXUP_IDENTITY;
             else
@@ -2942,10 +2965,6 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
 
             if (texture->resource.format_caps & WINED3D_FORMAT_CAP_SHADOW)
                 args->shadow |= 1u << i;
-
-            /* Flag samplers that need NP2 texcoord fixup. */
-            if (!(texture->flags & WINED3D_TEXTURE_POW2_MAT_IDENT))
-                args->np2_fixup |= (1u << i);
         }
     }
 
@@ -2998,7 +3017,7 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
         const struct wined3d_shader *vs = state->shader[WINED3D_SHADER_TYPE_VERTEX];
 
         args->texcoords_initialized = 0;
-        for (i = 0; i < WINED3D_MAX_TEXTURES; ++i)
+        for (i = 0; i < WINED3D_MAX_FFP_TEXTURES; ++i)
         {
             if (vs)
             {
@@ -3012,14 +3031,14 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
 
                 if ((state->texture_states[i][WINED3D_TSS_TEXCOORD_INDEX] >> WINED3D_FFP_TCI_SHIFT)
                         & WINED3D_FFP_TCI_MASK
-                        || (coord_idx < WINED3D_MAX_TEXTURES && (si->use_map & (1u << (WINED3D_FFP_TEXCOORD0 + coord_idx)))))
+                        || (coord_idx < WINED3D_MAX_FFP_TEXTURES && (si->use_map & (1u << (WINED3D_FFP_TEXCOORD0 + coord_idx)))))
                     args->texcoords_initialized |= 1u << i;
             }
         }
     }
     else
     {
-        args->texcoords_initialized = wined3d_mask_from_size(WINED3D_MAX_TEXTURES);
+        args->texcoords_initialized = wined3d_mask_from_size(WINED3D_MAX_FFP_TEXTURES);
     }
 
     args->pointsprite = state->render_states[WINED3D_RS_POINTSPRITEENABLE]
@@ -3034,10 +3053,6 @@ void find_ps_compile_args(const struct wined3d_state *state, const struct wined3
 
     if (d3d_info->emulated_flatshading)
         args->flatshading = state->render_states[WINED3D_RS_SHADEMODE] == WINED3D_SHADE_FLAT;
-
-    args->y_correction = (shader->reg_maps.vpos && d3d_info->frag_coord_correction)
-            || (shader->reg_maps.usesdsy && wined3d_settings.offscreen_rendering_mode != ORM_FBO)
-            ? !context->render_offscreen : 0;
 
     for (i = 0; i < ARRAY_SIZE(state->fb.render_targets); ++i)
     {
@@ -3142,20 +3157,20 @@ HRESULT CDECL wined3d_shader_create_cs(struct wined3d_device *device, const stru
     TRACE("device %p, desc %p, parent %p, parent_ops %p, shader %p.\n",
             device, desc, parent, parent_ops, shader);
 
-    if (!(object = heap_alloc_zero(sizeof(*object))))
+    if (!(object = calloc(1, sizeof(*object))))
         return E_OUTOFMEMORY;
 
     if (FAILED(hr = shader_init(object, device, desc, parent, parent_ops)))
     {
         WARN("Failed to initialize compute shader, hr %#lx.\n", hr);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
     if (FAILED(hr = shader_set_function(object, device, WINED3D_SHADER_TYPE_COMPUTE, 0)))
     {
         shader_cleanup(object);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
@@ -3176,20 +3191,20 @@ HRESULT CDECL wined3d_shader_create_ds(struct wined3d_device *device, const stru
     TRACE("device %p, desc %p, parent %p, parent_ops %p, shader %p.\n",
             device, desc, parent, parent_ops, shader);
 
-    if (!(object = heap_alloc_zero(sizeof(*object))))
+    if (!(object = calloc(1, sizeof(*object))))
         return E_OUTOFMEMORY;
 
     if (FAILED(hr = shader_init(object, device, desc, parent, parent_ops)))
     {
         WARN("Failed to initialize domain shader, hr %#lx.\n", hr);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
     if (FAILED(hr = shader_set_function(object, device, WINED3D_SHADER_TYPE_DOMAIN, 0)))
     {
         shader_cleanup(object);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
@@ -3211,13 +3226,13 @@ HRESULT CDECL wined3d_shader_create_gs(struct wined3d_device *device, const stru
     TRACE("device %p, desc %p, so_desc %p, parent %p, parent_ops %p, shader %p.\n",
             device, desc, so_desc, parent, parent_ops, shader);
 
-    if (!(object = heap_alloc_zero(sizeof(*object))))
+    if (!(object = calloc(1, sizeof(*object))))
         return E_OUTOFMEMORY;
 
     if (FAILED(hr = geometry_shader_init(object, device, desc, so_desc, parent, parent_ops)))
     {
         WARN("Failed to initialize geometry shader, hr %#lx.\n", hr);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
@@ -3238,20 +3253,20 @@ HRESULT CDECL wined3d_shader_create_hs(struct wined3d_device *device, const stru
     TRACE("device %p, desc %p, parent %p, parent_ops %p, shader %p.\n",
             device, desc, parent, parent_ops, shader);
 
-    if (!(object = heap_alloc_zero(sizeof(*object))))
+    if (!(object = calloc(1, sizeof(*object))))
         return E_OUTOFMEMORY;
 
     if (FAILED(hr = shader_init(object, device, desc, parent, parent_ops)))
     {
         WARN("Failed to initialize hull shader, hr %#lx.\n", hr);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
     if (FAILED(hr = shader_set_function(object, device, WINED3D_SHADER_TYPE_HULL, 0)))
     {
         shader_cleanup(object);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
@@ -3272,13 +3287,13 @@ HRESULT CDECL wined3d_shader_create_ps(struct wined3d_device *device, const stru
     TRACE("device %p, desc %p, parent %p, parent_ops %p, shader %p.\n",
             device, desc, parent, parent_ops, shader);
 
-    if (!(object = heap_alloc_zero(sizeof(*object))))
+    if (!(object = calloc(1, sizeof(*object))))
         return E_OUTOFMEMORY;
 
     if (FAILED(hr = pixel_shader_init(object, device, desc, parent, parent_ops)))
     {
         WARN("Failed to initialize pixel shader, hr %#lx.\n", hr);
-        heap_free(object);
+        free(object);
         return hr;
     }
 
@@ -3299,13 +3314,13 @@ HRESULT CDECL wined3d_shader_create_vs(struct wined3d_device *device, const stru
     TRACE("device %p, desc %p, parent %p, parent_ops %p, shader %p.\n",
             device, desc, parent, parent_ops, shader);
 
-    if (!(object = heap_alloc_zero(sizeof(*object))))
+    if (!(object = calloc(1, sizeof(*object))))
         return E_OUTOFMEMORY;
 
     if (FAILED(hr = vertex_shader_init(object, device, desc, parent, parent_ops)))
     {
         WARN("Failed to initialize vertex shader, hr %#lx.\n", hr);
-        heap_free(object);
+        free(object);
         return hr;
     }
 

@@ -23,6 +23,13 @@
 #include "d3dx9.h"
 
 /* helper functions */
+static BOOL compare_uint(unsigned int x, unsigned int y, unsigned int max_diff)
+{
+    unsigned int diff = x > y ? x - y : y - x;
+
+    return diff <= max_diff;
+}
+
 static BOOL compare_float(FLOAT f, FLOAT g, UINT ulps)
 {
     INT x = *(INT *)&f;
@@ -33,10 +40,7 @@ static BOOL compare_float(FLOAT f, FLOAT g, UINT ulps)
     if (y < 0)
         y = INT_MIN - y;
 
-    if (abs(x - y) > ulps)
-        return FALSE;
-
-    return TRUE;
+    return compare_uint(x, y, ulps);
 }
 
 static inline INT get_int(D3DXPARAMETER_TYPE type, const void *data)
@@ -253,12 +257,7 @@ static void test_create_effect_and_pool(IDirect3DDevice9 *device)
     ok(hr == D3D_OK, "Got result %lx, expected 0 (D3D_OK)\n", hr);
 
     hr = D3DXCreateEffect(device, effect_desc, sizeof(effect_desc), NULL, NULL, 0, NULL, &effect, NULL);
-    todo_wine ok(hr == D3D_OK, "Got result %lx, expected 0 (D3D_OK)\n", hr);
-    if (FAILED(hr))
-    {
-        skip("Failed to compile effect, skipping test.\n");
-        return;
-    }
+    ok(hr == D3D_OK, "Got result %lx, expected 0 (D3D_OK)\n", hr);
 
     hr = effect->lpVtbl->QueryInterface(effect, &IID_ID3DXBaseEffect, (void **)&base);
     ok(hr == E_NOINTERFACE, "QueryInterface failed, got %lx, expected %lx (E_NOINTERFACE)\n", hr, E_NOINTERFACE);
@@ -3083,13 +3082,13 @@ static void test_effect_states(IDirect3DDevice9 *device)
     ok(vshader != NULL, "Unexpected vshader %p.\n", vshader);
     hr = IDirect3DVertexShader9_GetFunction(vshader, NULL, &byte_code_size);
     ok(hr == D3D_OK, "Unexpected hr %#lx.\n", hr);
-    byte_code = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, byte_code_size);
+    byte_code = calloc(1, byte_code_size);
     hr = IDirect3DVertexShader9_GetFunction(vshader, byte_code, &byte_code_size);
     ok(hr == D3D_OK, "Unexpected hr %#lx.\n", hr);
     ok(byte_code_size > 1, "Got unexpected byte code size %u.\n", byte_code_size);
     ok(!memcmp(byte_code, &test_effect_states_effect_blob[TEST_EFFECT_STATES_VSHADER_POS], byte_code_size),
             "Incorrect shader selected.\n");
-    HeapFree(GetProcessHeap(), 0, byte_code);
+    free(byte_code);
     IDirect3DVertexShader9_Release(vshader);
 
     hr = IDirect3DDevice9_GetLightEnable(device, 2, &bval);
@@ -4277,14 +4276,14 @@ static void test_effect_preshader_compare_shader_(unsigned int line, IDirect3DDe
     ok_(__FILE__, line)(hr == D3D_OK, "IDirect3DVertexShader9_GetFunction %#lx.\n", hr);
     ok_(__FILE__, line)(byte_code_size > 1, "Got unexpected byte code size %u.\n", byte_code_size);
 
-    byte_code = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, byte_code_size);
+    byte_code = calloc(1, byte_code_size);
     hr = IDirect3DVertexShader9_GetFunction(vshader, byte_code, &byte_code_size);
     ok_(__FILE__, line)(hr == D3D_OK, "Got result %#lx.\n", hr);
 
     test_effect_preshader_compare_shader_bytecode_(line, byte_code,
             byte_code_size, expected_shader_index, todo);
 
-    HeapFree(GetProcessHeap(), 0, byte_code);
+    free(byte_code);
     IDirect3DVertexShader9_Release(vshader);
  }
 
@@ -6044,7 +6043,7 @@ static struct test_manager *impl_from_ID3DXEffectStateManager(ID3DXEffectStateMa
 
 static void free_test_effect_state_manager(struct test_manager *state_manager)
 {
-    HeapFree(GetProcessHeap(), 0, state_manager->update_record);
+    free(state_manager->update_record);
     state_manager->update_record = NULL;
 
     IDirect3DDevice9_Release(state_manager->device);
@@ -6065,7 +6064,7 @@ static ULONG WINAPI test_manager_Release(ID3DXEffectStateManager *iface)
     if (!ref)
     {
         free_test_effect_state_manager(state_manager);
-        HeapFree(GetProcessHeap(), 0, state_manager);
+        free(state_manager);
     }
     return ref;
 }
@@ -6078,17 +6077,11 @@ static HRESULT test_process_set_state(ID3DXEffectStateManager *iface,
     if (state_manager->update_record_count == state_manager->update_record_size)
     {
         if (!state_manager->update_record_size)
-        {
             state_manager->update_record_size = INITIAL_UPDATE_RECORD_SIZE;
-            state_manager->update_record = HeapAlloc(GetProcessHeap(), 0,
-                    sizeof(*state_manager->update_record) * state_manager->update_record_size);
-        }
         else
-        {
             state_manager->update_record_size *= 2;
-            state_manager->update_record = HeapReAlloc(GetProcessHeap(), 0, state_manager->update_record,
-                    sizeof(*state_manager->update_record) * state_manager->update_record_size);
-        }
+        state_manager->update_record = realloc(state_manager->update_record,
+                sizeof(*state_manager->update_record) * state_manager->update_record_size);
     }
     state_manager->update_record[state_manager->update_record_count].state_op = state_op;
     state_manager->update_record[state_manager->update_record_count].param1 = param1;
@@ -6334,7 +6327,7 @@ static void test_effect_state_manager(IDirect3DDevice9 *device)
     ULONG refcount;
     HRESULT hr;
 
-    state_manager = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*state_manager));
+    state_manager = calloc(1, sizeof(*state_manager));
     test_effect_state_manager_init(state_manager, device);
 
     for (i = 0; i < 8; ++i)
@@ -7225,7 +7218,7 @@ static void test_effect_unsupported_shader(void)
     ok(!!vshader, "Got NULL vshader.\n");
     hr = IDirect3DVertexShader9_GetFunction(vshader, NULL, &byte_code_size);
     ok(hr == D3D_OK, "Got result %lx.\n", hr);
-    byte_code = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, byte_code_size);
+    byte_code = calloc(1, byte_code_size);
     hr = IDirect3DVertexShader9_GetFunction(vshader, byte_code, &byte_code_size);
     ok(hr == D3D_OK, "Got result %lx.\n", hr);
     ok(byte_code_size == TEST_EFFECT_UNSUPPORTED_SHADER_BYTECODE_VS_3_0_LEN * sizeof(DWORD),
@@ -7233,7 +7226,7 @@ static void test_effect_unsupported_shader(void)
     ok(!memcmp(byte_code,
             &test_effect_unsupported_shader_blob[TEST_EFFECT_UNSUPPORTED_SHADER_BYTECODE_VS_3_0_POS],
             byte_code_size), "Incorrect shader selected.\n");
-    HeapFree(GetProcessHeap(), 0, byte_code);
+    free(byte_code);
     IDirect3DVertexShader9_Release(vshader);
 
     hr = effect->lpVtbl->SetInt(effect, "i", 1);
@@ -7435,7 +7428,7 @@ static void test_effect_clone(void)
     if (!(device = create_device(&window)))
         return;
 
-    state_manager = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*state_manager));
+    state_manager = calloc(1, sizeof(*state_manager));
     test_effect_state_manager_init(state_manager, device);
 
     hr = IDirect3DDevice9_CreateTexture(device, 16, 16, 1, 0, D3DFMT_X8R8G8B8,
@@ -7842,21 +7835,21 @@ static HRESULT WINAPI d3dxinclude_open(ID3DXInclude *iface, D3DXINCLUDE_TYPE inc
 
     if (!strcmp(filename, "effect2.fx"))
     {
-        buffer = HeapAlloc(GetProcessHeap(), 0, sizeof(effect2));
+        buffer = malloc(sizeof(effect2));
         memcpy(buffer, effect2, sizeof(effect2));
         *bytes = sizeof(effect2);
         ok(!parent_data, "Unexpected parent_data value.\n");
     }
     else if (!strcmp(filename, "include1.h"))
     {
-        buffer = HeapAlloc(GetProcessHeap(), 0, sizeof(include1));
+        buffer = malloc(sizeof(include1));
         memcpy(buffer, include1, sizeof(include1));
         *bytes = sizeof(include1);
         ok(!strncmp(parent_data, include2, strlen(include2)), "Unexpected parent_data value.\n");
     }
     else if (!strcmp(filename, "include\\include2.h"))
     {
-        buffer = HeapAlloc(GetProcessHeap(), 0, sizeof(include2));
+        buffer = malloc(sizeof(include2));
         memcpy(buffer, include2, sizeof(include2));
         *bytes = sizeof(include2);
         todo_wine ok(parent_data && !strncmp(parent_data, effect2, strlen(effect2)),
@@ -7873,7 +7866,7 @@ static HRESULT WINAPI d3dxinclude_open(ID3DXInclude *iface, D3DXINCLUDE_TYPE inc
 
 static HRESULT WINAPI d3dxinclude_close(ID3DXInclude *iface, const void *data)
 {
-    HeapFree(GetProcessHeap(), 0, (void *)data);
+    free((void *)data);
     return S_OK;
 }
 
@@ -8049,8 +8042,6 @@ static void test_create_effect_from_file(void)
         trace("D3DXCreateEffectFromFileExW messages:\n%s", (char *)ID3DXBuffer_GetBufferPointer(messages));
         ID3DXBuffer_Release(messages);
     }
-    if (effect)
-        effect->lpVtbl->Release(effect);
 
     delete_file("effect1.fx");
     delete_file("effect2.fx");

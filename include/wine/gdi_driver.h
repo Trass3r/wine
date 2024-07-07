@@ -25,10 +25,19 @@
 #error The GDI driver can only be used on the Unix side
 #endif
 
+#include <stdarg.h>
+#include <stddef.h>
+
+#include <pthread.h>
+
+#include "windef.h"
+#include "winbase.h"
 #include "winternl.h"
 #include "ntuser.h"
 #include "immdev.h"
+#include "shellapi.h"
 #include "ddk/d3dkmthk.h"
+#include "kbd.h"
 #include "wine/list.h"
 
 struct gdi_dc_funcs;
@@ -164,18 +173,13 @@ struct gdi_dc_funcs
     BOOL     (*pStrokeAndFillPath)(PHYSDEV);
     BOOL     (*pStrokePath)(PHYSDEV);
     BOOL     (*pUnrealizePalette)(HPALETTE);
-    NTSTATUS (*pD3DKMTCheckVidPnExclusiveOwnership)(const D3DKMT_CHECKVIDPNEXCLUSIVEOWNERSHIP *);
-    NTSTATUS (*pD3DKMTCloseAdapter)(const D3DKMT_CLOSEADAPTER *);
-    NTSTATUS (*pD3DKMTOpenAdapterFromLuid)(D3DKMT_OPENADAPTERFROMLUID *);
-    NTSTATUS (*pD3DKMTQueryVideoMemoryInfo)(D3DKMT_QUERYVIDEOMEMORYINFO *);
-    NTSTATUS (*pD3DKMTSetVidPnSourceOwner)(const D3DKMT_SETVIDPNSOURCEOWNER *);
 
     /* priority order for the driver on the stack */
     UINT       priority;
 };
 
 /* increment this when you change the DC function table */
-#define WINE_GDI_DRIVER_VERSION 83
+#define WINE_GDI_DRIVER_VERSION 87
 
 #define GDI_PRIORITY_NULL_DRV        0  /* null driver */
 #define GDI_PRIORITY_FONT_DRV      100  /* any font driver */
@@ -207,12 +211,10 @@ struct window_surface;
 
 struct window_surface_funcs
 {
-    void  (*lock)( struct window_surface *surface );
-    void  (*unlock)( struct window_surface *surface );
-    void* (*get_info)( struct window_surface *surface, BITMAPINFO *info );
-    RECT* (*get_bounds)( struct window_surface *surface );
-    void  (*set_region)( struct window_surface *surface, HRGN region );
-    void  (*flush)( struct window_surface *surface );
+    void  (*set_clip)( struct window_surface *surface, const RECT *rects, UINT count );
+    BOOL  (*flush)( struct window_surface *surface, const RECT *rect, const RECT *dirty,
+                    const BITMAPINFO *color_info, const void *color_bits, BOOL shape_changed,
+                    const BITMAPINFO *shape_info, const void *shape_bits );
     void  (*destroy)( struct window_surface *surface );
 };
 
@@ -221,62 +223,63 @@ struct window_surface
     const struct window_surface_funcs *funcs; /* driver-specific implementations  */
     struct list                        entry; /* entry in global list managed by user32 */
     LONG                               ref;   /* reference count */
+    HWND                               hwnd;  /* window the surface was created for */
     RECT                               rect;  /* constant, no locking needed */
+
+    pthread_mutex_t                    mutex;        /* mutex needed for any field below */
+    RECT                               bounds;       /* dirty area rectangle */
+    HRGN                               clip_region;  /* visible region of the surface, fully visible if 0 */
     DWORD                              draw_start_ticks; /* start ticks of fresh draw */
+    COLORREF                           color_key;    /* layered window surface color key, invalid if CLR_INVALID */
+    UINT                               alpha_bits;   /* layered window global alpha bits, invalid if -1 */
+    UINT                               alpha_mask;   /* layered window per-pixel alpha mask, invalid if 0 */
+    HRGN                               shape_region; /* shape of the window surface, unshaped if 0 */
+    HBITMAP                            shape_bitmap; /* bitmap for the surface shape (1bpp) */
+    HBITMAP                            color_bitmap; /* bitmap for the surface colors */
     /* driver-specific fields here */
 };
 
-static inline ULONG window_surface_add_ref( struct window_surface *surface )
-{
-    return InterlockedIncrement( &surface->ref );
-}
-
-static inline ULONG window_surface_release( struct window_surface *surface )
-{
-    ULONG ret = InterlockedDecrement( &surface->ref );
-    if (!ret) surface->funcs->destroy( surface );
-    return ret;
-}
+W32KAPI BOOL window_surface_init( struct window_surface *surface, const struct window_surface_funcs *funcs,
+                                  HWND hwnd, const RECT *rect, BITMAPINFO *info, HBITMAP bitmap );
+W32KAPI void window_surface_add_ref( struct window_surface *surface );
+W32KAPI void window_surface_release( struct window_surface *surface );
+W32KAPI void window_surface_lock( struct window_surface *surface );
+W32KAPI void window_surface_unlock( struct window_surface *surface );
+W32KAPI void window_surface_set_layered( struct window_surface *surface, COLORREF color_key, UINT alpha_bits, UINT alpha_mask );
+W32KAPI void window_surface_flush( struct window_surface *surface );
+W32KAPI void window_surface_set_clip( struct window_surface *surface, HRGN clip_region );
+W32KAPI void window_surface_set_shape( struct window_surface *surface, HRGN shape_region );
+W32KAPI void window_surface_set_layered( struct window_surface *surface, COLORREF color_key, UINT alpha_bits, UINT alpha_mask );
 
 /* display manager interface, used to initialize display device registry data */
 
-struct gdi_gpu
+struct pci_id
 {
-    ULONG_PTR id;
-    WCHAR name[128];      /* name */
-    UINT vendor_id;       /* PCI ID */
-    UINT device_id;
-    UINT subsys_id;
-    UINT revision_id;
-    GUID vulkan_uuid;     /* Vulkan device UUID */
-};
-
-struct gdi_adapter
-{
-    ULONG_PTR id;
-    DWORD state_flags;
+    UINT16 vendor;
+    UINT16 device;
+    UINT16 subsystem;
+    UINT16 revision;
 };
 
 struct gdi_monitor
 {
     RECT rc_monitor;      /* RcMonitor in MONITORINFO struct */
     RECT rc_work;         /* RcWork in MONITORINFO struct */
-    DWORD state_flags;    /* StateFlags in DISPLAY_DEVICE struct */
     unsigned char *edid;  /* Extended Device Identification Data */
     UINT edid_len;
 };
 
 struct gdi_device_manager
 {
-    void (*add_gpu)( const struct gdi_gpu *gpu, void *param );
-    void (*add_adapter)( const struct gdi_adapter *adapter, void *param );
+    void (*add_gpu)( const char *name, const struct pci_id *pci_id, const GUID *vulkan_uuid, void *param );
+    void (*add_source)( const char *name, UINT state_flags, void *param );
     void (*add_monitor)( const struct gdi_monitor *monitor, void *param );
-    void (*add_mode)( const DEVMODEW *mode, BOOL current, void *param );
+    void (*add_modes)( const DEVMODEW *current, UINT modes_count, const DEVMODEW *modes, void *param );
 };
 
 #define WINE_DM_UNSUPPORTED 0x80000000
 
-struct tagUPDATELAYEREDWINDOWINFO;
+struct vulkan_driver_funcs;
 
 struct user_driver_funcs
 {
@@ -292,9 +295,10 @@ struct user_driver_funcs
     INT     (*pToUnicodeEx)(UINT,UINT,const BYTE *,LPWSTR,int,UINT,HKL);
     void    (*pUnregisterHotKey)(HWND, UINT, UINT);
     SHORT   (*pVkKeyScanEx)(WCHAR, HKL);
+    const KBDTABLES *(*pKbdLayerDescriptor)(HKL);
+    void    (*pReleaseKbdTables)(const KBDTABLES *);
     /* IME functions */
     UINT    (*pImeProcessKey)(HIMC,UINT,UINT,const BYTE*);
-    UINT    (*pImeToAsciiEx)(UINT,UINT,const BYTE*,COMPOSITIONSTRING*,HIMC);
     void    (*pNotifyIMEStatus)(HWND,UINT);
     /* cursor/icon functions */
     void    (*pDestroyCursorIcon)(HCURSOR);
@@ -302,6 +306,13 @@ struct user_driver_funcs
     BOOL    (*pGetCursorPos)(LPPOINT);
     BOOL    (*pSetCursorPos)(INT,INT);
     BOOL    (*pClipCursor)(const RECT*,BOOL);
+    /* notify icon functions */
+    LRESULT (*pNotifyIcon)(HWND,UINT,NOTIFYICONDATAW *);
+    void    (*pCleanupIcons)(HWND);
+    void    (*pSystrayDockInit)(HWND);
+    BOOL    (*pSystrayDockInsert)(HWND,UINT,UINT,void *);
+    void    (*pSystrayDockClear)(HWND);
+    BOOL    (*pSystrayDockRemove)(HWND);
     /* clipboard functions */
     LRESULT (*pClipboardWindowProc)(HWND,UINT,WPARAM,LPARAM);
     void    (*pUpdateClipboard)(void);
@@ -309,7 +320,7 @@ struct user_driver_funcs
     LONG    (*pChangeDisplaySettings)(LPDEVMODEW,LPCWSTR,HWND,DWORD,LPVOID);
     BOOL    (*pGetCurrentDisplaySettings)(LPCWSTR,BOOL,LPDEVMODEW);
     INT     (*pGetDisplayDepth)(LPCWSTR,BOOL);
-    BOOL    (*pUpdateDisplayDevices)(const struct gdi_device_manager *,BOOL,void*);
+    UINT    (*pUpdateDisplayDevices)(const struct gdi_device_manager *,void*);
     /* windowing functions */
     BOOL    (*pCreateDesktop)(const WCHAR *,UINT,UINT);
     BOOL    (*pCreateWindow)(HWND);
@@ -331,25 +342,26 @@ struct user_driver_funcs
     void    (*pSetWindowText)(HWND,LPCWSTR);
     UINT    (*pShowWindow)(HWND,INT,RECT*,UINT);
     LRESULT (*pSysCommand)(HWND,WPARAM,LPARAM);
-    BOOL    (*pUpdateLayeredWindow)(HWND,const struct tagUPDATELAYEREDWINDOWINFO *,const RECT *);
+    BOOL    (*pCreateLayeredWindow)(HWND,const RECT *,COLORREF,struct window_surface **);
+    void    (*pUpdateLayeredWindow)(HWND,const RECT *,COLORREF,BYTE,UINT);
     LRESULT (*pWindowMessage)(HWND,UINT,WPARAM,LPARAM);
-    BOOL    (*pWindowPosChanging)(HWND,HWND,UINT,const RECT *,const RECT *,RECT *,
-                                  struct window_surface**);
+    BOOL    (*pWindowPosChanging)(HWND,UINT,BOOL,const RECT *,const RECT *,RECT *);
+    BOOL    (*pCreateWindowSurface)(HWND,const RECT *,struct window_surface**);
     void    (*pWindowPosChanged)(HWND,HWND,UINT,const RECT *,const RECT *,const RECT *,
                                  const RECT *,struct window_surface*);
     /* system parameters */
     BOOL    (*pSystemParametersInfo)(UINT,UINT,void*,UINT);
     /* vulkan support */
-    const struct vulkan_funcs * (*pwine_get_vulkan_driver)(UINT);
+    UINT    (*pVulkanInit)(UINT,void *,const struct vulkan_driver_funcs **);
     /* opengl support */
     struct opengl_funcs * (*pwine_get_wgl_driver)(UINT);
     /* thread management */
     void    (*pThreadDetach)(void);
 };
 
-extern void __wine_set_user_driver( const struct user_driver_funcs *funcs, UINT version );
+W32KAPI void __wine_set_user_driver( const struct user_driver_funcs *funcs, UINT version );
 
-extern BOOL win32u_set_window_pixel_format( HWND hwnd, int format, BOOL internal );
-extern int win32u_get_window_pixel_format( HWND hwnd );
+W32KAPI BOOL win32u_set_window_pixel_format( HWND hwnd, int format, BOOL internal );
+W32KAPI int win32u_get_window_pixel_format( HWND hwnd );
 
 #endif /* __WINE_WINE_GDI_DRIVER_H */

@@ -692,8 +692,7 @@ static WCHAR *edit_line_history( struct console *console, unsigned int index )
     }
     else if(console->edit_line.current_history)
     {
-        if ((ptr = malloc( (lstrlenW(console->edit_line.current_history) + 1) * sizeof(WCHAR) )))
-            lstrcpyW( ptr, console->edit_line.current_history );
+        ptr = wcsdup( console->edit_line.current_history );
     }
     return ptr;
 }
@@ -1314,7 +1313,7 @@ static NTSTATUS process_console_input( struct console *console )
                     ctrl_value = ir.Event.KeyEvent.uChar.UnicodeChar;
                     ctrl_keyvalue = ir.Event.KeyEvent.dwControlKeyState;
                     ctx->status = STATUS_SUCCESS;
-                    TRACE("Found ctrl char in mask: ^%lc %x\n", ir.Event.KeyEvent.uChar.UnicodeChar + '@', ctx->ctrl_mask);
+                    TRACE("Found ctrl char in mask: ^%c %x\n", ir.Event.KeyEvent.uChar.UnicodeChar + '@', ctx->ctrl_mask);
                     continue;
                 }
                 if (ir.Event.KeyEvent.uChar.UnicodeChar == 10) continue;
@@ -2842,6 +2841,12 @@ static NTSTATUS process_console_ioctls( struct console *console )
     }
 }
 
+static BOOL is_key_message( const MSG *msg )
+{
+    return msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN ||
+           msg->message == WM_KEYUP   || msg->message == WM_SYSKEYUP;
+}
+
 static int main_loop( struct console *console, HANDLE signal )
 {
     HANDLE signal_event = NULL;
@@ -2876,10 +2881,15 @@ static int main_loop( struct console *console, HANDLE signal )
         if (res == WAIT_OBJECT_0 + wait_cnt)
         {
             MSG msg;
+
             while (PeekMessageW( &msg, 0, 0, 0, PM_REMOVE ))
             {
+                BOOL translated = FALSE;
                 if (msg.message == WM_QUIT) return 0;
-                DispatchMessageW(&msg);
+                if (is_key_message( &msg ) && msg.wParam == VK_PROCESSKEY)
+                    translated = TranslateMessage( &msg );
+                if (!translated || msg.hwnd != console->win)
+                    DispatchMessageW( &msg );
             }
             continue;
         }

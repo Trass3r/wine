@@ -57,6 +57,13 @@ static ID3D10Blob *compile_shader_(unsigned int line, const char *source, const 
     return blob;
 }
 
+static BOOL compare_uint(unsigned int x, unsigned int y, unsigned int max_diff)
+{
+    unsigned int diff = x > y ? x - y : y - x;
+
+    return diff <= max_diff;
+}
+
 static BOOL compare_float(float f, float g, unsigned int ulps)
 {
     int x = *(int *)&f;
@@ -67,10 +74,7 @@ static BOOL compare_float(float f, float g, unsigned int ulps)
     if (y < 0)
         y = INT_MIN - y;
 
-    if (abs(x - y) > ulps)
-        return FALSE;
-
-    return TRUE;
+    return compare_uint(x, y, ulps);
 }
 
 static BOOL compare_vec4(const struct vec4 *vec, float x, float y, float z, float w, unsigned int ulps)
@@ -612,14 +616,13 @@ static void test_sampling(void)
         winetest_push_context("Test %u", i);
 
         ID3D11DeviceContext_ClearRenderTargetView(test_context.immediate_context, test_context.rtv, red);
-        todo_wine_if (i < 3)
-            ps_code = compile_shader_flags(tests[i], "ps_4_0", D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY);
+        ps_code = compile_shader_flags(tests[i], "ps_4_0", D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY);
         if (ps_code)
         {
             draw_quad(&test_context, ps_code);
 
             v = get_color_vec4(&test_context, 0, 0);
-            todo_wine ok(compare_vec4(&v, 0.25f, 0.0f, 0.25f, 0.0f, 0),
+            ok(compare_vec4(&v, 0.25f, 0.0f, 0.25f, 0.0f, 0),
                     "Got unexpected value {%.8e, %.8e, %.8e, %.8e}.\n", v.x, v.y, v.z, v.w);
 
             ID3D10Blob_Release(ps_code);
@@ -898,7 +901,6 @@ static void test_reflection(void)
     refcount = reflection->lpVtbl->Release(reflection);
     ok(!refcount, "Got unexpected refcount %lu.\n", refcount);
 
-    todo_wine
     code = compile_shader_flags(ps_source, "ps_4_0", D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY);
     if (!code)
         return;
