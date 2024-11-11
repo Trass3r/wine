@@ -28,6 +28,7 @@ jobs:
         mkdir -p build && cd build
         export CCACHE_STATSLOG=/tmp/stats.log
         ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
+            CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2" \
             --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
         time make -j$(($(nproc) + 1))
         make install DESTDIR=../install
