@@ -29,8 +29,9 @@ jobs:
         export CCACHE_STATSLOG=/tmp/stats.log
         ls -lA /usr/lib/ccache/**
         PATH="/usr/lib/ccache:$PATH" \
-        ../configure --enable-win64 --disable-tests --enable-archs=i386,x86_64
+        ../configure --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
         time make -j$(($(nproc) + 1))
+        make install DESTDIR=../install
     - uses: actions/upload-artifact@v4
       with:
         name: debug
@@ -39,6 +40,7 @@ jobs:
       with:
         name: binaries
         path: |
+          install
           build/wine*
           build/loader/wine*
           build/server/wine*
