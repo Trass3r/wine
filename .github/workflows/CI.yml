@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     #container: ubuntu:rolling
     steps:
     - uses: actions/checkout@v4
@@ -27,11 +27,12 @@ jobs:
         set -eux
         mkdir -p build && cd build
         export CCACHE_STATSLOG=/tmp/stats.log
-        ls -lA /usr/lib/ccache/**
-        PATH="/usr/lib/ccache:$PATH" \
-        ../configure --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
+        ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
+            --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
         time make -j$(($(nproc) + 1))
         make install DESTDIR=../install
+        cd ../install/usr/local
+        tar cvapf "$GITHUB_WORKSPACE/wine.tar.xz" *
     - uses: actions/upload-artifact@v4
       with:
         name: debug
@@ -40,12 +41,4 @@ jobs:
       with:
         name: binaries
         path: |
-          install
-          build/wine*
-          build/loader/wine*
-          build/server/wine*
-          build/fonts/
-          build/nls
-          build/**/*.dll
-          build/**/*.exe
-          build/**/*.so
+          wine.tar.xz
