@@ -3344,6 +3344,13 @@ static void test_coop_level_mode_set(void)
     /* For Wine. */
     change_ret = ChangeDisplaySettingsW(NULL, CDS_FULLSCREEN);
     ok(change_ret == DISP_CHANGE_SUCCESSFUL, "Failed to change display mode, ret %#lx.\n", change_ret);
+    flush_events();
+
+    if (IsIconic(window)) /* make sure the window is restored, working around some Wine/X11 race condition */
+    {
+        ShowWindow(window, SW_RESTORE);
+        flush_events();
+    }
 
     memset(&ddsd, 0, sizeof(ddsd));
     ddsd.dwSize = sizeof(ddsd);
@@ -3776,6 +3783,8 @@ static void test_coop_level_mode_set(void)
 
     hr = IDirectDraw2_RestoreDisplayMode(ddraw);
     ok(SUCCEEDED(hr), "RestoreDisplayMode failed, hr %#lx.\n", hr);
+
+    flush_events(); /* flush any pending window resize X11 event */
 
     /* If the window is changed at the same time, messages are sent to the new window. */
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
@@ -16495,15 +16504,15 @@ static void run_for_each_device_type(void (*test_func)(const GUID *))
 
 static void test_multiple_devices(void)
 {
-    D3DTEXTUREHANDLE texture_handle, texture_handle2;
+    D3DTEXTUREHANDLE texture_handle, texture_handle2, texture_handle3;
+    IDirectDrawSurface *surface, *texture_surf, *texture_surf2;
     IDirect3DDevice2 *device, *device2, *device3;
-    IDirectDrawSurface *surface, *texture_surf;
     D3DMATERIALHANDLE mat_handle, mat_handle2;
     IDirect3DViewport2 *viewport, *viewport2;
+    IDirect3DTexture2 *texture, *texture2;
     IDirectDraw2 *ddraw, *ddraw2;
     IDirect3DMaterial2 *material;
     DDSURFACEDESC surface_desc;
-    IDirect3DTexture2 *texture;
     IDirect3D2 *d3d;
     ULONG refcount;
     DWORD value;
@@ -16595,22 +16604,52 @@ static void test_multiple_devices(void)
     ok(hr == D3D_OK, "got %#lx.\n", hr);
     hr = IDirectDrawSurface_QueryInterface(texture_surf, &IID_IDirect3DTexture2, (void **)&texture);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirectDraw2_CreateSurface(ddraw, &surface_desc, &texture_surf2, NULL);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirectDrawSurface_QueryInterface(texture_surf2, &IID_IDirect3DTexture2, (void **)&texture2);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+
+    hr = IDirect3DDevice2_SwapTextureHandles(device, texture, texture2);
+    ok(hr == E_INVALIDARG, "got %#lx.\n", hr);
     hr = IDirect3DTexture2_GetHandle(texture, device, &texture_handle);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirect3DDevice2_SwapTextureHandles(device, texture, texture2);
+    ok(hr == E_INVALIDARG, "got %#lx.\n", hr);
     hr = IDirect3DTexture2_GetHandle(texture, device2, &texture_handle2);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
     ok(texture_handle == texture_handle2, "got different handles.\n");
     hr = IDirect3DTexture2_GetHandle(texture, device3, &texture_handle2);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
     ok(texture_handle == texture_handle2, "got different handles.\n");
+    hr = IDirect3DDevice2_SwapTextureHandles(device, texture, texture2);
+    ok(hr == E_INVALIDARG, "got %#lx.\n", hr);
+    hr = IDirect3DTexture2_GetHandle(texture2, device, &texture_handle2);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    ok(texture_handle != texture_handle2, "got same handles.\n");
+    hr = IDirect3DDevice2_SwapTextureHandles(device, texture, texture2);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirect3DTexture2_GetHandle(texture, device, &texture_handle3);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    ok(texture_handle3 == texture_handle2, "got different handles.\n");
+    hr = IDirect3DTexture2_GetHandle(texture2, device2, &texture_handle3);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    ok(texture_handle3 == texture_handle, "got different handles.\n");
+
     hr = IDirect3DDevice2_SetRenderState(device, D3DRENDERSTATE_TEXTUREHANDLE, texture_handle);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
     hr = IDirect3DDevice2_SetRenderState(device2, D3DRENDERSTATE_TEXTUREHANDLE, texture_handle);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
     hr = IDirect3DDevice2_SetRenderState(device3, D3DRENDERSTATE_TEXTUREHANDLE, texture_handle);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirect3DDevice2_SwapTextureHandles(device, texture, texture2);
+    ok(hr == S_OK, "got %#lx.\n", hr);
+    hr = IDirect3DDevice2_GetRenderState(device, D3DRENDERSTATE_TEXTUREHANDLE, &texture_handle2);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    ok(texture_handle2 == texture_handle, "got different handles.\n");
 
+    IDirect3DTexture2_Release(texture2);
     IDirect3DTexture2_Release(texture);
+    IDirectDrawSurface_Release(texture_surf2);
     IDirectDrawSurface_Release(texture_surf);
     IDirect3DMaterial2_Release(material);
     IDirect3DViewport2_Release(viewport);
@@ -16661,6 +16700,8 @@ static void test_d3d_state_reset(void)
     ok(hr == DD_OK, "got %#lx.\n", hr);
     hr = IDirect3DDevice2_SetRenderState(device, D3DRENDERSTATE_ZENABLE, TRUE);
     ok(hr == DD_OK, "got %#lx.\n", hr);
+    hr = IDirect3DDevice2_BeginScene(device);
+    ok(hr == DD_OK, "got %#lx.\n", hr);
 
     memset(&param, 0, sizeof(param));
     hr = IDirectDraw2_EnumDisplayModes(ddraw, 0, NULL, &param, find_different_mode_callback);
@@ -16709,6 +16750,8 @@ static void test_d3d_state_reset(void)
     hr = IDirect3DDevice2_GetRenderState(device, D3DRENDERSTATE_ZENABLE, &state);
     ok(hr == DD_OK, "got %#lx.\n", hr);
     ok(state == TRUE, "got %#lx.\n", state);
+    hr = IDirect3DDevice2_BeginScene(device);
+    ok(hr == D3DERR_SCENE_IN_SCENE, "Unexpected hr %#lx.\n", hr);
 
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, NULL, DDSCL_NORMAL);
     ok(hr == DD_OK, "got %#lx.\n", hr);

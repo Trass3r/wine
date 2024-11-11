@@ -440,9 +440,10 @@ typedef struct macdrv_event {
 } macdrv_event;
 
 enum {
-    QUERY_DRAG_DROP,
-    QUERY_DRAG_EXITED,
-    QUERY_DRAG_OPERATION,
+    QUERY_DRAG_DROP_ENTER,
+    QUERY_DRAG_DROP_LEAVE,
+    QUERY_DRAG_DROP_DRAG,
+    QUERY_DRAG_DROP_DROP,
     QUERY_IME_CHAR_RECT,
     QUERY_PASTEBOARD_DATA,
     QUERY_RESIZE_SIZE,
@@ -461,16 +462,9 @@ typedef struct macdrv_query {
         struct {
             int                 x;
             int                 y;
-            uint32_t            op;
+            uint32_t            ops;
             CFTypeRef           pasteboard;
         }                                           drag_drop;
-        struct {
-            int                 x;
-            int                 y;
-            uint32_t            offered_ops;
-            uint32_t            accepted_op;
-            CFTypeRef           pasteboard;
-        }                                           drag_operation;
         struct {
             void   *himc;
             CFRange range;
@@ -553,11 +547,9 @@ extern void macdrv_set_cocoa_window_frame(macdrv_window w, const CGRect* new_fra
 extern void macdrv_get_cocoa_window_frame(macdrv_window w, CGRect* out_frame);
 extern void macdrv_set_cocoa_parent_window(macdrv_window w, macdrv_window parent);
 extern void macdrv_window_set_color_image(macdrv_window w, CGImageRef image, CGRect rect, CGRect dirty);
+extern void macdrv_window_set_shape_image(macdrv_window w, CGImageRef image);
 extern void macdrv_set_window_shape(macdrv_window w, const CGRect *rects, int count);
 extern void macdrv_set_window_alpha(macdrv_window w, CGFloat alpha);
-extern void macdrv_set_window_color_key(macdrv_window w, CGFloat keyRed, CGFloat keyGreen,
-                                        CGFloat keyBlue);
-extern void macdrv_clear_window_color_key(macdrv_window w);
 extern void macdrv_window_use_per_pixel_alpha(macdrv_window w, int use_per_pixel_alpha);
 extern void macdrv_give_cocoa_window_focus(macdrv_window w, int activate);
 extern void macdrv_set_window_min_max_sizes(macdrv_window w, CGSize min_size, CGSize max_size);

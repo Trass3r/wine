@@ -1185,6 +1185,7 @@ static HRESULT d3d9_device_reset(struct d3d9_device *device,
                     surface->parent_device = &device->IDirect3DDevice9Ex_iface;
             }
 
+            device->in_scene = FALSE;
             device->device_state = D3D9_DEVICE_STATE_OK;
 
             if (extended)
@@ -1800,6 +1801,13 @@ static HRESULT WINAPI d3d9_device_UpdateSurface(IDirect3DDevice9Ex *iface,
         return D3DERR_INVALIDCALL;
     }
 
+    if (src_desc.multisample_type != WINED3D_MULTISAMPLE_NONE || dst_desc.multisample_type != WINED3D_MULTISAMPLE_NONE)
+    {
+        wined3d_mutex_unlock();
+        WARN("Cannot use UpdateSurface with multisampled surfaces.\n");
+        return D3DERR_INVALIDCALL;
+    }
+
     if (src_rect)
         wined3d_box_set(&src_box, src_rect->left, src_rect->top, src_rect->right, src_rect->bottom, 0, 1);
     else
@@ -2038,7 +2046,7 @@ static HRESULT WINAPI d3d9_device_ColorFill(IDirect3DDevice9Ex *iface,
         return D3DERR_INVALIDCALL;
     }
 
-    wined3d_device_apply_stateblock(device->wined3d_device, device->state);
+    wined3d_stateblock_apply_clear_state(device->state, device->wined3d_device);
     rtv = d3d9_surface_acquire_rendertarget_view(surface_impl);
     hr = wined3d_device_context_clear_rendertarget_view(device->immediate_context,
             rtv, rect, WINED3DCLEAR_TARGET, &c, 0.0f, 0);
@@ -2290,7 +2298,7 @@ static HRESULT WINAPI d3d9_device_Clear(IDirect3DDevice9Ex *iface, DWORD rect_co
 
     wined3d_color_from_d3dcolor(&c, color);
     wined3d_mutex_lock();
-    wined3d_device_apply_stateblock(device->wined3d_device, device->state);
+    wined3d_stateblock_apply_clear_state(device->state, device->wined3d_device);
     hr = wined3d_device_clear(device->wined3d_device, rect_count, (const RECT *)rects, flags, &c, z, stencil);
     if (SUCCEEDED(hr))
         d3d9_rts_flag_auto_gen_mipmap(device);

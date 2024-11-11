@@ -42,6 +42,260 @@
 #include "unixlib.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(odbc);
+WINE_DECLARE_DEBUG_CHANNEL(winediag);
+
+static void *libodbc;
+
+static SQLRETURN (*pSQLAllocHandle)(SQLSMALLINT,SQLHANDLE,SQLHANDLE*);
+static SQLRETURN (*pSQLAllocHandleStd)(SQLSMALLINT,SQLHANDLE,SQLHANDLE*);
+static SQLRETURN (*pSQLBindCol)(SQLHSTMT,SQLUSMALLINT,SQLSMALLINT,SQLPOINTER,SQLLEN,SQLLEN*);
+static SQLRETURN (*pSQLBindParam)(SQLHSTMT,SQLUSMALLINT,SQLSMALLINT,SQLSMALLINT,SQLULEN,SQLSMALLINT,SQLPOINTER,SQLLEN*);
+static SQLRETURN (*pSQLBindParameter)(SQLHSTMT,SQLUSMALLINT,SQLSMALLINT,SQLSMALLINT,SQLSMALLINT,SQLULEN,SQLSMALLINT, SQLPOINTER,SQLLEN,SQLLEN*);
+static SQLRETURN (*pSQLBrowseConnect)(SQLHDBC,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLBrowseConnectW)(SQLHDBC,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLBulkOperations)(SQLHSTMT,SQLSMALLINT);
+static SQLRETURN (*pSQLCancel)(SQLHSTMT);
+static SQLRETURN (*pSQLCloseCursor)(SQLHSTMT);
+static SQLRETURN (*pSQLColAttribute)(SQLHSTMT,SQLUSMALLINT,SQLUSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*,SQLLEN*);
+static SQLRETURN (*pSQLColAttributeW)(SQLHSTMT,SQLUSMALLINT,SQLUSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*,SQLLEN*);
+static SQLRETURN (*pSQLColAttributes)(SQLHSTMT,SQLUSMALLINT,SQLUSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*,SQLLEN*);
+static SQLRETURN (*pSQLColAttributesW)(SQLHSTMT,SQLUSMALLINT,SQLUSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*,SQLLEN*);
+static SQLRETURN (*pSQLColumnPrivileges)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT, SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLColumnPrivilegesW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT, SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLColumns)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*, SQLSMALLINT);
+static SQLRETURN (*pSQLColumnsW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*, SQLSMALLINT);
+static SQLRETURN (*pSQLConnect)(SQLHDBC,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLConnectW)(SQLHDBC,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLCopyDesc)(SQLHDESC,SQLHDESC);
+static SQLRETURN (*pSQLDataSources)(SQLHENV,SQLUSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLCHAR*,SQLSMALLINT, SQLSMALLINT*);
+static SQLRETURN (*pSQLDataSourcesW)(SQLHENV,SQLUSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLWCHAR*,SQLSMALLINT, SQLSMALLINT*);
+static SQLRETURN (*pSQLDescribeCol)(SQLHSTMT,SQLUSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLSMALLINT*,SQLULEN*, SQLSMALLINT*,SQLSMALLINT*);
+static SQLRETURN (*pSQLDescribeColW)(SQLHSTMT,SQLUSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLSMALLINT*,SQLULEN*, SQLSMALLINT*,SQLSMALLINT*);
+static SQLRETURN (*pSQLDescribeParam)(SQLHSTMT,SQLUSMALLINT,SQLSMALLINT*,SQLULEN*,SQLSMALLINT*,SQLSMALLINT*);
+static SQLRETURN (*pSQLDisconnect)(SQLHDBC);
+static SQLRETURN (*pSQLDriverConnect)(SQLHDBC,SQLHWND,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*, SQLUSMALLINT);
+static SQLRETURN (*pSQLDriverConnectW)(SQLHDBC,SQLHWND,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*, SQLUSMALLINT);
+static SQLRETURN (*pSQLDrivers)(SQLHENV,SQLUSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLCHAR*,SQLSMALLINT, SQLSMALLINT*);
+static SQLRETURN (*pSQLDriversW)(SQLHENV,SQLUSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLWCHAR*,SQLSMALLINT, SQLSMALLINT*);
+static SQLRETURN (*pSQLEndTran)(SQLSMALLINT,SQLHANDLE,SQLSMALLINT);
+static SQLRETURN (*pSQLError)(SQLHENV,SQLHDBC,SQLHSTMT,SQLCHAR*,SQLINTEGER*,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLErrorW)(SQLHENV,SQLHDBC,SQLHSTMT,SQLWCHAR*,SQLINTEGER*,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLExecDirect)(SQLHSTMT,SQLCHAR*,SQLINTEGER);
+static SQLRETURN (*pSQLExecDirectW)(SQLHSTMT,SQLWCHAR*,SQLINTEGER);
+static SQLRETURN (*pSQLExecute)(SQLHSTMT);
+static SQLRETURN (*pSQLExtendedFetch)(SQLHSTMT,SQLUSMALLINT,SQLLEN,SQLULEN*,SQLUSMALLINT*);
+static SQLRETURN (*pSQLFetch)(SQLHSTMT);
+static SQLRETURN (*pSQLFetchScroll)(SQLHSTMT,SQLSMALLINT,SQLLEN);
+static SQLRETURN (*pSQLForeignKeys)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*, SQLSMALLINT,SQLCHAR*,
+                                    SQLSMALLINT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLForeignKeysW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT, SQLWCHAR*,SQLSMALLINT,
+                                     SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLFreeHandle)(SQLSMALLINT,SQLHANDLE);
+static SQLRETURN (*pSQLFreeStmt)(SQLHSTMT,SQLUSMALLINT);
+static SQLRETURN (*pSQLGetConnectAttr)(SQLHDBC,SQLINTEGER,SQLPOINTER,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLGetConnectAttrW)(SQLHDBC,SQLINTEGER,SQLPOINTER,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLGetConnectOption)(SQLHDBC,SQLUSMALLINT,SQLPOINTER);
+static SQLRETURN (*pSQLGetConnectOptionW)(SQLHDBC,SQLUSMALLINT,SQLPOINTER);
+static SQLRETURN (*pSQLGetCursorName)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetCursorNameW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetData)(SQLHSTMT,SQLUSMALLINT,SQLSMALLINT,SQLPOINTER,SQLLEN,SQLLEN*);
+static SQLRETURN (*pSQLGetDescField)(SQLHDESC,SQLSMALLINT,SQLSMALLINT,SQLPOINTER,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLGetDescFieldW)(SQLHDESC,SQLSMALLINT,SQLSMALLINT,SQLPOINTER,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLGetDescRec)(SQLHDESC,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLSMALLINT*,SQLSMALLINT*,SQLLEN*,SQLSMALLINT*,
+                                   SQLSMALLINT*,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetDescRecW)(SQLHDESC,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*,SQLSMALLINT*,SQLSMALLINT*,SQLLEN*,SQLSMALLINT*,
+                                    SQLSMALLINT*,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetDiagField)(SQLSMALLINT,SQLHANDLE,SQLSMALLINT,SQLSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetDiagFieldW)(SQLSMALLINT,SQLHANDLE,SQLSMALLINT,SQLSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetDiagRec)(SQLSMALLINT,SQLHANDLE,SQLSMALLINT,SQLCHAR*,SQLINTEGER*,SQLCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetDiagRecW)(SQLSMALLINT,SQLHANDLE,SQLSMALLINT,SQLWCHAR*,SQLINTEGER*,SQLWCHAR*,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetEnvAttr)(SQLHENV,SQLINTEGER,SQLPOINTER,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLGetFunctions)(SQLHDBC,SQLUSMALLINT,SQLUSMALLINT*);
+static SQLRETURN (*pSQLGetInfo)(SQLHDBC,SQLUSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetInfoW)(SQLHDBC,SQLUSMALLINT,SQLPOINTER,SQLSMALLINT,SQLSMALLINT*);
+static SQLRETURN (*pSQLGetStmtAttr)(SQLHSTMT,SQLINTEGER,SQLPOINTER,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLGetStmtAttrW)(SQLHSTMT,SQLINTEGER,SQLPOINTER,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLGetStmtOption)(SQLHSTMT,SQLUSMALLINT,SQLPOINTER);
+static SQLRETURN (*pSQLGetTypeInfo)(SQLHSTMT,SQLSMALLINT);
+static SQLRETURN (*pSQLGetTypeInfoW)(SQLHSTMT,SQLSMALLINT);
+static SQLRETURN (*pSQLMoreResults)(SQLHSTMT);
+static SQLRETURN (*pSQLNativeSql)(SQLHDBC,SQLCHAR*,SQLINTEGER,SQLCHAR*,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLNativeSqlW)(SQLHDBC,SQLWCHAR*,SQLINTEGER,SQLWCHAR*,SQLINTEGER,SQLINTEGER*);
+static SQLRETURN (*pSQLNumParams)(SQLHSTMT,SQLSMALLINT*);
+static SQLRETURN (*pSQLNumResultCols)(SQLHSTMT,SQLSMALLINT*);
+static SQLRETURN (*pSQLParamData)(SQLHSTMT,SQLPOINTER*);
+static SQLRETURN (*pSQLParamOptions)(SQLHSTMT,SQLULEN,SQLULEN*);
+static SQLRETURN (*pSQLPrepare)(SQLHSTMT,SQLCHAR*,SQLINTEGER);
+static SQLRETURN (*pSQLPrepareW)(SQLHSTMT,SQLWCHAR*,SQLINTEGER);
+static SQLRETURN (*pSQLPrimaryKeys)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLPrimaryKeysW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLProcedureColumns)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLProcedureColumnsW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLProcedures)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLProceduresW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLPutData)(SQLHSTMT,SQLPOINTER,SQLLEN);
+static SQLRETURN (*pSQLRowCount)(SQLHSTMT,SQLLEN*);
+static SQLRETURN (*pSQLSetConnectAttr)(SQLHDBC,SQLINTEGER,SQLPOINTER,SQLINTEGER);
+static SQLRETURN (*pSQLSetConnectAttrW)(SQLHDBC,SQLINTEGER,SQLPOINTER,SQLINTEGER);
+static SQLRETURN (*pSQLSetConnectOption)(SQLHDBC,SQLUSMALLINT,SQLULEN);
+static SQLRETURN (*pSQLSetConnectOptionW)(SQLHDBC,SQLUSMALLINT,SQLULEN);
+static SQLRETURN (*pSQLSetCursorName)(SQLHSTMT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLSetCursorNameW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLSetDescField)(SQLHDESC,SQLSMALLINT,SQLSMALLINT,SQLPOINTER,SQLINTEGER);
+static SQLRETURN (*pSQLSetDescFieldW)(SQLHDESC,SQLSMALLINT,SQLSMALLINT,SQLPOINTER,SQLINTEGER);
+static SQLRETURN (*pSQLSetDescRec)(SQLHDESC,SQLSMALLINT,SQLSMALLINT,SQLSMALLINT,SQLLEN,SQLSMALLINT,SQLSMALLINT,SQLPOINTER,SQLLEN*,SQLLEN*);
+static SQLRETURN (*pSQLSetEnvAttr)(SQLHENV,SQLINTEGER,SQLPOINTER,SQLINTEGER);
+static SQLRETURN (*pSQLSetParam)(SQLHSTMT,SQLUSMALLINT,SQLSMALLINT,SQLSMALLINT,SQLULEN,SQLSMALLINT,SQLPOINTER,SQLLEN*);
+static SQLRETURN (*pSQLSetPos)(SQLHSTMT,SQLSETPOSIROW,SQLUSMALLINT,SQLUSMALLINT);
+static SQLRETURN (*pSQLSetScrollOptions)(SQLHSTMT,SQLUSMALLINT,SQLLEN,SQLUSMALLINT);
+static SQLRETURN (*pSQLSetStmtAttr)(SQLHSTMT,SQLINTEGER,SQLPOINTER,SQLINTEGER);
+static SQLRETURN (*pSQLSetStmtAttrW)(SQLHSTMT,SQLINTEGER,SQLPOINTER,SQLINTEGER);
+static SQLRETURN (*pSQLSetStmtOption)(SQLHSTMT,SQLUSMALLINT,SQLULEN);
+static SQLRETURN (*pSQLSpecialColumns)(SQLHSTMT,SQLUSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLUSMALLINT,SQLUSMALLINT);
+static SQLRETURN (*pSQLSpecialColumnsW)(SQLHSTMT,SQLUSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLUSMALLINT,SQLUSMALLINT);
+static SQLRETURN (*pSQLStatistics)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLUSMALLINT,SQLUSMALLINT);
+static SQLRETURN (*pSQLStatisticsW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLUSMALLINT,SQLUSMALLINT);
+static SQLRETURN (*pSQLTablePrivileges)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLTablePrivilegesW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLTables)(SQLHSTMT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT,SQLCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLTablesW)(SQLHSTMT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT,SQLWCHAR*,SQLSMALLINT);
+static SQLRETURN (*pSQLTransact)(SQLHENV,SQLHDBC,SQLUSMALLINT);
+
+static NTSTATUS load_odbc(void)
+{
+   const char *s = getenv( "LIB_ODBC_DRIVER_MANAGER" );
+
+   if (!s || !s[0]) s = SONAME_LIBODBC;
+   if (!(libodbc = dlopen( s, RTLD_NOW )))
+   {
+       ERR_(winediag)( "failed to open library %s: %s\n", debugstr_a(s), debugstr_a(dlerror()) );
+       return STATUS_DLL_NOT_FOUND;
+   }
+#define LOAD_FUNC(name) \
+    if (!(p##name = dlsym( libodbc, #name ))) \
+    { \
+        ERR( "failed to load %s\n", #name ); \
+        goto fail; \
+    }
+
+    LOAD_FUNC( SQLAllocHandle );
+    LOAD_FUNC( SQLAllocHandleStd );
+    LOAD_FUNC( SQLBindCol );
+    LOAD_FUNC( SQLBindParam );
+    LOAD_FUNC( SQLBindParameter );
+    LOAD_FUNC( SQLBrowseConnect );
+    LOAD_FUNC( SQLBrowseConnectW );
+    LOAD_FUNC( SQLBulkOperations );
+    LOAD_FUNC( SQLCancel );
+    LOAD_FUNC( SQLCloseCursor );
+    LOAD_FUNC( SQLColAttribute );
+    LOAD_FUNC( SQLColAttributeW );
+    LOAD_FUNC( SQLColAttributes );
+    LOAD_FUNC( SQLColAttributesW );
+    LOAD_FUNC( SQLColumnPrivileges );
+    LOAD_FUNC( SQLColumnPrivilegesW );
+    LOAD_FUNC( SQLColumns );
+    LOAD_FUNC( SQLColumnsW );
+    LOAD_FUNC( SQLConnect );
+    LOAD_FUNC( SQLConnectW );
+    LOAD_FUNC( SQLCopyDesc );
+    LOAD_FUNC( SQLDataSources );
+    LOAD_FUNC( SQLDataSourcesW );
+    LOAD_FUNC( SQLDescribeCol );
+    LOAD_FUNC( SQLDescribeColW );
+    LOAD_FUNC( SQLDescribeParam );
+    LOAD_FUNC( SQLDisconnect );
+    LOAD_FUNC( SQLDriverConnect );
+    LOAD_FUNC( SQLDriverConnectW );
+    LOAD_FUNC( SQLDrivers );
+    LOAD_FUNC( SQLDriversW );
+    LOAD_FUNC( SQLEndTran );
+    LOAD_FUNC( SQLError );
+    LOAD_FUNC( SQLErrorW );
+    LOAD_FUNC( SQLExecDirect );
+    LOAD_FUNC( SQLExecDirectW );
+    LOAD_FUNC( SQLExecute );
+    LOAD_FUNC( SQLExtendedFetch );
+    LOAD_FUNC( SQLFetch );
+    LOAD_FUNC( SQLFetchScroll );
+    LOAD_FUNC( SQLForeignKeys );
+    LOAD_FUNC( SQLForeignKeysW );
+    LOAD_FUNC( SQLFreeHandle );
+    LOAD_FUNC( SQLFreeStmt );
+    LOAD_FUNC( SQLGetConnectAttr );
+    LOAD_FUNC( SQLGetConnectAttrW );
+    LOAD_FUNC( SQLGetConnectOption );
+    LOAD_FUNC( SQLGetConnectOptionW );
+    LOAD_FUNC( SQLGetCursorName );
+    LOAD_FUNC( SQLGetCursorNameW );
+    LOAD_FUNC( SQLGetData );
+    LOAD_FUNC( SQLGetDescField );
+    LOAD_FUNC( SQLGetDescFieldW );
+    LOAD_FUNC( SQLGetDescRec );
+    LOAD_FUNC( SQLGetDescRecW );
+    LOAD_FUNC( SQLGetDiagField );
+    LOAD_FUNC( SQLGetDiagFieldW );
+    LOAD_FUNC( SQLGetDiagRec );
+    LOAD_FUNC( SQLGetDiagRecW );
+    LOAD_FUNC( SQLGetEnvAttr );
+    LOAD_FUNC( SQLGetFunctions );
+    LOAD_FUNC( SQLGetInfo );
+    LOAD_FUNC( SQLGetInfoW );
+    LOAD_FUNC( SQLGetStmtAttr );
+    LOAD_FUNC( SQLGetStmtAttrW );
+    LOAD_FUNC( SQLGetStmtOption );
+    LOAD_FUNC( SQLGetTypeInfo );
+    LOAD_FUNC( SQLGetTypeInfoW );
+    LOAD_FUNC( SQLMoreResults );
+    LOAD_FUNC( SQLNativeSql );
+    LOAD_FUNC( SQLNativeSqlW );
+    LOAD_FUNC( SQLNumParams );
+    LOAD_FUNC( SQLNumResultCols );
+    LOAD_FUNC( SQLParamData );
+    LOAD_FUNC( SQLParamOptions );
+    LOAD_FUNC( SQLPrepare );
+    LOAD_FUNC( SQLPrepareW );
+    LOAD_FUNC( SQLPrimaryKeys );
+    LOAD_FUNC( SQLPrimaryKeysW );
+    LOAD_FUNC( SQLProcedureColumns );
+    LOAD_FUNC( SQLProcedureColumnsW );
+    LOAD_FUNC( SQLProcedures );
+    LOAD_FUNC( SQLProceduresW );
+    LOAD_FUNC( SQLPutData );
+    LOAD_FUNC( SQLRowCount );
+    LOAD_FUNC( SQLSetConnectAttr );
+    LOAD_FUNC( SQLSetConnectAttrW );
+    LOAD_FUNC( SQLSetConnectOption );
+    LOAD_FUNC( SQLSetConnectOptionW );
+    LOAD_FUNC( SQLSetCursorName );
+    LOAD_FUNC( SQLSetCursorNameW );
+    LOAD_FUNC( SQLSetDescField );
+    LOAD_FUNC( SQLSetDescFieldW );
+    LOAD_FUNC( SQLSetDescRec );
+    LOAD_FUNC( SQLSetEnvAttr );
+    LOAD_FUNC( SQLSetParam );
+    LOAD_FUNC( SQLSetPos );
+    LOAD_FUNC( SQLSetScrollOptions );
+    LOAD_FUNC( SQLSetStmtAttr );
+    LOAD_FUNC( SQLSetStmtAttrW );
+    LOAD_FUNC( SQLSetStmtOption );
+    LOAD_FUNC( SQLSpecialColumns );
+    LOAD_FUNC( SQLSpecialColumnsW );
+    LOAD_FUNC( SQLStatistics );
+    LOAD_FUNC( SQLStatisticsW );
+    LOAD_FUNC( SQLTablePrivileges );
+    LOAD_FUNC( SQLTablePrivilegesW );
+    LOAD_FUNC( SQLTables );
+    LOAD_FUNC( SQLTablesW );
+    LOAD_FUNC( SQLTransact );
+#undef LOAD_FUNC
+    return STATUS_SUCCESS;
+
+fail:
+    dlclose( libodbc );
+    libodbc = NULL;
+    return STATUS_DLL_NOT_FOUND;
+}
 
 static inline void init_unicode_string( UNICODE_STRING *str, const WCHAR *data, ULONG data_size )
 {
@@ -101,7 +355,7 @@ static HANDLE create_hklm_key( const WCHAR *path, ULONG path_size )
     return NULL;
 }
 
-static HANDLE create_key( HANDLE root, const WCHAR *path, ULONG path_size, ULONG options, ULONG *disposition )
+static HANDLE create_key( HANDLE root, const WCHAR *path, ULONG path_size )
 {
     UNICODE_STRING name = { path_size, path_size, (WCHAR *)path };
     OBJECT_ATTRIBUTES attr;
@@ -113,7 +367,23 @@ static HANDLE create_key( HANDLE root, const WCHAR *path, ULONG path_size, ULONG
     attr.Attributes = 0;
     attr.SecurityDescriptor = NULL;
     attr.SecurityQualityOfService = NULL;
-    if (NtCreateKey( &ret, MAXIMUM_ALLOWED, &attr, 0, NULL, options, disposition )) return NULL;
+    if (NtCreateKey( &ret, MAXIMUM_ALLOWED, &attr, 0, NULL, 0, NULL )) return NULL;
+    return ret;
+}
+
+static HANDLE open_key( HANDLE root, const WCHAR *path, ULONG path_size )
+{
+    UNICODE_STRING name = { path_size, path_size, (WCHAR *)path };
+    OBJECT_ATTRIBUTES attr;
+    HANDLE ret;
+
+    attr.Length = sizeof(attr);
+    attr.RootDirectory = root;
+    attr.ObjectName = &name;
+    attr.Attributes = 0;
+    attr.SecurityDescriptor = NULL;
+    attr.SecurityQualityOfService = NULL;
+    if (NtOpenKey( &ret, MAXIMUM_ALLOWED, &attr )) return NULL;
     return ret;
 }
 
@@ -131,6 +401,25 @@ static BOOL set_value( HANDLE key, const WCHAR *name, ULONG name_size, ULONG typ
     return !NtSetValueKey( key, &str, 0, type, value, count );
 }
 
+static HANDLE open_odbcinst_key( void )
+{
+    static const WCHAR odbcW[] = {'S','o','f','t','w','a','r','e','\\','O','D','B','C'};
+    static const WCHAR odbcinstW[] = {'O','D','B','C','I','N','S','T','.','I','N','I'};
+    HANDLE ret, root = create_hklm_key( odbcW, sizeof(odbcW) );
+    ret = create_key( root, odbcinstW, sizeof(odbcinstW) );
+    NtClose( root );
+    return ret;
+}
+
+static HANDLE open_drivers_key( void )
+{
+    static const WCHAR driversW[] = {'O','D','B','C',' ','D','r','i','v','e','r','s'};
+    HANDLE ret, root = open_odbcinst_key();
+    ret = create_key( root, driversW, sizeof(driversW) );
+    NtClose( root );
+    return ret;
+}
+
 /***********************************************************************
  * odbc_replicate_odbcinst_to_registry
  *
@@ -144,155 +433,230 @@ static BOOL set_value( HANDLE key, const WCHAR *name, ULONG name_size, ULONG typ
  */
 static void replicate_odbcinst_to_registry( SQLHENV env )
 {
-    static const WCHAR odbcW[] = {'S','o','f','t','w','a','r','e','\\','O','D','B','C'};
-    static const WCHAR odbcinstW[] = {'O','D','B','C','I','N','S','T','.','I','N','I'};
-    static const WCHAR driversW[] = {'O','D','B','C',' ','D','r','i','v','e','r','s'};
-    HANDLE key_odbc, key_odbcinst, key_drivers;
-    BOOL success = FALSE;
+    HANDLE key_odbcinst, key_drivers;
+    SQLRETURN ret;
+    SQLUSMALLINT dir = SQL_FETCH_FIRST;
+    WCHAR desc[256], attrs[1024];
+    SQLSMALLINT len_desc, len_attrs;
 
-    if (!(key_odbc = create_hklm_key( odbcW, sizeof(odbcW) ))) return;
-
-    if ((key_odbcinst = create_key( key_odbc, odbcinstW, sizeof(odbcinstW), 0, NULL )))
+    if (!(key_odbcinst = open_odbcinst_key())) return;
+    if (!(key_drivers = open_drivers_key()))
     {
-        if ((key_drivers = create_key( key_odbcinst, driversW, sizeof(driversW), 0, NULL )))
-        {
-            SQLRETURN ret;
-            SQLUSMALLINT dir = SQL_FETCH_FIRST;
-            WCHAR desc [256];
-            SQLSMALLINT len;
-
-            success = TRUE;
-            while (SUCCESS((ret = SQLDriversW( env, dir, (SQLWCHAR *)desc, sizeof(desc), &len, NULL, 0, NULL ))))
-            {
-                dir = SQL_FETCH_NEXT;
-                if (len == lstrlenW( desc ))
-                {
-                    static const WCHAR installedW[] = {'I','n','s','t','a','l','l','e','d',0};
-                    HANDLE key_driver;
-                    WCHAR buffer[256];
-                    KEY_VALUE_PARTIAL_INFORMATION *info = (void *)buffer;
-
-                    if (!query_value( key_drivers, desc, len * sizeof(WCHAR), info, sizeof(buffer) ))
-                    {
-                        if (!set_value( key_drivers, desc, len * sizeof(WCHAR), REG_SZ, (const BYTE *)installedW,
-                                        sizeof(installedW) ))
-                        {
-                            TRACE( "error replicating driver %s\n", debugstr_w(desc) );
-                            success = FALSE;
-                        }
-                    }
-                    if ((key_driver = create_key( key_odbcinst, desc, lstrlenW( desc ) * sizeof(WCHAR), 0, NULL )))
-                        NtClose( key_driver );
-                    else
-                    {
-                        TRACE( "error ensuring driver key %s\n", debugstr_w(desc) );
-                        success = FALSE;
-                    }
-                }
-                else
-                {
-                    WARN( "unusually long driver name %s not replicated\n", debugstr_w(desc) );
-                    success = FALSE;
-                }
-            }
-            NtClose( key_drivers );
-        }
-        else TRACE( "error opening Drivers key\n" );
-
         NtClose( key_odbcinst );
+        return;
     }
-    else TRACE( "error creating/opening ODBCINST.INI key\n" );
 
-    if (!success) WARN( "may not have replicated all ODBC drivers to the registry\n" );
-    NtClose( key_odbc );
+    while (SUCCESS((ret = pSQLDriversW( env, dir, (SQLWCHAR *)desc, ARRAY_SIZE(desc), &len_desc, attrs,
+                                        ARRAY_SIZE(attrs), &len_attrs ))))
+    {
+        static const WCHAR installedW[] = {'I','n','s','t','a','l','l','e','d',0};
+        HANDLE key_driver;
+        WCHAR buffer[1024];
+        KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
+
+        dir = SQL_FETCH_NEXT;
+        if (!query_value( key_drivers, desc, len_desc * sizeof(WCHAR), info, sizeof(buffer) ))
+        {
+            set_value( key_drivers, desc, len_desc * sizeof(WCHAR), REG_SZ, (const BYTE *)installedW,
+                       sizeof(installedW) );
+        }
+
+        if ((key_driver = create_key( key_odbcinst, desc, wcslen( desc ) * sizeof(WCHAR) )))
+        {
+            static const WCHAR driverW[] = {'D','r','i','v','e','r'}, driver_eqW[] = {'D','r','i','v','e','r','='};
+            const WCHAR *driver = NULL, *ptr = attrs;
+
+            while (*ptr)
+            {
+                if (len_attrs > ARRAY_SIZE(driver_eqW) && !memcmp( driver_eqW, ptr, sizeof(driver_eqW) ))
+                {
+                    driver = ptr + 7;
+                    break;
+                }
+                len_attrs -= wcslen( ptr ) + 1;
+                ptr += wcslen( ptr ) + 1;
+            }
+            if (driver) set_value( key_driver, driverW, sizeof(driverW), REG_SZ, (const BYTE *)driver,
+                                   (wcslen(driver) + 1) * sizeof(WCHAR) );
+            NtClose( key_driver );
+        }
+    }
+
+    NtClose( key_drivers );
+    NtClose( key_odbcinst );
+}
+
+struct drivers
+{
+    ULONG   count;
+    WCHAR **names;
+};
+
+static void get_drivers( struct drivers *drivers )
+{
+    ULONG idx = 0, count = 0, capacity, info_size, info_max_size;
+    KEY_VALUE_BASIC_INFORMATION *info = NULL;
+    WCHAR **names;
+    NTSTATUS status = STATUS_SUCCESS;
+    HANDLE key;
+
+    drivers->count = 0;
+    drivers->names = NULL;
+
+    if (!(key = open_drivers_key())) return;
+
+    capacity = 4;
+    if (!(names = malloc( capacity * sizeof(*names) ))) goto done;
+    info_max_size = offsetof(KEY_VALUE_BASIC_INFORMATION, Name) + 512;
+    if (!(info = malloc( info_max_size ))) goto error;
+
+    while (1)
+    {
+        status = NtEnumerateValueKey( key, idx, KeyValueBasicInformation, info, info_max_size, &info_size );
+        while (status == STATUS_BUFFER_OVERFLOW)
+        {
+            info_max_size = info_size;
+            if (!(info = realloc( info, info_max_size ))) goto error;
+            status = NtEnumerateValueKey( key, idx, KeyValueFullInformation, info, info_max_size, &info_size );
+        }
+
+        if (status == STATUS_NO_MORE_ENTRIES)
+        {
+            drivers->count = count;
+            drivers->names = names;
+            goto done;
+        }
+        idx++;
+        if (status) break;
+        if (info->Type != REG_SZ) continue;
+
+        if (count >= capacity)
+        {
+            capacity = capacity * 3 / 2;
+            if (!(names = realloc( names, capacity * sizeof(*names) ))) break;
+        }
+
+        if (!(names[count] = malloc( info->NameLength + sizeof(WCHAR) ))) break;
+        memcpy( names[count], info->Name, info->NameLength );
+        names[count][info->NameLength / sizeof(WCHAR)] = 0;
+        count++;
+    }
+
+error:
+    if (names) while (count) free( names[--count] );
+    free( names );
+
+done:
+    free( info );
+    NtClose( key );
+}
+
+/* unixODBC returns the driver filename in the description, use it to look up the driver name */
+static WCHAR *get_driver_name( const WCHAR *filename )
+{
+    struct drivers drivers;
+    HANDLE key_odbcinst, key_driver;
+    WCHAR *ret = NULL;
+    ULONG i;
+
+    get_drivers( &drivers );
+    if (!drivers.count) return NULL;
+
+    key_odbcinst = open_odbcinst_key();
+    for (i = 0; i < drivers.count; i++)
+    {
+        static const WCHAR driverW[] = {'D','r','i','v','e','r'};
+        WCHAR buffer[1024];
+        KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
+
+        if ((key_driver = open_key( key_odbcinst, drivers.names[i], wcslen(drivers.names[i]) * sizeof(WCHAR) )))
+        {
+            if (query_value( key_driver, driverW, sizeof(driverW), info, sizeof(buffer) ) && info->Type == REG_SZ &&
+                !wcsnicmp( (const WCHAR *)info->Data, filename, info->DataLength / sizeof(WCHAR) ) &&
+                (ret = malloc( (wcslen(drivers.names[i]) + 1) * sizeof(WCHAR) )))
+            {
+                wcscpy( ret, drivers.names[i] );
+                break;
+            }
+            NtClose( key_driver );
+        }
+    }
+
+    for (i = 0; i < drivers.count; i++) free( drivers.names[i] );
+    free( drivers.names );
+    NtClose( key_odbcinst );
+    return ret;
+}
+
+static HANDLE open_odbcini_key( BOOL user )
+{
+    static const WCHAR odbcW[] = {'S','o','f','t','w','a','r','e','\\','O','D','B','C'};
+    static const WCHAR odbcinstW[] = {'O','D','B','C','.','I','N','I'};
+    HANDLE ret, root = user ? create_hkcu_key( odbcW, sizeof(odbcW) ) : create_hklm_key( odbcW, sizeof(odbcW) );
+    ret = create_key( root, odbcinstW, sizeof(odbcinstW) );
+    NtClose( root );
+    return ret;
+}
+
+static HANDLE open_sources_key( BOOL user )
+{
+    static const WCHAR sourcesW[] = {'O','D','B','C',' ','D','a','t','a',' ','S','o','u','r','c','e','s'};
+    HANDLE ret, root = open_odbcini_key( user );
+    ret = create_key( root, sourcesW, sizeof(sourcesW) );
+    NtClose( root );
+    return ret;
 }
 
 /***********************************************************************
  * replicate_odbc_to_registry
  *
- * Utility to replicate_to_registry() to replicate either the USER or
- * SYSTEM data sources.
- *
- * For now simply place the "Driver description" (as returned by SQLDataSources)
- * into the registry as the driver.  This is enough to satisfy Crystal's
- * requirement that there be a driver entry.  (It doesn't seem to care what
- * the setting is).
- * A slightly more accurate setting would be to access the registry to find
- * the actual driver library for the given description (which appears to map
- * to one of the HKLM/Software/ODBC/ODBCINST.INI keys).  (If you do this note
- * that this will add a requirement that this function be called after
- * replicate_odbcinst_to_registry())
+ * Utility to replicate either the USER or SYSTEM data sources.
+ * This function must be called after replicate_odbcinst_to_registry().
  */
 static void replicate_odbc_to_registry( BOOL is_user, SQLHENV env )
 {
-    static const WCHAR odbcW[] = {'S','o','f','t','w','a','r','e','\\','O','D','B','C'};
-    static const WCHAR odbciniW[] = {'O','D','B','C','.','I','N','I'};
-    HANDLE key_odbc, key_odbcini, key_source;
+    HANDLE key_odbcini, key_sources;
     SQLRETURN ret;
     SQLUSMALLINT dir;
     WCHAR dsn[SQL_MAX_DSN_LENGTH + 1], desc[256];
     SQLSMALLINT len_dsn, len_desc;
-    BOOL success = FALSE;
-    const char *which;
 
-    if (is_user)
+    if (!(key_odbcini = open_odbcini_key( is_user ))) return;
+    if (!(key_sources = open_sources_key( is_user )))
     {
-        key_odbc = create_hkcu_key( odbcW, sizeof(odbcW) );
-        which = "user";
-    }
-    else
-    {
-        key_odbc = create_hklm_key( odbcW, sizeof(odbcW) );
-        which = "system";
-    }
-    if (!key_odbc) return;
-
-    if ((key_odbcini = create_key( key_odbc, odbciniW, sizeof(odbciniW), 0, NULL )))
-    {
-        success = TRUE;
-        dir = is_user ? SQL_FETCH_FIRST_USER : SQL_FETCH_FIRST_SYSTEM;
-        while (SUCCESS((ret = SQLDataSourcesW( env, dir, (SQLWCHAR *)dsn, sizeof(dsn), &len_dsn, (SQLWCHAR *)desc,
-                                               sizeof(desc), &len_desc ))))
-        {
-            dir = SQL_FETCH_NEXT;
-            if (len_dsn == lstrlenW( dsn ) && len_desc == lstrlenW( desc ))
-            {
-                if ((key_source = create_key( key_odbcini, dsn, len_dsn * sizeof(WCHAR), 0, NULL )))
-                {
-                    static const WCHAR driverW[] = {'D','r','i','v','e','r'};
-                    WCHAR buffer[256];
-                    KEY_VALUE_PARTIAL_INFORMATION *info = (void *)buffer;
-                    ULONG size;
-
-                    if (!(size = query_value( key_source, driverW, sizeof(driverW), info, sizeof(buffer) )))
-                    {
-                        if (!set_value( key_source, driverW, sizeof(driverW), REG_SZ, (const BYTE *)desc,
-                                        len_desc * sizeof(WCHAR) ))
-                        {
-                            TRACE( "error replicating description of %s (%s)\n", debugstr_w(dsn), debugstr_w(desc) );
-                            success = FALSE;
-                        }
-                    }
-                    NtClose( key_source );
-                }
-                else
-                {
-                    TRACE( "error opening %s DSN key %s\n", which, debugstr_w(dsn) );
-                    success = FALSE;
-                }
-            }
-            else
-            {
-                WARN( "unusually long %s data source name %s (%s) not replicated\n", which, debugstr_w(dsn), debugstr_w(desc) );
-                success = FALSE;
-            }
-        }
         NtClose( key_odbcini );
+        return;
     }
-    else TRACE( "error creating/opening %s ODBC.INI registry key\n", which );
 
-    if (!success) WARN( "may not have replicated all %s ODBC DSNs to the registry\n", which );
-    NtClose( key_odbc );
+    dir = is_user ? SQL_FETCH_FIRST_USER : SQL_FETCH_FIRST_SYSTEM;
+    while (SUCCESS((ret = pSQLDataSourcesW( env, dir, dsn, sizeof(dsn), &len_dsn, desc, sizeof(desc), &len_desc ))))
+    {
+        HANDLE key_source;
+        WCHAR buffer[1024], *name = get_driver_name( desc );
+        KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
+
+        dir = SQL_FETCH_NEXT;
+        if (!query_value( key_sources, dsn, len_dsn * sizeof(WCHAR), info, sizeof(buffer) ) && name)
+        {
+            set_value( key_sources, dsn, len_dsn * sizeof(WCHAR), REG_SZ, (const BYTE *)name,
+                       (wcslen(name) + 1) * sizeof(WCHAR) );
+        }
+        free( name );
+
+        if ((key_source = create_key( key_odbcini, dsn, len_dsn * sizeof(WCHAR) )))
+        {
+            static const WCHAR driverW[] = {'D','r','i','v','e','r'};
+            if (!query_value( key_source, driverW, sizeof(driverW), info, sizeof(buffer) ))
+            {
+                set_value( key_source, driverW, sizeof(driverW), REG_SZ, (const BYTE *)desc,
+                           (len_desc + 1) * sizeof(WCHAR) );
+            }
+            NtClose( key_source );
+        }
+    }
+
+    NtClose( key_sources );
+    NtClose( key_odbcini );
 }
 
 /***********************************************************************
@@ -312,12 +676,13 @@ static void replicate_to_registry(void)
     SQLHENV env;
     SQLRETURN ret;
 
-    if (!(ret = SQLAllocEnv( &env )))
+    if (!(ret = pSQLAllocHandle( SQL_HANDLE_ENV, NULL, &env )))
     {
+        pSQLSetEnvAttr( env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC2, 0 );
         replicate_odbcinst_to_registry( env );
         replicate_odbc_to_registry( FALSE /* system dsn */, env );
         replicate_odbc_to_registry( TRUE /* user dsn */, env );
-        SQLFreeEnv( env );
+        pSQLFreeHandle( SQL_HANDLE_ENV, env );
     }
     else
     {
@@ -328,834 +693,770 @@ static void replicate_to_registry(void)
 
 static NTSTATUS odbc_process_attach( void *args )
 {
+    NTSTATUS status;
+    if ((status = load_odbc())) return status;
     replicate_to_registry();
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS wrap_SQLAllocConnect( void *args )
+static NTSTATUS odbc_process_detach( void *args )
 {
-    struct SQLAllocConnect_params *params = args;
-    return SQLAllocConnect( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, (SQLHDBC *)&params->ConnectionHandle );
-}
-
-static NTSTATUS wrap_SQLAllocEnv( void *args )
-{
-    struct SQLAllocEnv_params *params = args;
-    return SQLAllocEnv( (SQLHENV *)&params->EnvironmentHandle );
+    if (libodbc) dlclose( libodbc );
+    libodbc = NULL;
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS wrap_SQLAllocHandle( void *args )
 {
     struct SQLAllocHandle_params *params = args;
-    return SQLAllocHandle( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->InputHandle,
-                           (SQLHANDLE *)&params->OutputHandle );
+    return pSQLAllocHandle( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->InputHandle,
+                            (SQLHANDLE *)params->OutputHandle );
 }
 
 static NTSTATUS wrap_SQLAllocHandleStd( void *args )
 {
     struct SQLAllocHandleStd_params *params = args;
-    return SQLAllocHandleStd( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->InputHandle,
-                              (SQLHANDLE *)&params->OutputHandle );
-}
-
-static NTSTATUS wrap_SQLAllocStmt( void *args )
-{
-    struct SQLAllocStmt_params *params = args;
-    return SQLAllocStmt( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, (SQLHSTMT *)&params->StatementHandle );
+    return pSQLAllocHandleStd( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->InputHandle,
+                               (SQLHANDLE *)params->OutputHandle );
 }
 
 static NTSTATUS wrap_SQLBindCol( void *args )
 {
     struct SQLBindCol_params *params = args;
-    return SQLBindCol( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->TargetType,
-                       params->TargetValue, params->BufferLength, params->StrLen_or_Ind );
-}
-
-static NTSTATUS wrap_SQLBindParam( void *args )
-{
-    struct SQLBindParam_params *params = args;
-    return SQLBindParam( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterNumber, params->ValueType,
-                         params->ParameterType, params->LengthPrecision, params->ParameterScale,
-                         params->ParameterValue, params->StrLen_or_Ind );
+    return pSQLBindCol( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->TargetType,
+                        params->TargetValue, params->BufferLength, params->StrLen_or_Ind );
 }
 
 static NTSTATUS wrap_SQLBindParameter( void *args )
 {
     struct SQLBindParameter_params *params = args;
-    return SQLBindParameter( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterNumber,
-                             params->InputOutputType, params->ValueType, params->ParameterType, params->ColumnSize,
-                             params->DecimalDigits, params->ParameterValue, params->BufferLength,
-                             params->StrLen_or_Ind );
+    return pSQLBindParameter( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterNumber,
+                              params->InputOutputType, params->ValueType, params->ParameterType, params->ColumnSize,
+                              params->DecimalDigits, params->ParameterValue, params->BufferLength,
+                              params->StrLen_or_Ind );
 }
 
 static NTSTATUS wrap_SQLBrowseConnect( void *args )
 {
     struct SQLBrowseConnect_params *params = args;
-    return SQLBrowseConnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InConnectionString,
-                             params->StringLength1, params->OutConnectionString, params->BufferLength,
-                             params->StringLength2 );
+    return pSQLBrowseConnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InConnectionString,
+                              params->StringLength1, params->OutConnectionString, params->BufferLength,
+                              params->StringLength2 );
 }
 
 static NTSTATUS wrap_SQLBrowseConnectW( void *args )
 {
     struct SQLBrowseConnectW_params *params = args;
-    return SQLBrowseConnectW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InConnectionString,
-                              params->StringLength1, params->OutConnectionString, params->BufferLength,
-                              params->StringLength2 );
+    return pSQLBrowseConnectW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InConnectionString,
+                               params->StringLength1, params->OutConnectionString, params->BufferLength,
+                               params->StringLength2 );
 }
 
 static NTSTATUS wrap_SQLBulkOperations( void *args )
 {
     struct SQLBulkOperations_params *params = args;
-    return SQLBulkOperations( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Operation );
+    return pSQLBulkOperations( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Operation );
 }
 
 static NTSTATUS wrap_SQLCancel( void *args )
 {
     struct SQLCancel_params *params = args;
-    return SQLCancel( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
+    return pSQLCancel( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
 }
 
 static NTSTATUS wrap_SQLCloseCursor( void *args )
 {
     struct SQLCloseCursor_params *params = args;
-    return SQLCloseCursor( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
+    return pSQLCloseCursor( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
 }
 
 static NTSTATUS wrap_SQLColAttribute( void *args )
 {
     struct SQLColAttribute_params *params = args;
-    return SQLColAttribute( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
-                            params->FieldIdentifier, params->CharacterAttribute, params->BufferLength,
-                            params->StringLength, (SQLLEN *)(ULONG_PTR)params->NumericAttribute );
+    return pSQLColAttribute( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
+                             params->FieldIdentifier, params->CharacterAttribute, params->BufferLength,
+                             params->StringLength, (SQLLEN *)(ULONG_PTR)params->NumericAttribute );
 }
 
 static NTSTATUS wrap_SQLColAttributeW( void *args )
 {
     struct SQLColAttributeW_params *params = args;
-    return SQLColAttributeW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
-                             params->FieldIdentifier, params->CharacterAttribute,
-                             params->BufferLength, params->StringLength,
-                             (SQLLEN *)(ULONG_PTR)params->NumericAttribute );
+    return pSQLColAttributeW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
+                              params->FieldIdentifier, params->CharacterAttribute,
+                              params->BufferLength, params->StringLength,
+                              (SQLLEN *)(ULONG_PTR)params->NumericAttribute );
 }
 
 static NTSTATUS wrap_SQLColAttributes( void *args )
 {
     struct SQLColAttributes_params *params = args;
-    return SQLColAttributes( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
-                             params->FieldIdentifier, params->CharacterAttributes, params->BufferLength,
-                             params->StringLength, (SQLLEN *)(ULONG_PTR)params->NumericAttributes );
+    return pSQLColAttributes( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
+                              params->FieldIdentifier, params->CharacterAttributes, params->BufferLength,
+                              params->StringLength, (SQLLEN *)(ULONG_PTR)params->NumericAttributes );
 }
 
 static NTSTATUS wrap_SQLColAttributesW( void *args )
 {
     struct SQLColAttributesW_params *params = args;
-    return SQLColAttributesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
-                              params->FieldIdentifier, params->CharacterAttributes, params->BufferLength,
-                              params->StringLength, (SQLLEN *)(ULONG_PTR)params->NumericAttributes );
+    return pSQLColAttributesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber,
+                               params->FieldIdentifier, params->CharacterAttributes, params->BufferLength,
+                               params->StringLength, (SQLLEN *)(ULONG_PTR)params->NumericAttributes );
 }
 
 static NTSTATUS wrap_SQLColumnPrivileges( void *args )
 {
     struct SQLColumnPrivileges_params *params = args;
-    return SQLColumnPrivileges( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
-                                params->NameLength1, params->SchemaName, params->NameLength2,
-                                params->TableName, params->NameLength3, params->ColumnName, params->NameLength4 );
+    return pSQLColumnPrivileges( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
+                                 params->NameLength1, params->SchemaName, params->NameLength2,
+                                 params->TableName, params->NameLength3, params->ColumnName, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLColumnPrivilegesW( void *args )
 {
     struct SQLColumnPrivilegesW_params *params = args;
-    return SQLColumnPrivilegesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
-                                 params->NameLength1, params->SchemaName, params->NameLength2,
-                                 params->TableName, params->NameLength3, params->ColumnName, params->NameLength4 );
+    return pSQLColumnPrivilegesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
+                                  params->NameLength1, params->SchemaName, params->NameLength2,
+                                  params->TableName, params->NameLength3, params->ColumnName, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLColumns( void *args )
 {
     struct SQLColumns_params *params = args;
-    return SQLColumns( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                       params->SchemaName, params->NameLength2, params->TableName, params->NameLength3,
-                       params->ColumnName, params->NameLength4 );
+    return pSQLColumns( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                        params->SchemaName, params->NameLength2, params->TableName, params->NameLength3,
+                        params->ColumnName, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLColumnsW( void *args )
 {
     struct SQLColumnsW_params *params = args;
-    return SQLColumnsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                        params->SchemaName, params->NameLength2, params->TableName, params->NameLength3,
-                        params->ColumnName, params->NameLength4 );
+    return pSQLColumnsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                         params->SchemaName, params->NameLength2, params->TableName, params->NameLength3,
+                         params->ColumnName, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLConnect( void *args )
 {
     struct SQLConnect_params *params = args;
-    return SQLConnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->ServerName, params->NameLength1,
-                       params->UserName, params->NameLength2, params->Authentication, params->NameLength3 );
+    return pSQLConnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->ServerName, params->NameLength1,
+                        params->UserName, params->NameLength2, params->Authentication, params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLConnectW( void *args )
 {
     struct SQLConnectW_params *params = args;
-    return SQLConnectW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->ServerName, params->NameLength1,
-                        params->UserName, params->NameLength2, params->Authentication, params->NameLength3 );
+    return pSQLConnectW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->ServerName, params->NameLength1,
+                         params->UserName, params->NameLength2, params->Authentication, params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLCopyDesc( void *args )
 {
     struct SQLCopyDesc_params *params = args;
-    return SQLCopyDesc( (SQLHDESC)(ULONG_PTR)params->SourceDescHandle, (SQLHDESC)(ULONG_PTR)params->TargetDescHandle );
-}
-
-static NTSTATUS wrap_SQLDataSources( void *args )
-{
-    struct SQLDataSources_params *params = args;
-    return SQLDataSources( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Direction, params->ServerName,
-                           params->BufferLength1, params->NameLength1, params->Description,
-                           params->BufferLength2, params->NameLength2 );
-}
-
-static NTSTATUS wrap_SQLDataSourcesW( void *args )
-{
-    struct SQLDataSourcesW_params *params = args;
-    return SQLDataSourcesW( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Direction, params->ServerName,
-                            params->BufferLength1, params->NameLength1, params->Description,
-                            params->BufferLength2, params->NameLength2 );
+    return pSQLCopyDesc( (SQLHDESC)(ULONG_PTR)params->SourceDescHandle, (SQLHDESC)(ULONG_PTR)params->TargetDescHandle );
 }
 
 static NTSTATUS wrap_SQLDescribeCol( void *args )
 {
     struct SQLDescribeCol_params *params = args;
-    return SQLDescribeCol( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->ColumnName,
-                           params->BufferLength, params->NameLength, params->DataType,
-                           (SQLULEN *)(ULONG_PTR)params->ColumnSize, params->DecimalDigits, params->Nullable );
+    return pSQLDescribeCol( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->ColumnName,
+                            params->BufferLength, params->NameLength, params->DataType,
+                            (SQLULEN *)(ULONG_PTR)params->ColumnSize, params->DecimalDigits, params->Nullable );
 }
 
 static NTSTATUS wrap_SQLDescribeColW( void *args )
 {
     struct SQLDescribeColW_params *params = args;
-    return SQLDescribeColW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->ColumnName,
-                            params->BufferLength, params->NameLength, params->DataType,
-                            (SQLULEN *)(ULONG_PTR)params->ColumnSize, params->DecimalDigits, params->Nullable );
+    return pSQLDescribeColW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->ColumnName,
+                             params->BufferLength, params->NameLength, params->DataType,
+                             (SQLULEN *)(ULONG_PTR)params->ColumnSize, params->DecimalDigits, params->Nullable );
 }
 
 static NTSTATUS wrap_SQLDescribeParam( void *args )
 {
     struct SQLDescribeParam_params *params = args;
-    return SQLDescribeParam( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterNumber, params->DataType,
-                             (SQLULEN *)(ULONG_PTR)params->ParameterSize, params->DecimalDigits, params->Nullable );
+    return pSQLDescribeParam( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterNumber, params->DataType,
+                              (SQLULEN *)(ULONG_PTR)params->ParameterSize, params->DecimalDigits, params->Nullable );
 }
 
 static NTSTATUS wrap_SQLDisconnect( void *args )
 {
     struct SQLDisconnect_params *params = args;
-    return SQLDisconnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle );
+    return pSQLDisconnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle );
 }
 
 static NTSTATUS wrap_SQLDriverConnect( void *args )
 {
     struct SQLDriverConnect_params *params = args;
-    return SQLDriverConnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, (SQLHWND)(ULONG_PTR)params->WindowHandle,
-                             params->ConnectionString, params->Length, params->OutConnectionString,
-                             params->BufferLength, params->Length2, params->DriverCompletion );
+    return pSQLDriverConnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, (SQLHWND)(ULONG_PTR)params->WindowHandle,
+                              params->ConnectionString, params->Length, params->OutConnectionString,
+                              params->BufferLength, params->Length2, params->DriverCompletion );
 }
 
 static NTSTATUS wrap_SQLDriverConnectW( void *args )
 {
     struct SQLDriverConnectW_params *params = args;
-    return SQLDriverConnectW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, (SQLHWND)(ULONG_PTR)params->WindowHandle,
-                              params->InConnectionString, params->Length, params->OutConnectionString,
-                              params->BufferLength, params->Length2, params->DriverCompletion );
-}
-
-static NTSTATUS wrap_SQLDrivers( void *args )
-{
-    struct SQLDrivers_params *params = args;
-    return SQLDrivers( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Direction, params->DriverDescription,
-                       params->BufferLength1, params->DescriptionLength, params->DriverAttributes,
-                       params->BufferLength2, params->AttributesLength );
-}
-
-static NTSTATUS wrap_SQLDriversW( void *args )
-{
-    struct SQLDriversW_params *params = args;
-    return SQLDriversW( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Direction, params->DriverDescription,
-                        params->BufferLength1, params->DescriptionLength, params->DriverAttributes,
-                        params->BufferLength2, params->AttributesLength );
+    return pSQLDriverConnectW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, (SQLHWND)(ULONG_PTR)params->WindowHandle,
+                               params->InConnectionString, params->Length, params->OutConnectionString,
+                               params->BufferLength, params->Length2, params->DriverCompletion );
 }
 
 static NTSTATUS wrap_SQLEndTran( void *args )
 {
     struct SQLEndTran_params *params = args;
-    return SQLEndTran( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->CompletionType );
+    return pSQLEndTran( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->CompletionType );
 }
 
 static NTSTATUS wrap_SQLError( void *args )
 {
     struct SQLError_params *params = args;
-    return SQLError( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, (SQLHDBC)(ULONG_PTR)params->ConnectionHandle,
-                     (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->SqlState, params->NativeError,
-                     params->MessageText, params->BufferLength, params->TextLength );
+    return pSQLError( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, (SQLHDBC)(ULONG_PTR)params->ConnectionHandle,
+                      (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->SqlState, params->NativeError,
+                      params->MessageText, params->BufferLength, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLErrorW( void *args )
 {
     struct SQLErrorW_params *params = args;
-    return SQLErrorW( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, (SQLHDBC)(ULONG_PTR)params->ConnectionHandle,
-                      (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->SqlState, params->NativeError,
-                      params->MessageText, params->BufferLength, params->TextLength );
+    return pSQLErrorW( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, (SQLHDBC)(ULONG_PTR)params->ConnectionHandle,
+                       (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->SqlState, params->NativeError,
+                       params->MessageText, params->BufferLength, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLExecDirect( void *args )
 {
     struct SQLExecDirect_params *params = args;
-    return SQLExecDirect( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
+    return pSQLExecDirect( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLExecDirectW( void *args )
 {
     struct SQLExecDirectW_params *params = args;
-    return SQLExecDirectW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
+    return pSQLExecDirectW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLExecute( void *args )
 {
     struct SQLExecute_params *params = args;
-    return SQLExecute( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
+    return pSQLExecute( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
 }
 
 static NTSTATUS wrap_SQLExtendedFetch( void *args )
 {
     struct SQLExtendedFetch_params *params = args;
-    return SQLExtendedFetch( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->FetchOrientation,
-                             params->FetchOffset, (SQLULEN *)(ULONG_PTR)params->RowCount, params->RowStatusArray );
+    return pSQLExtendedFetch( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->FetchOrientation,
+                              params->FetchOffset, (SQLULEN *)(ULONG_PTR)params->RowCount, params->RowStatusArray );
 }
 
 static NTSTATUS wrap_SQLFetch( void *args )
 {
     struct SQLFetch_params *params = args;
-    return SQLFetch( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
+    return pSQLFetch( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
 }
 
 static NTSTATUS wrap_SQLFetchScroll( void *args )
 {
     struct SQLFetchScroll_params *params = args;
-    return SQLFetchScroll( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->FetchOrientation,
-                           params->FetchOffset );
+    return pSQLFetchScroll( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->FetchOrientation,
+                            params->FetchOffset );
 }
 
 static NTSTATUS wrap_SQLForeignKeys( void *args )
 {
     struct SQLForeignKeys_params *params = args;
-    return SQLForeignKeys( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->PkCatalogName,
-                           params->NameLength1, params->PkSchemaName, params->NameLength2,
-                           params->PkTableName, params->NameLength3, params->FkCatalogName,
-                           params->NameLength4, params->FkSchemaName, params->NameLength5,
-                           params->FkTableName, params->NameLength6 );
-}
-
-static NTSTATUS wrap_SQLForeignKeysW( void *args )
-{
-    struct SQLForeignKeysW_params *params = args;
-    return SQLForeignKeysW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->PkCatalogName,
+    return pSQLForeignKeys( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->PkCatalogName,
                             params->NameLength1, params->PkSchemaName, params->NameLength2,
                             params->PkTableName, params->NameLength3, params->FkCatalogName,
                             params->NameLength4, params->FkSchemaName, params->NameLength5,
                             params->FkTableName, params->NameLength6 );
 }
 
-static NTSTATUS wrap_SQLFreeConnect( void *args )
+static NTSTATUS wrap_SQLForeignKeysW( void *args )
 {
-    struct SQLFreeConnect_params *params = args;
-    return SQLFreeConnect( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle );
-}
-
-static NTSTATUS wrap_SQLFreeEnv( void *args )
-{
-    struct SQLFreeEnv_params *params = args;
-    return SQLFreeEnv( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle );
+    struct SQLForeignKeysW_params *params = args;
+    return pSQLForeignKeysW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->PkCatalogName,
+                             params->NameLength1, params->PkSchemaName, params->NameLength2,
+                             params->PkTableName, params->NameLength3, params->FkCatalogName,
+                             params->NameLength4, params->FkSchemaName, params->NameLength5,
+                             params->FkTableName, params->NameLength6 );
 }
 
 static NTSTATUS wrap_SQLFreeHandle( void *args )
 {
     struct SQLFreeHandle_params *params = args;
-    return SQLFreeHandle( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle );
+    return pSQLFreeHandle( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle );
 }
 
 static NTSTATUS wrap_SQLFreeStmt( void *args )
 {
     struct SQLFreeStmt_params *params = args;
-    return SQLFreeStmt( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Option );
+    return pSQLFreeStmt( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Option );
 }
 
 static NTSTATUS wrap_SQLGetConnectAttr( void *args )
 {
     struct SQLGetConnectAttr_params *params = args;
-    return SQLGetConnectAttr( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
-                              params->BufferLength, params->StringLength );
+    return pSQLGetConnectAttr( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
+                               params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetConnectAttrW( void *args )
 {
     struct SQLGetConnectAttrW_params *params = args;
-    return SQLGetConnectAttrW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
-                               params->BufferLength, params->StringLength );
+    return pSQLGetConnectAttrW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
+                                params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetConnectOption( void *args )
 {
     struct SQLGetConnectOption_params *params = args;
-    return SQLGetConnectOption( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
+    return pSQLGetConnectOption( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
 }
 
 static NTSTATUS wrap_SQLGetConnectOptionW( void *args )
 {
     struct SQLGetConnectOptionW_params *params = args;
-    return SQLGetConnectOptionW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
+    return pSQLGetConnectOptionW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
 }
 
 static NTSTATUS wrap_SQLGetCursorName( void *args )
 {
     struct SQLGetCursorName_params *params = args;
-    return SQLGetCursorName( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->BufferLength,
-                             params->NameLength );
+    return pSQLGetCursorName( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->BufferLength,
+                              params->NameLength );
 }
 
 static NTSTATUS wrap_SQLGetCursorNameW( void *args )
 {
     struct SQLGetCursorNameW_params *params = args;
-    return SQLGetCursorNameW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->BufferLength,
-                              params->NameLength );
+    return pSQLGetCursorNameW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->BufferLength,
+                               params->NameLength );
 }
 
 static NTSTATUS wrap_SQLGetData( void *args )
 {
     struct SQLGetData_params *params = args;
-    return SQLGetData( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->TargetType,
-                       params->TargetValue, params->BufferLength, (SQLLEN *)(ULONG_PTR)params->StrLen_or_Ind );
+    return pSQLGetData( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnNumber, params->TargetType,
+                        params->TargetValue, params->BufferLength, (SQLLEN *)(ULONG_PTR)params->StrLen_or_Ind );
 }
 
 static NTSTATUS wrap_SQLGetDescField( void *args )
 {
     struct SQLGetDescField_params *params = args;
-    return SQLGetDescField( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
-                            params->Value, params->BufferLength, params->StringLength );
+    return pSQLGetDescField( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
+                             params->Value, params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetDescFieldW( void *args )
 {
     struct SQLGetDescFieldW_params *params = args;
-    return SQLGetDescFieldW( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
-                             params->Value, params->BufferLength, params->StringLength );
+    return pSQLGetDescFieldW( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
+                              params->Value, params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetDescRec( void *args )
 {
     struct SQLGetDescRec_params *params = args;
-    return SQLGetDescRec( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->Name,
-                          params->BufferLength, params->StringLength, params->Type, params->SubType,
-                          (SQLLEN *)(ULONG_PTR)params->Length, params->Precision, params->Scale, params->Nullable );
+    return pSQLGetDescRec( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->Name,
+                           params->BufferLength, params->StringLength, params->Type, params->SubType,
+                           (SQLLEN *)(ULONG_PTR)params->Length, params->Precision, params->Scale, params->Nullable );
 }
 
 static NTSTATUS wrap_SQLGetDescRecW( void *args )
 {
     struct SQLGetDescRecW_params *params = args;
-    return SQLGetDescRecW( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->Name,
-                           params->BufferLength, params->StringLength, params->Type, params->SubType,
-                           (SQLLEN *)(ULONG_PTR)params->Length, params->Precision, params->Scale, params->Nullable );
+    return pSQLGetDescRecW( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->Name,
+                            params->BufferLength, params->StringLength, params->Type, params->SubType,
+                            (SQLLEN *)(ULONG_PTR)params->Length, params->Precision, params->Scale, params->Nullable );
 }
 
 static NTSTATUS wrap_SQLGetDiagField( void *args )
 {
     struct SQLGetDiagField_params *params = args;
-    return SQLGetDiagField( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber,
-                            params->DiagIdentifier, params->DiagInfo, params->BufferLength, params->StringLength );
+    return pSQLGetDiagField( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber,
+                             params->DiagIdentifier, params->DiagInfo, params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetDiagFieldW( void *args )
 {
     struct SQLGetDiagFieldW_params *params = args;
-    return SQLGetDiagFieldW( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber,
-                             params->DiagIdentifier, params->DiagInfo, params->BufferLength, params->StringLength );
+    return pSQLGetDiagFieldW( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber,
+                              params->DiagIdentifier, params->DiagInfo, params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetDiagRec( void *args )
 {
     struct SQLGetDiagRec_params *params = args;
-    return SQLGetDiagRec( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber, params->SqlState,
-                          params->NativeError, params->MessageText, params->BufferLength, params->TextLength );
+    return pSQLGetDiagRec( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber, params->SqlState,
+                           params->NativeError, params->MessageText, params->BufferLength, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLGetDiagRecW( void *args )
 {
     struct SQLGetDiagRecW_params *params = args;
-    return SQLGetDiagRecW( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber, params->SqlState,
-                           params->NativeError, params->MessageText, params->BufferLength, params->TextLength );
+    return pSQLGetDiagRecW( params->HandleType, (SQLHANDLE)(ULONG_PTR)params->Handle, params->RecNumber, params->SqlState,
+                            params->NativeError, params->MessageText, params->BufferLength, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLGetEnvAttr( void *args )
 {
     struct SQLGetEnvAttr_params *params = args;
-    return SQLGetEnvAttr( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Attribute,
-                          params->Value, params->BufferLength, params->StringLength );
+    return pSQLGetEnvAttr( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Attribute,
+                           params->Value, params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetFunctions( void *args )
 {
     struct SQLGetFunctions_params *params = args;
-    return SQLGetFunctions( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->FunctionId, params->Supported );
+    return pSQLGetFunctions( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->FunctionId, params->Supported );
 }
 
 static NTSTATUS wrap_SQLGetInfo( void *args )
 {
     struct SQLGetInfo_params *params = args;
-    return SQLGetInfo( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InfoType, params->InfoValue,
-                       params->BufferLength, params->StringLength );
+    return pSQLGetInfo( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InfoType, params->InfoValue,
+                        params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetInfoW( void *args )
 {
     struct SQLGetInfoW_params *params = args;
-    return SQLGetInfoW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InfoType, params->InfoValue,
-                        params->BufferLength, params->StringLength );
+    return pSQLGetInfoW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InfoType, params->InfoValue,
+                         params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetStmtAttr( void *args )
 {
     struct SQLGetStmtAttr_params *params = args;
-    return SQLGetStmtAttr( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
-                           params->BufferLength, params->StringLength );
+    return pSQLGetStmtAttr( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
+                            params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetStmtAttrW( void *args )
 {
     struct SQLGetStmtAttrW_params *params = args;
-    return SQLGetStmtAttrW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
-                            params->BufferLength, params->StringLength );
+    return pSQLGetStmtAttrW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
+                             params->BufferLength, params->StringLength );
 }
 
 static NTSTATUS wrap_SQLGetStmtOption( void *args )
 {
     struct SQLGetStmtOption_params *params = args;
-    return SQLGetStmtOption( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Option, params->Value );
+    return pSQLGetStmtOption( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Option, params->Value );
 }
 
 static NTSTATUS wrap_SQLGetTypeInfo( void *args )
 {
     struct SQLGetTypeInfo_params *params = args;
-    return SQLGetTypeInfo( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->DataType );
+    return pSQLGetTypeInfo( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->DataType );
 }
 
 static NTSTATUS wrap_SQLGetTypeInfoW( void *args )
 {
     struct SQLGetTypeInfoW_params *params = args;
-    return SQLGetTypeInfoW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->DataType );
+    return pSQLGetTypeInfoW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->DataType );
 }
 
 static NTSTATUS wrap_SQLMoreResults( void *args )
 {
     struct SQLMoreResults_params *params = args;
-    return SQLMoreResults( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
+    return pSQLMoreResults( (SQLHSTMT)(ULONG_PTR)params->StatementHandle );
 }
 
 static NTSTATUS wrap_SQLNativeSql( void *args )
 {
     struct SQLNativeSql_params *params = args;
-    return SQLNativeSql( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InStatementText, params->TextLength1,
-                         params->OutStatementText, params->BufferLength, params->TextLength2 );
+    return pSQLNativeSql( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InStatementText, params->TextLength1,
+                          params->OutStatementText, params->BufferLength, params->TextLength2 );
 }
 
 static NTSTATUS wrap_SQLNativeSqlW( void *args )
 {
     struct SQLNativeSqlW_params *params = args;
-    return SQLNativeSqlW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InStatementText, params->TextLength1,
-                          params->OutStatementText, params->BufferLength, params->TextLength2 );
+    return pSQLNativeSqlW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->InStatementText, params->TextLength1,
+                           params->OutStatementText, params->BufferLength, params->TextLength2 );
 }
 
 static NTSTATUS wrap_SQLNumParams( void *args )
 {
     struct SQLNumParams_params *params = args;
-    return SQLNumParams( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterCount );
+    return pSQLNumParams( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterCount );
 }
 
 static NTSTATUS wrap_SQLNumResultCols( void *args )
 {
     struct SQLNumResultCols_params *params = args;
-    return SQLNumResultCols( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnCount );
+    return pSQLNumResultCols( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ColumnCount );
 }
 
 static NTSTATUS wrap_SQLParamData( void *args )
 {
     struct SQLParamData_params *params = args;
-    return SQLParamData( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Value );
+    return pSQLParamData( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Value );
 }
 
 static NTSTATUS wrap_SQLParamOptions( void *args )
 {
     struct SQLParamOptions_params *params = args;
-    return SQLParamOptions( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->RowCount,
-                            (SQLULEN *)(ULONG_PTR)params->RowNumber );
+    return pSQLParamOptions( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->RowCount,
+                             (SQLULEN *)(ULONG_PTR)params->RowNumber );
 }
 
 static NTSTATUS wrap_SQLPrepare( void *args )
 {
     struct SQLPrepare_params *params = args;
-    return SQLPrepare( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
+    return pSQLPrepare( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLPrepareW( void *args )
 {
     struct SQLPrepareW_params *params = args;
-    return SQLPrepareW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
+    return pSQLPrepareW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->StatementText, params->TextLength );
 }
 
 static NTSTATUS wrap_SQLPrimaryKeys( void *args )
 {
     struct SQLPrimaryKeys_params *params = args;
-    return SQLPrimaryKeys( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                           params->SchemaName, params->NameLength2, params->TableName, params->NameLength3 );
+    return pSQLPrimaryKeys( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                            params->SchemaName, params->NameLength2, params->TableName, params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLPrimaryKeysW( void *args )
 {
     struct SQLPrimaryKeysW_params *params = args;
-    return SQLPrimaryKeysW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                            params->SchemaName, params->NameLength2, params->TableName, params->NameLength3 );
+    return pSQLPrimaryKeysW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                             params->SchemaName, params->NameLength2, params->TableName, params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLProcedureColumns( void *args )
 {
     struct SQLProcedureColumns_params *params = args;
-    return SQLProcedureColumns( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
-                                params->NameLength1, params->SchemaName, params->NameLength2, params->ProcName,
-                                params->NameLength3, params->ColumnName, params->NameLength4 );
+    return pSQLProcedureColumns( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
+                                 params->NameLength1, params->SchemaName, params->NameLength2, params->ProcName,
+                                 params->NameLength3, params->ColumnName, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLProcedureColumnsW( void *args )
 {
     struct SQLProcedureColumnsW_params *params = args;
-    return SQLProcedureColumnsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
-                                 params->NameLength1, params->SchemaName, params->NameLength2, params->ProcName,
-                                 params->NameLength3, params->ColumnName, params->NameLength4 );
+    return pSQLProcedureColumnsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
+                                  params->NameLength1, params->SchemaName, params->NameLength2, params->ProcName,
+                                  params->NameLength3, params->ColumnName, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLProcedures( void *args )
 {
     struct SQLProcedures_params *params = args;
-    return SQLProcedures( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                          params->SchemaName, params->NameLength2, params->ProcName, params->NameLength3 );
+    return pSQLProcedures( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                           params->SchemaName, params->NameLength2, params->ProcName, params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLProceduresW( void *args )
 {
     struct SQLProceduresW_params *params = args;
-    return SQLProceduresW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                           params->SchemaName, params->NameLength2, params->ProcName, params->NameLength3 );
+    return pSQLProceduresW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                            params->SchemaName, params->NameLength2, params->ProcName, params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLPutData( void *args )
 {
     struct SQLPutData_params *params = args;
-    return SQLPutData( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Data, params->StrLen_or_Ind );
+    return pSQLPutData( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Data, params->StrLen_or_Ind );
 }
 
 static NTSTATUS wrap_SQLRowCount( void *args )
 {
     struct SQLRowCount_params *params = args;
-    return SQLRowCount( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, (SQLLEN *)(ULONG_PTR)params->RowCount );
+    return pSQLRowCount( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, (SQLLEN *)(ULONG_PTR)params->RowCount );
 }
 
 static NTSTATUS wrap_SQLSetConnectAttr( void *args )
 {
     struct SQLSetConnectAttr_params *params = args;
-    return SQLSetConnectAttr( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
-                              params->StringLength );
+    return pSQLSetConnectAttr( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
+                               params->StringLength );
 }
 
 static NTSTATUS wrap_SQLSetConnectAttrW( void *args )
 {
     struct SQLSetConnectAttrW_params *params = args;
-    return SQLSetConnectAttrW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
-                               params->StringLength );
+    return pSQLSetConnectAttrW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Attribute, params->Value,
+                                params->StringLength );
 }
 
 static NTSTATUS wrap_SQLSetConnectOption( void *args )
 {
     struct SQLSetConnectOption_params *params = args;
-    return SQLSetConnectOption( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
+    return pSQLSetConnectOption( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
 }
 
 static NTSTATUS wrap_SQLSetConnectOptionW( void *args )
 {
     struct SQLSetConnectOptionW_params *params = args;
-    return SQLSetConnectOptionW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
+    return pSQLSetConnectOptionW( (SQLHDBC)(ULONG_PTR)params->ConnectionHandle, params->Option, params->Value );
 }
 
 static NTSTATUS wrap_SQLSetCursorName( void *args )
 {
     struct SQLSetCursorName_params *params = args;
-    return SQLSetCursorName( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->NameLength );
+    return pSQLSetCursorName( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->NameLength );
 }
 
 static NTSTATUS wrap_SQLSetCursorNameW( void *args )
 {
     struct SQLSetCursorNameW_params *params = args;
-    return SQLSetCursorNameW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->NameLength );
+    return pSQLSetCursorNameW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CursorName, params->NameLength );
 }
 
 static NTSTATUS wrap_SQLSetDescField( void *args )
 {
     struct SQLSetDescField_params *params = args;
-    return SQLSetDescField( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
-                            params->Value, params->BufferLength );
+    return pSQLSetDescField( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
+                             params->Value, params->BufferLength );
 }
 
 static NTSTATUS wrap_SQLSetDescFieldW( void *args )
 {
     struct SQLSetDescFieldW_params *params = args;
-    return SQLSetDescFieldW( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
-                             params->Value, params->BufferLength );
+    return pSQLSetDescFieldW( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->FieldIdentifier,
+                              params->Value, params->BufferLength );
 }
 
 static NTSTATUS wrap_SQLSetDescRec( void *args )
 {
     struct SQLSetDescRec_params *params = args;
-    return SQLSetDescRec( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->Type,
-                          params->SubType, params->Length, params->Precision, params->Scale,
-                          params->Data, (SQLLEN *)(ULONG_PTR)params->StringLength,
-                          (SQLLEN *)(ULONG_PTR)params->Indicator );
+    return pSQLSetDescRec( (SQLHDESC)(ULONG_PTR)params->DescriptorHandle, params->RecNumber, params->Type,
+                           params->SubType, params->Length, params->Precision, params->Scale,
+                           params->Data, (SQLLEN *)(ULONG_PTR)params->StringLength,
+                           (SQLLEN *)(ULONG_PTR)params->Indicator );
 }
 
 static NTSTATUS wrap_SQLSetEnvAttr( void *args )
 {
     struct SQLSetEnvAttr_params *params = args;
-    return SQLSetEnvAttr( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Attribute, params->Value,
-                          params->StringLength );
+    return pSQLSetEnvAttr( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, params->Attribute, params->Value,
+                           params->StringLength );
 }
 
 static NTSTATUS wrap_SQLSetParam( void *args )
 {
     struct SQLSetParam_params *params = args;
-    return SQLSetParam( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterNumber, params->ValueType,
-                        params->ParameterType, params->LengthPrecision, params->ParameterScale,
-                        params->ParameterValue, (SQLLEN *)(ULONG_PTR)params->StrLen_or_Ind );
+    return pSQLSetParam( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->ParameterNumber, params->ValueType,
+                         params->ParameterType, params->LengthPrecision, params->ParameterScale,
+                         params->ParameterValue, (SQLLEN *)(ULONG_PTR)params->StrLen_or_Ind );
 }
 
 static NTSTATUS wrap_SQLSetPos( void *args )
 {
     struct SQLSetPos_params *params = args;
-    return SQLSetPos( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->RowNumber, params->Operation,
-                      params->LockType );
+    return pSQLSetPos( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->RowNumber, params->Operation,
+                       params->LockType );
 }
 
 static NTSTATUS wrap_SQLSetScrollOptions( void *args )
 {
     struct SQLSetScrollOptions_params *params = args;
-    return SQLSetScrollOptions( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Concurrency,
-                                params->KeySetSize, params->RowSetSize );
+    return pSQLSetScrollOptions( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Concurrency,
+                                 params->KeySetSize, params->RowSetSize );
 }
 
 static NTSTATUS wrap_SQLSetStmtAttr( void *args )
 {
     struct SQLSetStmtAttr_params *params = args;
-    return SQLSetStmtAttr( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
-                           params->StringLength );
+    return pSQLSetStmtAttr( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
+                            params->StringLength );
 }
 
 static NTSTATUS wrap_SQLSetStmtAttrW( void *args )
 {
     struct SQLSetStmtAttrW_params *params = args;
-    return SQLSetStmtAttrW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
-                            params->StringLength );
+    return pSQLSetStmtAttrW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Attribute, params->Value,
+                             params->StringLength );
 }
 
 static NTSTATUS wrap_SQLSetStmtOption( void *args )
 {
     struct SQLSetStmtOption_params *params = args;
-    return SQLSetStmtOption( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Option, params->Value );
+    return pSQLSetStmtOption( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->Option, params->Value );
 }
 
 static NTSTATUS wrap_SQLSpecialColumns( void *args )
 {
     struct SQLSpecialColumns_params *params = args;
-    return SQLSpecialColumns( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->IdentifierType,
-                              params->CatalogName, params->NameLength1, params->SchemaName, params->NameLength2,
-                              params->TableName, params->NameLength3, params->Scope, params->Nullable );
+    return pSQLSpecialColumns( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->IdentifierType,
+                               params->CatalogName, params->NameLength1, params->SchemaName, params->NameLength2,
+                               params->TableName, params->NameLength3, params->Scope, params->Nullable );
 }
 
 static NTSTATUS wrap_SQLSpecialColumnsW( void *args )
 {
     struct SQLSpecialColumnsW_params *params = args;
-    return SQLSpecialColumnsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->IdentifierType,
-                               params->CatalogName, params->NameLength1, params->SchemaName, params->NameLength2,
-                               params->TableName, params->NameLength3, params->Scope, params->Nullable );
+    return pSQLSpecialColumnsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->IdentifierType,
+                                params->CatalogName, params->NameLength1, params->SchemaName, params->NameLength2,
+                                params->TableName, params->NameLength3, params->Scope, params->Nullable );
 }
 
 static NTSTATUS wrap_SQLStatistics( void *args )
 {
     struct SQLStatistics_params *params = args;
-    return SQLStatistics( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                          params->SchemaName, params->NameLength2, params->TableName,
-                          params->NameLength3, params->Unique, params->Reserved );
+    return pSQLStatistics( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                           params->SchemaName, params->NameLength2, params->TableName,
+                           params->NameLength3, params->Unique, params->Reserved );
 }
 
 static NTSTATUS wrap_SQLStatisticsW( void *args )
 {
     struct SQLStatisticsW_params *params = args;
-    return SQLStatisticsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                           params->SchemaName, params->NameLength2, params->TableName,
-                           params->NameLength3, params->Unique, params->Reserved );
+    return pSQLStatisticsW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                            params->SchemaName, params->NameLength2, params->TableName,
+                            params->NameLength3, params->Unique, params->Reserved );
 }
 
 static NTSTATUS wrap_SQLTablePrivileges( void *args )
 {
     struct SQLTablePrivileges_params *params = args;
-    return SQLTablePrivileges( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
-                               params->NameLength1, params->SchemaName, params->NameLength2, params->TableName,
-                               params->NameLength3 );
+    return pSQLTablePrivileges( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
+                                params->NameLength1, params->SchemaName, params->NameLength2, params->TableName,
+                                params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLTablePrivilegesW( void *args )
 {
     struct SQLTablePrivilegesW_params *params = args;
-    return SQLTablePrivilegesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
-                                params->NameLength1, params->SchemaName, params->NameLength2, params->TableName,
-                                params->NameLength3 );
+    return pSQLTablePrivilegesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName,
+                                 params->NameLength1, params->SchemaName, params->NameLength2, params->TableName,
+                                 params->NameLength3 );
 }
 
 static NTSTATUS wrap_SQLTables( void *args )
 {
     struct SQLTables_params *params = args;
-    return SQLTables( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                      params->SchemaName, params->NameLength2, params->TableName,
-                      params->NameLength3, params->TableType, params->NameLength4 );
+    return pSQLTables( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                       params->SchemaName, params->NameLength2, params->TableName,
+                       params->NameLength3, params->TableType, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLTablesW( void *args )
 {
     struct SQLTablesW_params *params = args;
-    return SQLTablesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
-                       params->SchemaName, params->NameLength2, params->TableName,
-                       params->NameLength3, params->TableType, params->NameLength4 );
+    return pSQLTablesW( (SQLHSTMT)(ULONG_PTR)params->StatementHandle, params->CatalogName, params->NameLength1,
+                        params->SchemaName, params->NameLength2, params->TableName,
+                        params->NameLength3, params->TableType, params->NameLength4 );
 }
 
 static NTSTATUS wrap_SQLTransact( void *args )
 {
     struct SQLTransact_params *params = args;
-    return SQLTransact( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, (SQLHDBC)(ULONG_PTR)params->ConnectionHandle,
-                        params->CompletionType );
+    return pSQLTransact( (SQLHENV)(ULONG_PTR)params->EnvironmentHandle, (SQLHDBC)(ULONG_PTR)params->ConnectionHandle,
+                         params->CompletionType );
 }
 
 const unixlib_entry_t __wine_unix_call_funcs[] =
 {
     odbc_process_attach,
-    wrap_SQLAllocConnect,
-    wrap_SQLAllocEnv,
+    odbc_process_detach,
     wrap_SQLAllocHandle,
     wrap_SQLAllocHandleStd,
-    wrap_SQLAllocStmt,
     wrap_SQLBindCol,
-    wrap_SQLBindParam,
     wrap_SQLBindParameter,
     wrap_SQLBrowseConnect,
     wrap_SQLBrowseConnectW,
@@ -1173,16 +1474,12 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
     wrap_SQLConnect,
     wrap_SQLConnectW,
     wrap_SQLCopyDesc,
-    wrap_SQLDataSources,
-    wrap_SQLDataSourcesW,
     wrap_SQLDescribeCol,
     wrap_SQLDescribeColW,
     wrap_SQLDescribeParam,
     wrap_SQLDisconnect,
     wrap_SQLDriverConnect,
     wrap_SQLDriverConnectW,
-    wrap_SQLDrivers,
-    wrap_SQLDriversW,
     wrap_SQLEndTran,
     wrap_SQLError,
     wrap_SQLErrorW,
@@ -1194,8 +1491,6 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
     wrap_SQLFetchScroll,
     wrap_SQLForeignKeys,
     wrap_SQLForeignKeysW,
-    wrap_SQLFreeConnect,
-    wrap_SQLFreeEnv,
     wrap_SQLFreeHandle,
     wrap_SQLFreeStmt,
     wrap_SQLGetConnectAttr,
@@ -1295,35 +1590,6 @@ static NTSTATUS wow64_SQLBindCol( void *args )
     };
 
     return wrap_SQLBindCol( &params );
-}
-
-static NTSTATUS wow64_SQLBindParam( void *args )
-{
-    struct
-    {
-        UINT64 StatementHandle;
-        UINT16 ParameterNumber;
-        INT16  ValueType;
-        INT16  ParameterType;
-        UINT64 LengthPrecision;
-        INT16  ParameterScale;
-        PTR32  ParameterValue;
-        PTR32  StrLen_or_Ind;
-    } const *params32 = args;
-
-    struct SQLBindParam_params params =
-    {
-        params32->StatementHandle,
-        params32->ParameterNumber,
-        params32->ValueType,
-        params32->ParameterType,
-        params32->LengthPrecision,
-        params32->ParameterScale,
-        ULongToPtr(params32->ParameterValue),
-        ULongToPtr(params32->StrLen_or_Ind)
-    };
-
-    return wrap_SQLBindParam( &params );
 }
 
 static NTSTATUS wow64_SQLBindParameter( void *args )
@@ -1695,64 +1961,6 @@ static NTSTATUS wow64_SQLConnectW( void *args )
     return wrap_SQLConnectW( &params );
 }
 
-static NTSTATUS wow64_SQLDataSources( void *args )
-{
-    struct
-    {
-        UINT64 EnvironmentHandle;
-        UINT16 Direction;
-        PTR32  ServerName;
-        INT16  BufferLength1;
-        PTR32  NameLength1;
-        PTR32  Description;
-        INT16  BufferLength2;
-        PTR32  NameLength2;
-    } const *params32 = args;
-
-    struct SQLDataSources_params params =
-    {
-        params32->EnvironmentHandle,
-        params32->Direction,
-        ULongToPtr(params32->ServerName),
-        params32->BufferLength1,
-        ULongToPtr(params32->NameLength1),
-        ULongToPtr(params32->Description),
-        params32->BufferLength2,
-        ULongToPtr(params32->NameLength2)
-    };
-
-    return wrap_SQLDataSources( &params );
-}
-
-static NTSTATUS wow64_SQLDataSourcesW( void *args )
-{
-    struct
-    {
-        UINT64 EnvironmentHandle;
-        UINT16 Direction;
-        PTR32  ServerName;
-        INT16  BufferLength1;
-        PTR32  NameLength1;
-        PTR32  Description;
-        INT16  BufferLength2;
-        PTR32  NameLength2;
-    } const *params32 = args;
-
-    struct SQLDataSourcesW_params params =
-    {
-        params32->EnvironmentHandle,
-        params32->Direction,
-        ULongToPtr(params32->ServerName),
-        params32->BufferLength1,
-        ULongToPtr(params32->NameLength1),
-        ULongToPtr(params32->Description),
-        params32->BufferLength2,
-        ULongToPtr(params32->NameLength2)
-    };
-
-    return wrap_SQLDataSourcesW( &params );
-}
-
 static NTSTATUS wow64_SQLDescribeCol( void *args )
 {
     struct
@@ -1838,64 +2046,6 @@ static NTSTATUS wow64_SQLDescribeParam( void *args )
     };
 
     return wrap_SQLDescribeParam( &params );
-}
-
-static NTSTATUS wow64_SQLDrivers( void *args )
-{
-    struct
-    {
-        UINT64 EnvironmentHandle;
-        UINT16 Direction;
-        PTR32  DriverDescription;
-        INT16  BufferLength1;
-        PTR32  DescriptionLength;
-        PTR32  DriverAttributes;
-        INT16  BufferLength2;
-        PTR32  AttributesLength;
-    } const *params32 = args;
-
-    struct SQLDrivers_params params =
-    {
-        params32->EnvironmentHandle,
-        params32->Direction,
-        ULongToPtr(params32->DriverDescription),
-        params32->BufferLength1,
-        ULongToPtr(params32->DescriptionLength),
-        ULongToPtr(params32->DriverAttributes),
-        params32->BufferLength2,
-        ULongToPtr(params32->AttributesLength)
-    };
-
-    return wrap_SQLDrivers( &params );
-}
-
-static NTSTATUS wow64_SQLDriversW( void *args )
-{
-    struct
-    {
-        UINT64 EnvironmentHandle;
-        UINT16 Direction;
-        PTR32  DriverDescription;
-        INT16  BufferLength1;
-        PTR32  DescriptionLength;
-        PTR32  DriverAttributes;
-        INT16  BufferLength2;
-        PTR32  AttributesLength;
-    } const *params32 = args;
-
-    struct SQLDriversW_params params =
-    {
-        params32->EnvironmentHandle,
-        params32->Direction,
-        ULongToPtr(params32->DriverDescription),
-        params32->BufferLength1,
-        ULongToPtr(params32->DescriptionLength),
-        ULongToPtr(params32->DriverAttributes),
-        params32->BufferLength2,
-        ULongToPtr(params32->AttributesLength)
-    };
-
-    return wrap_SQLDriversW( &params );
 }
 
 static NTSTATUS wow64_SQLDriverConnect( void *args )
@@ -3551,13 +3701,10 @@ static NTSTATUS wow64_SQLTablesW( void *args )
 const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
 {
     odbc_process_attach,
-    wrap_SQLAllocConnect,
-    wrap_SQLAllocEnv,
+    odbc_process_detach,
     wrap_SQLAllocHandle,
     wrap_SQLAllocHandleStd,
-    wrap_SQLAllocStmt,
     wow64_SQLBindCol,
-    wow64_SQLBindParam,
     wow64_SQLBindParameter,
     wow64_SQLBrowseConnect,
     wow64_SQLBrowseConnectW,
@@ -3575,16 +3722,12 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     wow64_SQLConnect,
     wow64_SQLConnectW,
     wrap_SQLCopyDesc,
-    wow64_SQLDataSources,
-    wow64_SQLDataSourcesW,
     wow64_SQLDescribeCol,
     wow64_SQLDescribeColW,
     wow64_SQLDescribeParam,
     wrap_SQLDisconnect,
     wow64_SQLDriverConnect,
     wow64_SQLDriverConnectW,
-    wow64_SQLDrivers,
-    wow64_SQLDriversW,
     wrap_SQLEndTran,
     wow64_SQLError,
     wow64_SQLErrorW,
@@ -3596,8 +3739,6 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     wrap_SQLFetchScroll,
     wow64_SQLForeignKeys,
     wow64_SQLForeignKeysW,
-    wrap_SQLFreeConnect,
-    wrap_SQLFreeEnv,
     wrap_SQLFreeHandle,
     wrap_SQLFreeStmt,
     wow64_SQLGetConnectAttr,

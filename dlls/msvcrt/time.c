@@ -1730,7 +1730,8 @@ char * CDECL _ctime64(const __time64_t *time)
  */
 errno_t CDECL _ctime64_s(char *res, size_t len, const __time64_t *time)
 {
-    struct tm *t;
+    struct tm t;
+    int ret;
 
     if (!MSVCRT_CHECK_PMT( res != NULL )) return EINVAL;
     if (!MSVCRT_CHECK_PMT( len >= 26 )) return EINVAL;
@@ -1738,9 +1739,10 @@ errno_t CDECL _ctime64_s(char *res, size_t len, const __time64_t *time)
     if (!MSVCRT_CHECK_PMT( time != NULL )) return EINVAL;
     if (!MSVCRT_CHECK_PMT( *time > 0 )) return EINVAL;
 
-    t = _localtime64( time );
-    strcpy( res, asctime( t ) );
-    return 0;
+    ret = _localtime64_s( &t, time );
+    if (ret)
+        return ret;
+    return asctime_s( res, len, &t );
 }
 
 /*********************************************************************
@@ -1759,7 +1761,8 @@ char * CDECL _ctime32(const __time32_t *time)
  */
 errno_t CDECL _ctime32_s(char *res, size_t len, const __time32_t *time)
 {
-    struct tm *t;
+    struct tm t;
+    int ret;
 
     if (!MSVCRT_CHECK_PMT( res != NULL )) return EINVAL;
     if (!MSVCRT_CHECK_PMT( len >= 26 )) return EINVAL;
@@ -1767,9 +1770,10 @@ errno_t CDECL _ctime32_s(char *res, size_t len, const __time32_t *time)
     if (!MSVCRT_CHECK_PMT( time != NULL )) return EINVAL;
     if (!MSVCRT_CHECK_PMT( *time > 0 )) return EINVAL;
 
-    t = _localtime32( time );
-    strcpy( res, asctime( t ) );
-    return 0;
+    ret = _localtime32_s( &t, time );
+    if (ret)
+        return ret;
+    return asctime_s( res, len, &t );
 }
 
 /*********************************************************************
@@ -1862,18 +1866,6 @@ int CDECL _get_daylight(int *hours)
 #if _MSVCR_VER >= 140
 
 #define TIME_UTC 1
-
-struct _timespec32
-{
-    __time32_t tv_sec;
-    LONG tv_nsec;
-};
-
-struct _timespec64
-{
-    __time64_t tv_sec;
-    LONG tv_nsec;
-};
 
 /*********************************************************************
  * _timespec64_get (UCRTBASE.@)

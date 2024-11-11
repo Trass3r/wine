@@ -106,12 +106,8 @@ struct thread_input
     struct desktop        *desktop;       /* desktop that this thread input belongs to */
     int                    caret_hide;    /* caret hide count */
     int                    caret_state;   /* caret on/off state */
-    user_handle_t          cursor;        /* current cursor */
-    int                    cursor_count;  /* cursor show count */
     struct list            msg_list;      /* list of hardware messages */
-    unsigned char          keystate[256]; /* state of each key */
     unsigned char          desktop_keystate[256]; /* desktop keystate when keystate was synced */
-    int                    keystate_lock; /* keystate is locked */
     const input_shm_t     *shared;        /* thread input in session shared memory */
 };
 
@@ -252,11 +248,7 @@ static struct thread_input *create_thread_input( struct thread *thread )
 
     if ((input = alloc_object( &thread_input_ops )))
     {
-        input->cursor       = 0;
-        input->cursor_count = 0;
         list_init( &input->msg_list );
-        memset( input->keystate, 0, sizeof(input->keystate) );
-        input->keystate_lock = 0;
         input->shared = NULL;
 
         if (!(input->desktop = get_thread_desktop( thread, 0 /* FIXME: access rights */ )))
@@ -275,12 +267,17 @@ static struct thread_input *create_thread_input( struct thread *thread )
 
         SHARED_WRITE_BEGIN( input->shared, input_shm_t )
         {
+            shared->foreground = 0;
             shared->active = 0;
             shared->focus = 0;
             shared->capture = 0;
             shared->menu_owner = 0;
             shared->move_size = 0;
             set_caret_window( input, shared, 0 );
+            shared->cursor = 0;
+            shared->cursor_count = 0;
+            memset( (void *)shared->keystate, 0, sizeof(shared->keystate) );
+            shared->keystate_lock = 0;
         }
         SHARED_WRITE_END;
     }
@@ -361,36 +358,55 @@ void free_msg_queue( struct thread *thread )
 /* synchronize thread input keystate with the desktop */
 static void sync_input_keystate( struct thread_input *input )
 {
+    const input_shm_t *input_shm = input->shared;
     const desktop_shm_t *desktop_shm;
     int i;
 
-    if (!input->desktop || input->keystate_lock) return;
+    if (!input->desktop || input_shm->keystate_lock) return;
     desktop_shm = input->desktop->shared;
 
-    for (i = 0; i < sizeof(input->keystate); ++i)
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
     {
-        if (input->desktop_keystate[i] == desktop_shm->keystate[i]) continue;
-        input->keystate[i] = input->desktop_keystate[i] = desktop_shm->keystate[i];
+        for (i = 0; i < sizeof(shared->keystate); ++i)
+        {
+            if (input->desktop_keystate[i] == desktop_shm->keystate[i]) continue;
+            shared->keystate[i] = input->desktop_keystate[i] = desktop_shm->keystate[i];
+        }
     }
+    SHARED_WRITE_END;
 }
 
 /* locks thread input keystate to prevent synchronization */
 static void lock_input_keystate( struct thread_input *input )
 {
-    input->keystate_lock++;
+    const input_shm_t *input_shm = input->shared;
+
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+    {
+        shared->keystate_lock++;
+    }
+    SHARED_WRITE_END;
 }
 
 /* unlock the thread input keystate and synchronize it again */
 static void unlock_input_keystate( struct thread_input *input )
 {
-    input->keystate_lock--;
-    if (!input->keystate_lock) sync_input_keystate( input );
+    const input_shm_t *input_shm = input->shared;
+
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+    {
+        shared->keystate_lock--;
+    }
+    SHARED_WRITE_END;
+
+    if (!input_shm->keystate_lock) sync_input_keystate( input );
 }
 
 /* change the thread input data of a given thread */
 static int assign_thread_input( struct thread *thread, struct thread_input *new_input )
 {
     struct msg_queue *queue = thread->queue;
+    const input_shm_t *input_shm;
 
     if (!queue)
     {
@@ -399,7 +415,14 @@ static int assign_thread_input( struct thread *thread, struct thread_input *new_
     }
     if (queue->input)
     {
-        queue->input->cursor_count -= queue->cursor_count;
+        input_shm = queue->input->shared;
+
+        SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+        {
+            shared->cursor_count -= queue->cursor_count;
+        }
+        SHARED_WRITE_END;
+
         if (queue->keystate_lock) unlock_input_keystate( queue->input );
 
         /* invalidate the old object to force clients to refresh their cached thread input */
@@ -408,7 +431,14 @@ static int assign_thread_input( struct thread *thread, struct thread_input *new_
     }
     queue->input = (struct thread_input *)grab_object( new_input );
     if (queue->keystate_lock) lock_input_keystate( queue->input );
-    new_input->cursor_count += queue->cursor_count;
+
+    input_shm = new_input->shared;
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+    {
+        shared->cursor_count += queue->cursor_count;
+    }
+    SHARED_WRITE_END;
+
     return 1;
 }
 
@@ -442,7 +472,7 @@ static int is_cursor_clipped( struct desktop *desktop )
 {
     const desktop_shm_t *desktop_shm = desktop->shared;
     rectangle_t top_rect, clip_rect = desktop_shm->cursor.clip;
-    get_top_window_rectangle( desktop, &top_rect );
+    get_virtual_screen_rect( desktop, &top_rect, 1 );
     return !is_rect_equal( &clip_rect, &top_rect );
 }
 
@@ -487,7 +517,8 @@ static int update_desktop_cursor_window( struct desktop *desktop, user_handle_t 
 
     if (updated && (input = get_desktop_cursor_thread_input( desktop )))
     {
-        user_handle_t handle = input->cursor_count < 0 ? 0 : input->cursor;
+        const input_shm_t *input_shm = input->shared;
+        user_handle_t handle = input_shm->cursor_count < 0 ? 0 : input_shm->cursor;
         /* when clipping send the message to the foreground window as well, as some driver have an artificial overlay window */
         if (is_cursor_clipped( desktop )) queue_cursor_message( desktop, 0, WM_WINE_SETCURSOR, win, handle );
         queue_cursor_message( desktop, win, WM_WINE_SETCURSOR, win, handle );
@@ -553,6 +584,15 @@ static void set_cursor_pos( struct desktop *desktop, int x, int y )
     queue_hardware_message( desktop, msg, 1 );
 }
 
+/* sync cursor position after window change */
+void update_cursor_pos( struct desktop *desktop )
+{
+    const desktop_shm_t *desktop_shm;
+
+    desktop_shm = desktop->shared;
+    set_cursor_pos( desktop, desktop_shm->cursor.x, desktop_shm->cursor.y );
+}
+
 /* retrieve default position and time for synthesized messages */
 static void get_message_defaults( struct msg_queue *queue, int *x, int *y, unsigned int *time )
 {
@@ -572,7 +612,7 @@ void set_clip_rectangle( struct desktop *desktop, const rectangle_t *rect, unsig
     unsigned int old_flags;
     int x, y;
 
-    get_top_window_rectangle( desktop, &top_rect );
+    get_virtual_screen_rect( desktop, &top_rect, 1 );
     if (rect)
     {
         new_rect = *rect;
@@ -609,9 +649,27 @@ void set_clip_rectangle( struct desktop *desktop, const rectangle_t *rect, unsig
 /* change the foreground input and reset the cursor clip rect */
 static void set_foreground_input( struct desktop *desktop, struct thread_input *input )
 {
+    const input_shm_t *input_shm, *old_input_shm;
+    shared_object_t dummy_obj = {0};
+
     if (desktop->foreground_input == input) return;
+    input_shm = input ? input->shared : &dummy_obj.shm.input;
+    old_input_shm = desktop->foreground_input ? desktop->foreground_input->shared : &dummy_obj.shm.input;
+
     set_clip_rectangle( desktop, NULL, SET_CURSOR_NOCLIP, 1 );
     desktop->foreground_input = input;
+
+    SHARED_WRITE_BEGIN( old_input_shm, input_shm_t )
+    {
+        input_shm_t *old_shared = shared;
+        SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+        {
+            old_shared->foreground = 0;
+            shared->foreground = 1;
+        }
+        SHARED_WRITE_END;
+    }
+    SHARED_WRITE_END;
 }
 
 /* get the hook table for a given thread */
@@ -1241,6 +1299,7 @@ static void msg_queue_destroy( struct object *obj )
     struct msg_queue *queue = (struct msg_queue *)obj;
     struct list *ptr;
     struct hotkey *hotkey, *hotkey2;
+    const input_shm_t *input_shm = queue->input->shared;
     int i;
 
     cleanup_results( queue );
@@ -1268,7 +1327,11 @@ static void msg_queue_destroy( struct object *obj )
         free( timer );
     }
     if (queue->timeout) remove_timeout_user( queue->timeout );
-    queue->input->cursor_count -= queue->cursor_count;
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+    {
+        shared->cursor_count -= queue->cursor_count;
+    }
+    SHARED_WRITE_END;
     if (queue->keystate_lock) unlock_input_keystate( queue->input );
     release_object( queue->input );
     if (queue->hooks) release_object( queue->hooks );
@@ -1398,7 +1461,15 @@ int attach_thread_input( struct thread *thread_from, struct thread *thread_to )
     }
 
     ret = assign_thread_input( thread_from, input );
-    if (ret) memset( input->keystate, 0, sizeof(input->keystate) );
+    if (ret)
+    {
+        const input_shm_t *input_shm = input->shared;
+        SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+        {
+            memset( (void *)shared->keystate, 0, sizeof(shared->keystate) );
+        }
+        SHARED_WRITE_END;
+    }
     release_object( input );
     return ret;
 }
@@ -1655,7 +1726,12 @@ static void update_key_state( volatile unsigned char *keystate, unsigned int msg
 
 static void update_thread_input_key_state( struct thread_input *input, unsigned int msg, lparam_t wparam )
 {
-    update_key_state( input->keystate, msg, wparam, 0 );
+    const input_shm_t *input_shm = input->shared;
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+    {
+        update_key_state( shared->keystate, msg, wparam, 0 );
+    }
+    SHARED_WRITE_END;
 }
 
 static void update_desktop_key_state( struct desktop *desktop, unsigned int msg, lparam_t wparam )
@@ -2067,6 +2143,7 @@ static void queue_rawinput_message( struct desktop *desktop, struct process *pro
     data_size_t report_size = 0, data_size = 0;
     int wparam = RIM_INPUT;
     lparam_t info = 0;
+    char *ptr;
 
     if (raw_msg->rawinput.type == RIM_TYPEMOUSE)
     {
@@ -2104,8 +2181,8 @@ static void queue_rawinput_message( struct desktop *desktop, struct process *pro
     msg_data = msg->data;
     msg_data->flags = raw_msg->flags;
     msg_data->rawinput = raw_msg->rawinput;
-    memcpy( msg_data + 1, &raw_msg->data, data_size );
-    if (report_size) memcpy( (char *)(msg_data + 1) + data_size, raw_msg->hid_report, report_size );
+    ptr = mem_append( msg_data + 1, &raw_msg->data, data_size );
+    mem_append( ptr, raw_msg->hid_report, report_size );
 
     if (raw_msg->message == WM_INPUT_DEVICE_CHANGE && raw_msg->rawinput.type == RIM_TYPEHID)
     {
@@ -2454,7 +2531,7 @@ static void queue_pointer_message( struct pointer *pointer, int repeated )
     struct message *msg;
     int x, y;
 
-    get_top_window_rectangle( desktop, &top_rect );
+    get_virtual_screen_rect( desktop, &top_rect, 0 );
     x = LOWORD(input->hw.lparam) * (top_rect.right - top_rect.left) / 65535;
     y = HIWORD(input->hw.lparam) * (top_rect.bottom - top_rect.top) / 65535;
 
@@ -3207,7 +3284,7 @@ DECL_HANDLER(get_message)
     struct msg_queue *queue = get_current_queue();
     user_handle_t get_win = get_user_full_handle( req->get_win );
     const queue_shm_t *queue_shm;
-    unsigned int filter = req->flags >> 16;
+    unsigned int filter;
 
     if (get_win && get_win != 1 && get_win != -1 && !get_user_object( get_win, USER_WINDOW ))
     {
@@ -3230,7 +3307,6 @@ DECL_HANDLER(get_message)
     }
 
     queue->last_get_msg = current_time;
-    if (!filter) filter = QS_ALLINPUT;
 
     /* first check for sent messages */
     if ((ptr = list_head( &queue->msg_list[SEND_MESSAGE] )))
@@ -3239,6 +3315,9 @@ DECL_HANDLER(get_message)
         receive_message( queue, msg, reply );
         return;
     }
+
+    /* use the same logic as in win32u/message.c peek_message */
+    if (!(filter = req->flags >> 16)) filter = QS_ALLINPUT;
 
     /* clear changed bits so we can wait on them if we don't find a message */
     SHARED_WRITE_BEGIN( queue_shm, queue_shm_t )
@@ -3631,52 +3710,6 @@ DECL_HANDLER(attach_thread_input)
 }
 
 
-/* get thread input data */
-DECL_HANDLER(get_thread_input_data)
-{
-    struct thread *thread = NULL;
-    struct desktop *desktop;
-    struct thread_input *input;
-
-    if (req->tid)
-    {
-        if (!(thread = get_thread_from_id( req->tid ))) return;
-        if (!(desktop = get_thread_desktop( thread, 0 )))
-        {
-            release_object( thread );
-            return;
-        }
-        input = thread->queue ? thread->queue->input : NULL;
-    }
-    else
-    {
-        if (!(desktop = get_thread_desktop( current, 0 ))) return;
-        input = desktop->foreground_input;  /* get the foreground thread info */
-    }
-
-    if (input)
-    {
-        const input_shm_t *input_shm = input->shared;
-        reply->focus      = input_shm->focus;
-        reply->capture    = input_shm->capture;
-        reply->active     = input_shm->active;
-        reply->menu_owner = input_shm->menu_owner;
-        reply->move_size  = input_shm->move_size;
-        reply->caret      = input_shm->caret;
-        reply->cursor     = input->cursor;
-        reply->show_count = input->cursor_count;
-        reply->rect       = input_shm->caret_rect;
-    }
-
-    /* foreground window is active window of foreground thread */
-    if (!(input = desktop->foreground_input)) reply->foreground = 0;
-    else reply->foreground = input->shared->active;
-
-    if (thread) release_object( thread );
-    release_object( desktop );
-}
-
-
 /* get the thread input of the given thread */
 DECL_HANDLER(get_thread_input)
 {
@@ -3705,33 +3738,25 @@ DECL_HANDLER(get_thread_input)
 DECL_HANDLER(get_key_state)
 {
     struct desktop *desktop;
-    data_size_t size = min( 256, get_reply_max_size() );
 
     if (req->async)  /* get global async key state */
     {
         if (!(desktop = get_thread_desktop( current, 0 ))) return;
-        if (req->key >= 0)
+        SHARED_WRITE_BEGIN( desktop->shared, desktop_shm_t )
         {
-            SHARED_WRITE_BEGIN( desktop->shared, desktop_shm_t )
-            {
-                reply->state = shared->keystate[req->key & 0xff];
-                shared->keystate[req->key & 0xff] &= ~0x40;
-            }
-            SHARED_WRITE_END;
+            reply->state = shared->keystate[req->key & 0xff];
+            shared->keystate[req->key & 0xff] &= ~0x40;
         }
-        set_reply_data( (const void *)desktop->shared->keystate, size );
+        SHARED_WRITE_END;
         release_object( desktop );
     }
     else
     {
         struct msg_queue *queue = get_current_queue();
-        unsigned char *keystate = queue->input->keystate;
-        if (req->key >= 0)
-        {
-            sync_input_keystate( queue->input );
-            reply->state = keystate[req->key & 0xff];
-        }
-        set_reply_data( keystate, size );
+        const input_shm_t *input_shm = queue->input->shared;
+        unsigned char *keystate = (void *)input_shm->keystate;
+        sync_input_keystate( queue->input );
+        reply->state = keystate[req->key & 0xff];
     }
 }
 
@@ -3742,8 +3767,14 @@ DECL_HANDLER(set_key_state)
     struct msg_queue *queue = get_current_queue();
     struct desktop *desktop = queue->input->desktop;
     data_size_t size = min( 256, get_req_data_size() );
+    const input_shm_t *input_shm = queue->input->shared;
 
-    memcpy( queue->input->keystate, get_req_data(), size );
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+    {
+        memcpy( (void *)shared->keystate, get_req_data(), size );
+    }
+    SHARED_WRITE_END;
+
     memcpy( queue->input->desktop_keystate, (const void *)desktop->shared->keystate,
             sizeof(queue->input->desktop_keystate) );
 
@@ -3952,39 +3983,46 @@ DECL_HANDLER(set_cursor)
     struct msg_queue *queue = get_current_queue();
     user_handle_t prev_cursor, new_cursor;
     struct thread_input *input;
+    const input_shm_t *input_shm;
     struct desktop *desktop;
     const desktop_shm_t *desktop_shm;
 
     if (!queue) return;
     input = queue->input;
+    input_shm = input->shared;
     desktop = input->desktop;
     desktop_shm = desktop->shared;
-    prev_cursor = input->cursor_count < 0 ? 0 : input->cursor;
+    prev_cursor = input_shm->cursor_count < 0 ? 0 : input_shm->cursor;
 
-    reply->prev_handle = input->cursor;
-    reply->prev_count  = input->cursor_count;
+    reply->prev_handle = input_shm->cursor;
+    reply->prev_count  = input_shm->cursor_count;
     reply->prev_x      = desktop_shm->cursor.x;
     reply->prev_y      = desktop_shm->cursor.y;
 
-    if (req->flags & SET_CURSOR_HANDLE)
+    if ((req->flags & SET_CURSOR_HANDLE) && req->handle &&
+        !get_user_object( req->handle, USER_CLIENT ))
     {
-        if (req->handle && !get_user_object( req->handle, USER_CLIENT ))
+        set_win32_error( ERROR_INVALID_CURSOR_HANDLE );
+        return;
+    }
+
+    SHARED_WRITE_BEGIN( input_shm, input_shm_t )
+    {
+        if (req->flags & SET_CURSOR_HANDLE)
+            shared->cursor = req->handle;
+        if (req->flags & SET_CURSOR_COUNT)
         {
-            set_win32_error( ERROR_INVALID_CURSOR_HANDLE );
-            return;
+            queue->cursor_count += req->show_count;
+            shared->cursor_count += req->show_count;
         }
-        input->cursor = req->handle;
     }
-    if (req->flags & SET_CURSOR_COUNT)
-    {
-        queue->cursor_count += req->show_count;
-        input->cursor_count += req->show_count;
-    }
+    SHARED_WRITE_END;
+
     if (req->flags & SET_CURSOR_POS) set_cursor_pos( desktop, req->x, req->y );
     if (req->flags & SET_CURSOR_CLIP) set_clip_rectangle( desktop, &req->clip, req->flags, 0 );
     if (req->flags & SET_CURSOR_NOCLIP) set_clip_rectangle( desktop, NULL, SET_CURSOR_NOCLIP, 0 );
 
-    new_cursor = input->cursor_count < 0 ? 0 : input->cursor;
+    new_cursor = input_shm->cursor_count < 0 ? 0 : input_shm->cursor;
     if (prev_cursor != new_cursor) update_desktop_cursor_handle( desktop, input, new_cursor );
 
     reply->new_x       = desktop_shm->cursor.x;

@@ -713,6 +713,7 @@ NTSTATUS WINAPI wow64_NtQueryInformationThread( UINT *args )
     case ThreadHideFromDebugger:  /* BOOLEAN */
     case ThreadSuspendCount:  /* ULONG */
     case ThreadPriorityBoost:   /* ULONG */
+    case ThreadIdealProcessorEx: /* PROCESSOR_NUMBER */
         /* FIXME: check buffer alignment */
         return NtQueryInformationThread( handle, class, ptr, len, retlen );
 
@@ -894,7 +895,7 @@ NTSTATUS WINAPI wow64_NtSetInformationProcess( UINT *args )
         else return STATUS_INVALID_PARAMETER;
 
     case ProcessInstrumentationCallback:   /* PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION */
-        if (len == sizeof(PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION32))
+        if (len >= sizeof(ULONG))
         {
             FIXME( "ProcessInstrumentationCallback stub\n" );
             return STATUS_SUCCESS;
@@ -929,6 +930,9 @@ NTSTATUS WINAPI wow64_NtSetInformationProcess( UINT *args )
             return status;
         }
         else return STATUS_INFO_LENGTH_MISMATCH;
+
+    case ProcessManageWritesToExecutableMemory: /* MANAGE_WRITES_TO_EXECUTABLE_MEMORY */
+        return STATUS_INVALID_INFO_CLASS;
 
     case ProcessWineMakeProcessSystem:   /* HANDLE* */
         if (len == sizeof(ULONG))
@@ -986,6 +990,7 @@ NTSTATUS WINAPI wow64_NtSetInformationThread( UINT *args )
         else return STATUS_INVALID_PARAMETER;
 
     case ThreadWow64Context:  /* WOW64_CONTEXT* */
+    case ThreadManageWritesToExecutableMemory: /* MANAGE_WRITES_TO_EXECUTABLE_MEMORY */
         return STATUS_INVALID_INFO_CLASS;
 
     case ThreadGroupInformation:   /* GROUP_AFFINITY */
@@ -1061,7 +1066,12 @@ NTSTATUS WINAPI wow64_NtTerminateProcess( UINT *args )
     HANDLE handle = get_handle( &args );
     LONG exit_code = get_ulong( &args );
 
-    return NtTerminateProcess( handle, exit_code );
+    NTSTATUS status;
+
+    if (!handle && pBTCpuProcessTerm) pBTCpuProcessTerm( handle, FALSE, 0 );
+    status = NtTerminateProcess( handle, exit_code );
+    if (!handle && pBTCpuProcessTerm) pBTCpuProcessTerm( handle, TRUE, status );
+    return status;
 }
 
 
@@ -1073,7 +1083,28 @@ NTSTATUS WINAPI wow64_NtTerminateThread( UINT *args )
     HANDLE handle = get_handle( &args );
     LONG exit_code = get_ulong( &args );
 
-    if (pBTCpuThreadTerm) pBTCpuThreadTerm( handle );
+    if (pBTCpuThreadTerm) pBTCpuThreadTerm( handle, exit_code );
 
     return NtTerminateThread( handle, exit_code );
+}
+
+
+/**********************************************************************
+ *           wow64_NtWow64QueryInformationProcess64
+ */
+NTSTATUS WINAPI wow64_NtWow64QueryInformationProcess64( UINT *args )
+{
+    HANDLE handle = get_handle( &args );
+    PROCESSINFOCLASS class = get_ulong( &args );
+    void *info = get_ptr( &args );
+    ULONG size = get_ulong( &args );
+    ULONG *ret_len = get_ptr( &args );
+
+    switch (class)
+    {
+    case ProcessBasicInformation:
+        return NtQueryInformationProcess( handle, class, info, size, ret_len );
+    default:
+        return STATUS_NOT_IMPLEMENTED;
+    }
 }

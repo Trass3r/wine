@@ -34,10 +34,26 @@
 # endif
 #endif
 
-/* KernelCallbackTable codes, not compatible with Windows */
+/* avoid including shellscalingapi.h */
+typedef enum MONITOR_DPI_TYPE
+{
+    MDT_EFFECTIVE_DPI   = 0,
+    MDT_ANGULAR_DPI     = 1,
+    MDT_RAW_DPI         = 2,
+    MDT_DEFAULT         = MDT_EFFECTIVE_DPI,
+} MONITOR_DPI_TYPE;
+
+typedef NTSTATUS (WINAPI *ntuser_callback)( void *args, ULONG len );
+NTSYSAPI NTSTATUS KeUserModeCallback( ULONG id, const void *args, ULONG len, void **ret_ptr, ULONG *ret_len );
+
+/* KernelCallbackTable codes, not compatible with Windows.
+   All of these functions must live inside user32.dll. Overwatch 2's
+   KiUserCallbackDispatcher hook verifies this and prevents the callback from
+   running if that check fails. */
 enum
 {
     /* user32 callbacks */
+    NtUserCallDispatchCallback,
     NtUserCallEnumDisplayMonitor,
     NtUserCallSendAsyncCallback,
     NtUserCallWinEventHook,
@@ -57,19 +73,26 @@ enum
     NtUserPostDDEMessage,
     NtUserRenderSynthesizedFormat,
     NtUserUnpackDDEMessage,
-    /* win16 hooks */
-    NtUserCallFreeIcon,
-    NtUserThunkLock,
-    /* Vulkan support */
-    NtUserCallVulkanDebugReportCallback,
-    NtUserCallVulkanDebugUtilsCallback,
-    /* OpenGL support */
-    NtUserCallOpenGLDebugMessageCallback,
-    /* Driver-specific callbacks */
-    NtUserDriverCallbackFirst,
-    NtUserDriverCallbackLast = NtUserDriverCallbackFirst + 9,
+    NtUserDragDropEnter,
+    NtUserDragDropLeave,
+    NtUserDragDropDrag,
+    NtUserDragDropDrop,
+    NtUserDragDropPost,
     NtUserCallCount
 };
+
+/* NtUserCallDispatchCallback params */
+struct dispatch_callback_params
+{
+    UINT64 callback;
+};
+
+static inline NTSTATUS KeUserDispatchCallback( const struct dispatch_callback_params *params, ULONG len,
+                                               void **ret_ptr, ULONG *ret_len )
+{
+    if (!params->callback) return STATUS_ENTRYPOINT_NOT_FOUND;
+    return KeUserModeCallback( NtUserCallDispatchCallback, params, len, ret_ptr, ret_len );
+}
 
 /* TEB thread info, not compatible with Windows */
 struct ntuser_thread_info
@@ -281,6 +304,49 @@ struct unpack_dde_message_result
     LPARAM lparam;
 };
 
+/* NtUserDragDropEnter params */
+struct format_entry
+{
+    UINT format;
+    UINT size;
+    char data[1];
+};
+
+/* NtUserDragDropDrag params */
+struct drag_drop_drag_params
+{
+    HWND hwnd;
+    POINT point;
+    UINT effect;
+};
+
+/* NtUserDragDropDrop params */
+struct drag_drop_drop_params
+{
+    HWND hwnd;
+};
+
+/* NtUserDragDropPost params */
+
+/* avoid including shlobj.h */
+struct drop_files
+{
+    DWORD pFiles;
+    POINT pt;
+    BOOL  fNC;
+    BOOL  fWide;
+};
+
+struct drag_drop_post_params
+{
+    HWND hwnd;
+    UINT drop_size;
+    struct drop_files drop;
+    BYTE files[];
+};
+
+C_ASSERT( sizeof(struct drag_drop_post_params) == offsetof(struct drag_drop_post_params, files[0]) );
+
 /* DPI awareness contexts */
 #define MAKE_NTUSER_DPI_CONTEXT( awareness, version, dpi, flags )  ((awareness) | ((version) << 4) | ((dpi) << 8) | (flags))
 #define NTUSER_DPI_CONTEXT_GET_AWARENESS( ctx )                    ((ctx) & 0x0f)
@@ -331,6 +397,7 @@ enum
     NtUserSpyExit             = 0x0304,
     NtUserImeDriverCall       = 0x0305,
     NtUserSystemTrayCall      = 0x0306,
+    NtUserDragDropCall        = 0x0307,
 };
 
 /* NtUserThunkedMenuItemInfo codes */
@@ -503,6 +570,7 @@ enum wine_internal_message
     WM_WINE_SETACTIVEWINDOW,
     WM_WINE_KEYBOARD_LL_HOOK,
     WM_WINE_MOUSE_LL_HOOK,
+    WM_WINE_IME_NOTIFY,
     WM_WINE_UPDATEWINDOWSTATE,
     WM_WINE_FIRST_DRIVER_MSG = 0x80001000,  /* range of messages reserved for the USER driver */
     WM_WINE_CLIPCURSOR = 0x80001ff0, /* internal driver notification messages */
@@ -547,6 +615,16 @@ enum wine_systray_call
     WINE_SYSTRAY_DOCK_INSERT,
     WINE_SYSTRAY_DOCK_CLEAR,
     WINE_SYSTRAY_DOCK_REMOVE,
+};
+
+/* NtUserDragDropCall calls */
+enum wine_drag_drop_call
+{
+    WINE_DRAG_DROP_ENTER,
+    WINE_DRAG_DROP_LEAVE,
+    WINE_DRAG_DROP_DRAG,
+    WINE_DRAG_DROP_DROP,
+    WINE_DRAG_DROP_POST,
 };
 
 #define WM_SYSTIMER  0x0118
@@ -612,6 +690,7 @@ W32KAPI DWORD   WINAPI NtUserDrawMenuBarTemp( HWND hwnd, HDC hdc, RECT *rect, HM
 W32KAPI BOOL    WINAPI NtUserEmptyClipboard(void);
 W32KAPI BOOL    WINAPI NtUserEnableMenuItem( HMENU handle, UINT id, UINT flags );
 W32KAPI BOOL    WINAPI NtUserEnableMouseInPointer( BOOL );
+W32KAPI BOOL    WINAPI NtUserEnableMouseInPointerForThread(void);
 W32KAPI BOOL    WINAPI NtUserEnableScrollBar( HWND hwnd, UINT bar, UINT flags );
 W32KAPI BOOL    WINAPI NtUserEndDeferWindowPosEx( HDWP hdwp, BOOL async );
 W32KAPI BOOL    WINAPI NtUserEndMenu(void);
@@ -737,6 +816,7 @@ W32KAPI ATOM    WINAPI NtUserRegisterClassExWOW( const WNDCLASSEXW *wc, UNICODE_
                                                  DWORD *wow );
 W32KAPI BOOL    WINAPI NtUserRegisterHotKey( HWND hwnd, INT id, UINT modifiers, UINT vk );
 W32KAPI BOOL    WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT device_count, UINT size );
+W32KAPI BOOL    WINAPI NtUserRegisterTouchPadCapable( BOOL capable );
 W32KAPI INT     WINAPI NtUserReleaseDC( HWND hwnd, HDC hdc );
 W32KAPI BOOL    WINAPI NtUserRemoveClipboardFormatListener( HWND hwnd );
 W32KAPI BOOL    WINAPI NtUserRemoveMenu( HMENU menu, UINT id, UINT flags );
@@ -912,6 +992,7 @@ enum
     NtUserCallOneParam_SetKeyboardAutoRepeat,
     NtUserCallOneParam_SetThreadDpiAwarenessContext,
     NtUserCallOneParam_D3DKMTOpenAdapterFromGdiDisplayName,
+    NtUserCallOneParam_GetAsyncKeyboardState,
     /* temporary exports */
     NtUserGetDeskPattern,
 };
@@ -936,9 +1017,16 @@ static inline WORD NtUserEnableDC( HDC hdc )
     return NtUserCallOneParam( HandleToUlong(hdc), NtUserCallOneParam_EnableDC );
 }
 
-static inline void NtUserEnableThunkLock( BOOL enable )
+struct thunk_lock_params
 {
-    NtUserCallOneParam( enable, NtUserCallOneParam_EnableThunkLock );
+    struct dispatch_callback_params dispatch;
+    BOOL restore;
+    DWORD locks;
+};
+
+static inline void NtUserEnableThunkLock( ntuser_callback thunk_lock_callback )
+{
+    NtUserCallOneParam( (UINT_PTR)thunk_lock_callback, NtUserCallOneParam_EnableThunkLock );
 }
 
 static inline UINT NtUserEnumClipboardFormats( UINT format )
@@ -998,13 +1086,6 @@ static inline INT NtUserGetSystemMetrics( INT index )
     return NtUserCallOneParam( index, NtUserCallOneParam_GetSystemMetrics );
 }
 
-static inline RECT NtUserGetVirtualScreenRect(void)
-{
-    RECT virtual;
-    NtUserCallOneParam( (UINT_PTR)&virtual, NtUserCallOneParam_GetVirtualScreenRect );
-    return virtual;
-}
-
 static inline BOOL NtUserMessageBeep( UINT i )
 {
     return NtUserCallOneParam( i, NtUserCallOneParam_MessageBeep );
@@ -1037,6 +1118,11 @@ static inline NTSTATUS NtUserD3DKMTOpenAdapterFromGdiDisplayName( D3DKMT_OPENADA
     return NtUserCallOneParam( (UINT_PTR)desc, NtUserCallOneParam_D3DKMTOpenAdapterFromGdiDisplayName );
 }
 
+static inline BOOL NtUserGetAsyncKeyboardState( BYTE state[256] )
+{
+    return NtUserCallOneParam( (UINT_PTR)state, NtUserCallOneParam_GetAsyncKeyboardState );
+}
+
 /* NtUserCallTwoParam codes, not compatible with Windows */
 enum
 {
@@ -1047,9 +1133,10 @@ enum
     NtUserCallTwoParam_MonitorFromRect,
     NtUserCallTwoParam_SetCaretPos,
     NtUserCallTwoParam_SetIconParam,
+    NtUserCallTwoParam_SetIMECompositionRect,
     NtUserCallTwoParam_UnhookWindowsHook,
     NtUserCallTwoParam_AdjustWindowRect,
-    NtUserCallTwoParam_IsWindowRectFullScreen,
+    NtUserCallTwoParam_GetVirtualScreenRect,
     /* temporary exports */
     NtUserAllocWinProc,
 };
@@ -1087,9 +1174,16 @@ static inline BOOL NtUserSetCaretPos( int x, int y )
     return NtUserCallTwoParam( x, y, NtUserCallTwoParam_SetCaretPos );
 }
 
-static inline UINT_PTR NtUserSetIconParam( HICON icon, ULONG_PTR param )
+struct free_icon_params
 {
-    return NtUserCallTwoParam( HandleToUlong(icon), param, NtUserCallTwoParam_SetIconParam );
+    struct dispatch_callback_params dispatch;
+    UINT64 param;
+};
+
+static inline UINT_PTR NtUserSetIconParam( HICON icon, ULONG_PTR param, ntuser_callback callback )
+{
+    struct free_icon_params params = {.dispatch = {.callback = (UINT_PTR)callback}, .param = param};
+    return NtUserCallTwoParam( HandleToUlong(icon), (UINT_PTR)&params, NtUserCallTwoParam_SetIconParam );
 }
 
 static inline BOOL NtUserUnhookWindowsHook( INT id, HOOKPROC proc )
@@ -1117,9 +1211,11 @@ static inline BOOL NtUserAdjustWindowRect( RECT *rect, DWORD style, BOOL menu, D
     return NtUserCallTwoParam( (ULONG_PTR)rect, (ULONG_PTR)&params, NtUserCallTwoParam_AdjustWindowRect );
 }
 
-static inline BOOL NtUserIsWindowRectFullScreen( const RECT *rect, UINT dpi )
+static inline RECT NtUserGetVirtualScreenRect( MONITOR_DPI_TYPE type )
 {
-    return NtUserCallTwoParam( (UINT_PTR)rect, dpi, NtUserCallTwoParam_IsWindowRectFullScreen );
+    RECT virtual;
+    NtUserCallTwoParam( (UINT_PTR)&virtual, type, NtUserCallTwoParam_GetVirtualScreenRect );
+    return virtual;
 }
 
 /* NtUserCallHwnd codes, not compatible with Windows */
@@ -1283,6 +1379,9 @@ enum
     NtUserCallHwndParam_SetWindowContextHelpId,
     NtUserCallHwndParam_ShowOwnedPopups,
     NtUserCallHwndParam_SendHardwareInput,
+    NtUserCallHwndParam_ExposeWindowSurface,
+    NtUserCallHwndParam_GetWinMonitorDpi,
+    NtUserCallHwndParam_SetRawWindowPos,
     /* temporary exports */
     NtUserSetWindowStyle,
 };
@@ -1491,6 +1590,39 @@ static inline BOOL NtUserSendHardwareInput( HWND hwnd, UINT flags, const INPUT *
 {
     struct send_hardware_input_params params = {.flags = flags, .input = input, .lparam = lparam};
     return NtUserCallHwndParam( hwnd, (UINT_PTR)&params, NtUserCallHwndParam_SendHardwareInput );
+}
+
+struct expose_window_surface_params
+{
+    UINT flags;
+    BOOL whole;
+    RECT rect;
+    UINT dpi;
+};
+
+static inline BOOL NtUserExposeWindowSurface( HWND hwnd, UINT flags, const RECT *rect, UINT dpi )
+{
+    struct expose_window_surface_params params = {.flags = flags, .whole = !rect, .dpi = dpi};
+    if (rect) params.rect = *rect;
+    return NtUserCallHwndParam( hwnd, (UINT_PTR)&params, NtUserCallHwndParam_ExposeWindowSurface );
+}
+
+static inline UINT NtUserGetWinMonitorDpi( HWND hwnd, MONITOR_DPI_TYPE type )
+{
+    return NtUserCallHwndParam( hwnd, type, NtUserCallHwndParam_GetWinMonitorDpi );
+}
+
+struct set_raw_window_pos_params
+{
+    RECT rect;
+    UINT flags;
+    BOOL internal;
+};
+
+static inline BOOL NtUserSetRawWindowPos( HWND hwnd, RECT rect, UINT flags, BOOL internal )
+{
+    struct set_raw_window_pos_params params = {.rect = rect, .flags = flags, .internal = internal};
+    return NtUserCallHwndParam( hwnd, (UINT_PTR)&params, NtUserCallHwndParam_SetRawWindowPos );
 }
 
 #endif /* _NTUSER_ */

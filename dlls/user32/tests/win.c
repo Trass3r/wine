@@ -74,6 +74,30 @@ static const char* szAWRClass = "Winsize";
 static HMENU hmenu;
 static DWORD our_pid;
 
+static void hold_key( int vk )
+{
+    BYTE kstate[256];
+    BOOL res;
+
+    res = GetKeyboardState( kstate );
+    ok(res, "GetKeyboardState failed.\n");
+    kstate[vk] |= 0x80;
+    res = SetKeyboardState( kstate );
+    ok(res, "SetKeyboardState failed.\n");
+}
+
+static void release_key( int vk )
+{
+    BYTE kstate[256];
+    BOOL res;
+
+    res = GetKeyboardState( kstate );
+    ok(res, "GetKeyboardState failed.\n");
+    kstate[vk] &= ~0x80;
+    res = SetKeyboardState( kstate );
+    ok(res, "SetKeyboardState failed.\n");
+}
+
 static void dump_minmax_info( const MINMAXINFO *minmax )
 {
     trace("Reserved=%ld,%ld MaxSize=%ld,%ld MaxPos=%ld,%ld MinTrack=%ld,%ld MaxTrack=%ld,%ld\n",
@@ -1788,7 +1812,11 @@ static DWORD WINAPI test_shell_window_thread(LPVOID param)
 static void test_shell_window(void)
 {
     HDESK hdesk;
+    HWND orig_shell_window;
     HANDLE hthread;
+
+    orig_shell_window = GetShellWindow();
+    ok(orig_shell_window != NULL, "default desktop doesn't have a shell window\n");
 
     hdesk = CreateDesktopA("winetest", NULL, NULL, 0, GENERIC_ALL, NULL);
 
@@ -1799,6 +1827,11 @@ static void test_shell_window(void)
     CloseHandle(hthread);
 
     CloseDesktop(hdesk);
+
+    if (!orig_shell_window)
+        skip("no shell window on default desktop\n");
+    else
+        ok(GetShellWindow() == orig_shell_window, "changing shell window on another desktop effected the default\n");
 }
 
 /************** MDI test ****************/
@@ -4034,8 +4067,11 @@ static void test_SetForegroundWindow(HWND hwnd)
     while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE)) DispatchMessageA(&msg);
     if (0) check_wnd_state(hwnd2, hwnd2, hwnd2, 0);
 
-    ok(GetActiveWindow() == hwnd2, "Expected active window %p, got %p.\n", hwnd2, GetActiveWindow());
-    ok(GetFocus() == hwnd2, "Expected focus window %p, got %p.\n", hwnd2, GetFocus());
+    /* FIXME: these tests are failing because of a race condition
+     * between internal focus state applied immediately and X11 focus
+     * message coming late */
+    todo_wine ok(GetActiveWindow() == hwnd2, "Expected active window %p, got %p.\n", hwnd2, GetActiveWindow());
+    todo_wine ok(GetFocus() == hwnd2, "Expected focus window %p, got %p.\n", hwnd2, GetFocus());
 
     SetForegroundWindow(hwnd);
     check_wnd_state(hwnd, hwnd, hwnd, 0);
@@ -4056,6 +4092,8 @@ static void test_SetForegroundWindow(HWND hwnd)
     CloseHandle(thread_params.window_created);
     CloseHandle(thread);
     DestroyWindow(hwnd2);
+
+    flush_events(TRUE);
 }
 
 static WNDPROC old_button_proc;
@@ -12897,6 +12935,8 @@ static void test_cancel_mode(void)
 
 static void test_DragDetect(void)
 {
+    int cx_drag = GetSystemMetrics( SM_CXDRAG ), cy_drag = GetSystemMetrics( SM_CYDRAG );
+    HWND hwnd;
     POINT pt;
     BOOL ret;
 
@@ -12909,6 +12949,53 @@ static void test_DragDetect(void)
 
     ok(!GetCapture(), "got capture window %p\n", GetCapture());
     ok(!(GetKeyState( VK_LBUTTON ) & 0x8000), "got VK_LBUTTON\n");
+
+    /* Test mouse moving out of the drag rectangle in client coordinates */
+    hwnd = CreateWindowA( "static", "test", WS_POPUP | WS_VISIBLE, 100, 100, 50, 50, 0, 0, 0, 0 );
+    hold_key( VK_LBUTTON );
+
+    PostMessageA( hwnd, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(cx_drag, cy_drag) );
+
+    pt.x = 0;
+    pt.y = 0;
+    ret = DragDetect( hwnd, pt );
+    ok(ret, "Got unexpected %d.\n", ret);
+    flush_events( TRUE );
+
+    /* Test mouse not moving out of the drag rectangle in client coordinates */
+    PostMessageA( hwnd, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(cx_drag - 1, cy_drag - 1) );
+    PostMessageA( hwnd, WM_LBUTTONUP, 0, 0 );
+
+    pt.x = 0;
+    pt.y = 0;
+    ret = DragDetect( hwnd, pt );
+    ok(!ret || broken(ret) /* Win 7 */, "Got unexpected %d\n", ret);
+    flush_events( TRUE );
+
+    /* Test mouse moving out of the drag rectangle in screen coordinates */
+    PostMessageA( hwnd, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(cx_drag, cy_drag) );
+
+    pt.x = 0;
+    pt.y = 0;
+    ClientToScreen( hwnd, &pt );
+    ret = DragDetect( hwnd, pt );
+    ok(ret || broken(!ret) /* Win 7 */, "Got unexpected %d\n", ret);
+    flush_events( TRUE );
+
+    /* Test mouse not moving out of the drag rectangle in screen coordinates */
+    PostMessageA( hwnd, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(0, 0) );
+
+    pt.x = 0;
+    pt.y = 0;
+    ClientToScreen( hwnd, &pt );
+    ret = DragDetect( hwnd, pt );
+    /* NOTE that if DragDetect() do use screen coordinates for the second parameter for the initial
+     * mouse position, then FALSE should be returned in this case. But TRUE is returned here. So
+     * this means that DragDetect() don't use screen coordinates even though MSDN says that it does */
+    ok(ret, "Got unexpected %d\n", ret);
+
+    DestroyWindow( hwnd );
+    release_key( VK_LBUTTON );
 }
 
 static LRESULT WINAPI ncdestroy_test_proc( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp )

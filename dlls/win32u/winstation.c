@@ -49,6 +49,7 @@ struct shared_input_cache
 {
     const shared_object_t *object;
     UINT64 id;
+    DWORD tid;
 };
 
 struct session_thread_data
@@ -56,6 +57,8 @@ struct session_thread_data
     const shared_object_t *shared_desktop;         /* thread desktop shared session cached object */
     const shared_object_t *shared_queue;           /* thread message queue shared session cached object */
     struct shared_input_cache shared_input;        /* current thread input shared session cached object */
+    struct shared_input_cache shared_foreground;   /* foreground thread input shared session cached object */
+    struct shared_input_cache other_thread_input;  /* other thread input shared session cached object */
 };
 
 struct session_block
@@ -286,7 +289,11 @@ static NTSTATUS try_get_shared_input( UINT tid, struct object_lock *lock, const 
     }
 
     /* check object validity by comparing ids, within the object seqlock */
-    valid = cache->id == object->id;
+    if ((valid = cache->id == object->id) && !tid)
+    {
+        /* check that a previously locked foreground thread input is still foreground */
+        valid = !!object->shm.input.foreground;
+    }
 
     if (!lock->id || !shared_object_release_seqlock( object, lock->seq ))
     {
@@ -309,7 +316,11 @@ NTSTATUS get_shared_input( UINT tid, struct object_lock *lock, const input_shm_t
     TRACE( "tid %u, lock %p, input_shm %p\n", tid, lock, input_shm );
 
     if (tid == GetCurrentThreadId()) cache = &data->shared_input;
-    else return STATUS_INVALID_HANDLE;
+    else if (!tid) cache = &data->shared_foreground;
+    else cache = &data->other_thread_input;
+
+    if (tid != cache->tid) memset( cache, 0, sizeof(*cache) );
+    cache->tid = tid;
 
     do { status = try_get_shared_input( tid, lock, input_shm, cache ); }
     while (!status && !cache->id);
@@ -543,10 +554,12 @@ BOOL WINAPI NtUserSetThreadDesktop( HDESK handle )
     if (ret)  /* reset the desktop windows */
     {
         struct user_thread_info *thread_info = get_user_thread_info();
-        get_session_thread_data()->shared_desktop = find_shared_session_object( locator );
+        struct session_thread_data *data = get_session_thread_data();
+        data->shared_desktop = find_shared_session_object( locator );
+        memset( &data->shared_foreground, 0, sizeof(data->shared_foreground) );
         thread_info->client_info.top_window = 0;
         thread_info->client_info.msg_window = 0;
-        if (was_virtual_desktop != is_virtual_desktop()) update_display_cache( FALSE );
+        if (was_virtual_desktop != is_virtual_desktop()) update_display_cache( TRUE );
     }
     return ret;
 }

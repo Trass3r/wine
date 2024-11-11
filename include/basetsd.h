@@ -65,12 +65,20 @@ extern "C" {
 #  endif
 #endif /* !defined(_MSC_VER) */
 
+#ifndef __has_declspec_attribute
+# if defined(_MSC_VER)
+#  define __has_declspec_attribute(x) 1
+# else
+#  define __has_declspec_attribute(x) 0
+# endif
+#endif
+
 /* FIXME: DECLSPEC_ALIGN should be declared only in winnt.h, but we need it here too */
 #ifndef DECLSPEC_ALIGN
-# if defined(_MSC_VER) && (_MSC_VER >= 1300) && !defined(MIDL_PASS)
-#  define DECLSPEC_ALIGN(x) __declspec(align(x))
-# elif defined(__GNUC__)
+# ifdef __GNUC__
 #  define DECLSPEC_ALIGN(x) __attribute__((aligned(x)))
+# elif __has_declspec_attribute(align) && !defined(MIDL_PASS)
+#  define DECLSPEC_ALIGN(x) __declspec(align(x))
 # else
 #  define DECLSPEC_ALIGN(x)
 # endif

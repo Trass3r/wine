@@ -162,6 +162,10 @@ extern void heap_thread_detach(void);
 
 #ifdef __arm64ec__
 
+extern NTSTATUS arm64ec_process_init( HMODULE module );
+extern NTSTATUS arm64ec_thread_init(void);
+extern void invoke_arm64ec_syscall(void);
+
 extern void *__os_arm64x_check_call;
 extern void *__os_arm64x_check_icall;
 extern void *__os_arm64x_check_icall_cfg;
@@ -170,9 +174,6 @@ extern void *__os_arm64x_dispatch_fptr;
 extern void *__os_arm64x_dispatch_ret;
 extern void *__os_arm64x_get_x64_information;
 extern void *__os_arm64x_set_x64_information;
-extern void *__os_arm64x_helper0;
-extern void *__os_arm64x_helper1;
-extern void *__os_arm64x_helper2;
 extern void *__os_arm64x_helper3;
 extern void *__os_arm64x_helper4;
 extern void *__os_arm64x_helper5;

@@ -796,6 +796,10 @@ static HRESULT WINAPI transform_ProcessMessage(IMFTransform *iface, MFT_MESSAGE_
     case MFT_MESSAGE_COMMAND_FLUSH:
         return wg_transform_flush(decoder->wg_transform);
 
+    case MFT_MESSAGE_NOTIFY_START_OF_STREAM:
+        decoder->sample_time = -1;
+        return S_OK;
+
     default:
         FIXME("Ignoring message %#x.\n", message);
         return S_OK;
@@ -810,6 +814,9 @@ static HRESULT WINAPI transform_ProcessInput(IMFTransform *iface, DWORD id, IMFS
 
     if (!decoder->wg_transform)
         return MF_E_TRANSFORM_TYPE_NOT_SET;
+
+    if (decoder->sample_time == -1 && FAILED(IMFSample_GetSampleTime(sample, (LONGLONG *)&decoder->sample_time)))
+        decoder->sample_time = 0;
 
     return wg_transform_push_mf(decoder->wg_transform, sample, decoder->wg_sample_queue);
 }
@@ -1618,7 +1625,7 @@ HRESULT h264_decoder_create(REFIID riid, void **out)
             video_decoder_output_types, ARRAY_SIZE(video_decoder_output_types), NULL, &decoder)))
         return hr;
 
-    if (FAILED(hr = IMFAttributes_SetUINT32(decoder->attributes, &AVDecVideoAcceleration_H264, TRUE)))
+    if (FAILED(hr = IMFAttributes_SetUINT32(decoder->attributes, &CODECAPI_AVDecVideoAcceleration_H264, TRUE)))
     {
         IMFTransform_Release(&decoder->IMFTransform_iface);
         return hr;

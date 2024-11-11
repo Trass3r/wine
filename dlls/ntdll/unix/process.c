@@ -1617,6 +1617,68 @@ NTSTATUS WINAPI NtQueryInformationProcess( HANDLE handle, PROCESSINFOCLASS class
     return ret;
 }
 
+#ifndef _WIN64
+
+/**********************************************************************
+ *           NtWow64QueryInformationProcess64  (NTDLL.@)
+ */
+NTSTATUS WINAPI NtWow64QueryInformationProcess64( HANDLE handle, PROCESSINFOCLASS class, void *info,
+                                                  ULONG size, ULONG *ret_len )
+{
+    NTSTATUS ret;
+    ULONG len = 0;
+
+    TRACE( "(%p,0x%08x,%p,0x%08x,%p)\n", handle, class, info, (int)size, ret_len );
+
+    switch (class)
+    {
+    case ProcessBasicInformation:
+        {
+            PROCESS_BASIC_INFORMATION64 pbi;
+            const ULONG_PTR affinity_mask = get_system_affinity_mask();
+
+            if (size >= sizeof(PROCESS_BASIC_INFORMATION64))
+            {
+                if (!info) ret = STATUS_ACCESS_VIOLATION;
+                else
+                {
+                    SERVER_START_REQ(get_process_info)
+                    {
+                        req->handle = wine_server_obj_handle( handle );
+                        if ((ret = wine_server_call( req )) == STATUS_SUCCESS)
+                        {
+                            pbi.ExitStatus = reply->exit_code;
+                            pbi.PebBaseAddress = (ULONG)wine_server_get_ptr( reply->peb );
+                            pbi.AffinityMask = reply->affinity & affinity_mask;
+                            pbi.BasePriority = reply->priority;
+                            pbi.UniqueProcessId = reply->pid;
+                            pbi.InheritedFromUniqueProcessId = reply->ppid;
+                        }
+                    }
+                    SERVER_END_REQ;
+
+                    memcpy( info, &pbi, sizeof(PROCESS_BASIC_INFORMATION64) );
+                    len = sizeof(PROCESS_BASIC_INFORMATION64);
+                }
+                if (size > sizeof(PROCESS_BASIC_INFORMATION64)) ret = STATUS_INFO_LENGTH_MISMATCH;
+            }
+            else
+            {
+                len = sizeof(PROCESS_BASIC_INFORMATION64);
+                ret = STATUS_INFO_LENGTH_MISMATCH;
+            }
+        }
+        break;
+
+    default:
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (ret_len) *ret_len = len;
+    return ret;
+}
+
+#endif
 
 /**********************************************************************
  *           NtSetInformationProcess  (NTDLL.@)
@@ -1711,11 +1773,18 @@ NTSTATUS WINAPI NtSetInformationProcess( HANDLE handle, PROCESSINFOCLASS class, 
     case ProcessInstrumentationCallback:
     {
         PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION *instr = info;
+        void *callback;
 
-        FIXME( "ProcessInstrumentationCallback stub.\n" );
-
-        if (size < sizeof(*instr)) return STATUS_INFO_LENGTH_MISMATCH;
+        if (size < sizeof(callback)) return STATUS_INFO_LENGTH_MISMATCH;
+        if (size >= sizeof(PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION)) callback = instr->Callback;
+        else                                                              callback = *(void **)info;
         ret = STATUS_SUCCESS;
+        if (handle != GetCurrentProcess())
+        {
+            FIXME( "Setting ProcessInstrumentationCallback is not yet supported for other process.\n" );
+            break;
+        }
+        set_process_instrumentation_callback( callback );
         break;
     }
 
@@ -1741,6 +1810,22 @@ NTSTATUS WINAPI NtSetInformationProcess( HANDLE handle, PROCESSINFOCLASS class, 
         break;
     }
 
+    case ProcessManageWritesToExecutableMemory:
+    {
+#ifdef __aarch64__
+        const MANAGE_WRITES_TO_EXECUTABLE_MEMORY *mem = info;
+
+        if (size != sizeof(*mem)) return STATUS_INFO_LENGTH_MISMATCH;
+        if (handle != GetCurrentProcess()) return STATUS_NOT_SUPPORTED;
+        if (mem->Version != 2) return STATUS_REVISION_MISMATCH;
+        if (mem->ThreadAllowWrites) return STATUS_INVALID_PARAMETER;
+        virtual_enable_write_exceptions( mem->ProcessEnableWriteExceptions );
+        break;
+#else
+        return STATUS_NOT_SUPPORTED;
+#endif
+    }
+
     case ProcessWineMakeProcessSystem:
         if (size != sizeof(HANDLE *)) return STATUS_INFO_LENGTH_MISMATCH;
         SERVER_START_REQ( make_process_system )
@@ -1751,6 +1836,10 @@ NTSTATUS WINAPI NtSetInformationProcess( HANDLE handle, PROCESSINFOCLASS class, 
         }
         SERVER_END_REQ;
         return ret;
+
+    case ProcessPowerThrottlingState:
+        FIXME( "ProcessPowerThrottlingState - stub\n" );
+        return STATUS_SUCCESS;
 
     default:
         FIXME( "(%p,0x%08x,%p,0x%08x) stub\n", handle, class, info, (int)size );

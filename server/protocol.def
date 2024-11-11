@@ -896,6 +896,17 @@ struct directory_entry
     /* VARARG(type,unicode_str,type_len); */
 };
 
+struct monitor_info
+{
+    rectangle_t raw;     /* host / physical position of the monitor rect */
+    rectangle_t virt;    /* client / virtual position of the monitor rect */
+    unsigned int flags;  /* MONITOR_FLAG_* flags for the monitor */
+    unsigned int dpi;    /* physical DPI for the monitor */
+};
+#define MONITOR_FLAG_PRIMARY  0x01
+#define MONITOR_FLAG_CLONE    0x02
+#define MONITOR_FLAG_INACTIVE 0x04
+
 /****************************************************************/
 /* shared session mapping structures */
 
@@ -925,6 +936,7 @@ typedef volatile struct
 
 typedef volatile struct
 {
+    int                  foreground;       /* is desktop foreground thread input */
     user_handle_t        active;           /* handle to the active window */
     user_handle_t        focus;            /* handle to the focus window */
     user_handle_t        capture;          /* handle to the capture window */
@@ -932,6 +944,10 @@ typedef volatile struct
     user_handle_t        move_size;        /* handle to the moving/resizing window */
     user_handle_t        caret;            /* handle to the caret window */
     rectangle_t          caret_rect;       /* caret rectangle */
+    user_handle_t        cursor;           /* handle to the cursor */
+    int                  cursor_count;     /* cursor show count */
+    unsigned char        keystate[256];    /* key state */
+    int                  keystate_lock;    /* keystate is locked */
 } input_shm_t;
 
 typedef volatile union
@@ -1249,6 +1265,15 @@ typedef struct
 @END
 
 
+/* Allocate a reserve object for pre-allocating memory for object types */
+@REQ(allocate_reserve_object)
+    int type;                   /* reserve object type. See MEMORY_RESERVE_OBJECT_TYPE */
+    VARARG(objattr,object_attributes); /* object attributes */
+@REPLY
+    obj_handle_t handle;        /* reserve object handle */
+@END
+
+
 /* Test if two handles refer to the same object */
 @REQ(compare_objects)
     obj_handle_t first;         /* first object handle */
@@ -1497,8 +1522,6 @@ enum server_fd_type
     FD_TYPE_DIR,      /* directory */
     FD_TYPE_SOCKET,   /* socket */
     FD_TYPE_SERIAL,   /* serial port */
-    FD_TYPE_PIPE,     /* named pipe */
-    FD_TYPE_MAILSLOT, /* mailslot */
     FD_TYPE_CHAR,     /* unspecified char device */
     FD_TYPE_DEVICE,   /* Windows device file */
     FD_TYPE_NB_TYPES
@@ -1574,14 +1597,16 @@ enum server_fd_type
 
 /* Perform a send on a socket */
 @REQ(send_socket)
+    unsigned int flags;         /* SERVER_SOCKET_IO_* flags */
     async_data_t async;         /* async I/O parameters */
-    int          force_async;   /* Force asynchronous mode? */
 @REPLY
     obj_handle_t wait;          /* handle to wait on for blocking send */
     unsigned int options;       /* device open options */
     int          nonblocking;   /* is socket non-blocking? */
 @END
 
+#define SERVER_SOCKET_IO_FORCE_ASYNC 0x01
+#define SERVER_SOCKET_IO_SYSTEM      0x02
 
 /* Get socket event flags */
 @REQ(socket_get_events)
@@ -2589,6 +2614,7 @@ enum message_type
 @REQ(set_window_pos)
     unsigned short swp_flags;     /* SWP_* flags */
     unsigned short paint_flags;   /* paint flags (see below) */
+    unsigned int   monitor_dpi;   /* DPI of the window's monitor */
     user_handle_t  handle;        /* handle to the window */
     user_handle_t  previous;      /* previous window in Z order */
     rectangle_t    window;        /* window rectangle (in parent coords) */
@@ -2600,8 +2626,9 @@ enum message_type
     user_handle_t  surface_win;   /* parent window that holds the surface */
     int            needs_update;  /* whether the surface region needs an update */
 @END
-#define SET_WINPOS_PAINT_SURFACE 0x01  /* window has a paintable surface */
-#define SET_WINPOS_PIXEL_FORMAT  0x02  /* window has a custom pixel format */
+#define SET_WINPOS_PAINT_SURFACE    0x01  /* window has a paintable surface */
+#define SET_WINPOS_PIXEL_FORMAT     0x02  /* window has a custom pixel format */
+#define SET_WINPOS_LAYERED_WINDOW   0x04  /* window is drawn with UpdateLayeredWindow */
 
 /* Get the window and client rectangles of a window */
 @REQ(get_window_rectangles)
@@ -2786,6 +2813,12 @@ enum coords_relative
 @END
 
 
+/* Update the process current window station monitors */
+@REQ(set_winstation_monitors)
+    VARARG(infos,monitor_infos);  /* window station monitors */
+@END
+
+
 /* Get the process current window station */
 @REQ(get_process_winstation)
 @REPLY
@@ -2925,23 +2958,6 @@ enum coords_relative
 @END
 
 
-/* Get input data for a given thread */
-@REQ(get_thread_input_data)
-    thread_id_t    tid;           /* id of thread */
-@REPLY
-    user_handle_t  focus;         /* handle to the focus window */
-    user_handle_t  capture;       /* handle to the capture window */
-    user_handle_t  active;        /* handle to the active window */
-    user_handle_t  foreground;    /* handle to the global foreground window */
-    user_handle_t  menu_owner;    /* handle to the menu owner */
-    user_handle_t  move_size;     /* handle to the moving/resizing window */
-    user_handle_t  caret;         /* handle to the caret window */
-    user_handle_t  cursor;        /* handle to the cursor */
-    int            show_count;    /* cursor show count */
-    rectangle_t    rect;          /* caret rectangle */
-@END
-
-
 /* Get the thread input of the given thread */
 @REQ(get_thread_input)
     thread_id_t    tid;           /* id of thread */
@@ -2960,10 +2976,9 @@ enum coords_relative
 /* Retrieve queue keyboard state for current thread or global async state */
 @REQ(get_key_state)
     int            async;         /* whether to query the async state */
-    int            key;           /* optional key code or -1 */
+    int            key;           /* key code */
 @REPLY
     unsigned char  state;         /* state of specified key */
-    VARARG(keystate,bytes);       /* state array for all the keys */
 @END
 
 /* Set queue keyboard state for current thread */
@@ -3303,8 +3318,8 @@ enum caret_state
 #define OPEN_TOKEN_AS_SELF  2
 
 
-/* Set/get the global windows */
-@REQ(set_global_windows)
+/* Set/get the desktop shell windows */
+@REQ(set_desktop_shell_windows)
     unsigned int   flags;               /* flags for fields to set (see below) */
     user_handle_t  shell_window;        /* handle to the new shell window */
     user_handle_t  shell_listview;      /* handle to the new shell listview window */
@@ -3316,9 +3331,9 @@ enum caret_state
     user_handle_t  old_progman_window;  /* handle to the new program manager window */
     user_handle_t  old_taskman_window;  /* handle to the new task manager window */
 @END
-#define SET_GLOBAL_SHELL_WINDOWS   0x01  /* set both main shell and listview windows */
-#define SET_GLOBAL_PROGMAN_WINDOW  0x02
-#define SET_GLOBAL_TASKMAN_WINDOW  0x04
+#define SET_DESKTOP_SHELL_WINDOWS   0x01  /* set both main shell and listview windows */
+#define SET_DESKTOP_PROGMAN_WINDOW  0x02
+#define SET_DESKTOP_TASKMAN_WINDOW  0x04
 
 /* Adjust the privileges held by a token */
 @REQ(adjust_token_privileges)
@@ -3443,9 +3458,83 @@ struct handle_info
 @END
 
 
+typedef union
+{
+    struct
+    {
+        unsigned int family;
+        process_id_t owner;
+        unsigned int state;
+    } common;
+    struct
+    {
+        unsigned int family;
+        process_id_t owner;
+        unsigned int state;
+        unsigned int local_addr;
+        unsigned int local_port;
+        unsigned int remote_addr;
+        unsigned int remote_port;
+    } ipv4;
+    struct
+    {
+        unsigned int family;
+        process_id_t owner;
+        unsigned int state;
+        unsigned char local_addr[16];
+        unsigned int local_scope_id;
+        unsigned int local_port;
+        unsigned char remote_addr[16];
+        unsigned int remote_scope_id;
+        unsigned int remote_port;
+    } ipv6;
+} tcp_connection;
+
+/* Retrieve a list of all processes' TCP connections. */
+@REQ(get_tcp_connections)
+    unsigned int    state_filter; /* MIB_TCP_STATE_* or 0 for no filter */
+@REPLY
+    unsigned int    count;
+    VARARG(connections,tcp_connections);
+@END
+
+
+typedef union
+{
+    struct
+    {
+        unsigned int family;
+        process_id_t owner;
+    } common;
+    struct
+    {
+        unsigned int family;
+        process_id_t owner;
+        unsigned int addr;
+        unsigned int port;
+    } ipv4;
+    struct
+    {
+        unsigned int family;
+        process_id_t owner;
+        unsigned char addr[16];
+        unsigned int scope_id;
+        unsigned int port;
+    } ipv6;
+} udp_endpoint;
+
+/* Retrieve a list of all processes' UDP endpoints. */
+@REQ(get_udp_endpoints)
+@REPLY
+    unsigned int    count;
+    VARARG(endpoints,udp_endpoints);
+@END
+
+
 /* Create a mailslot */
 @REQ(create_mailslot)
     unsigned int   access;        /* wanted access rights */
+    unsigned int   options;
     timeout_t      read_timeout;
     unsigned int   max_msgsize;
     VARARG(objattr,object_attributes); /* object attributes */
@@ -3721,6 +3810,18 @@ struct handle_info
 /* get completion from completion port queue */
 @REQ(remove_completion)
     obj_handle_t handle;          /* port handle */
+    int          alertable;       /* completion wait is alertable */
+@REPLY
+    apc_param_t   ckey;           /* completion key */
+    apc_param_t   cvalue;         /* completion value */
+    apc_param_t   information;    /* IO_STATUS_BLOCK Information */
+    unsigned int  status;         /* completion result */
+    obj_handle_t  wait_handle;    /* handle to completion wait internal object */
+@END
+
+
+/* get completion after successful wait */
+@REQ(get_thread_completion)
 @REPLY
     apc_param_t   ckey;           /* completion key */
     apc_param_t   cvalue;         /* completion value */

@@ -104,17 +104,19 @@ static void     (WINAPI *pBTCpuThreadInit)(void);
 static void     (WINAPI *pBTCpuSimulate)(void) __attribute__((used));
 static void *   (WINAPI *p__wine_get_unix_opcode)(void);
 static void *   (WINAPI *pKiRaiseUserExceptionDispatcher)(void);
-void (WINAPI *pBTCpuFlushInstructionCache2)( const void *, SIZE_T ) = NULL;
-void (WINAPI *pBTCpuFlushInstructionCacheHeavy)( const void *, SIZE_T ) = NULL;
-void (WINAPI *pBTCpuNotifyMapViewOfSection)( void * ) = NULL;
-void (WINAPI *pBTCpuNotifyMemoryAlloc)( void *, SIZE_T, ULONG, ULONG, BOOL, NTSTATUS ) = NULL;
-void (WINAPI *pBTCpuNotifyMemoryDirty)( void *, SIZE_T ) = NULL;
-void (WINAPI *pBTCpuNotifyMemoryFree)( void *, SIZE_T, ULONG, BOOL, NTSTATUS ) = NULL;
-void (WINAPI *pBTCpuNotifyMemoryProtect)( void *, SIZE_T, ULONG, BOOL, NTSTATUS ) = NULL;
-void (WINAPI *pBTCpuNotifyUnmapViewOfSection)( void *, BOOL, NTSTATUS ) = NULL;
+void     (WINAPI *pBTCpuFlushInstructionCache2)( const void *, SIZE_T ) = NULL;
+void     (WINAPI *pBTCpuFlushInstructionCacheHeavy)( const void *, SIZE_T ) = NULL;
+NTSTATUS (WINAPI *pBTCpuNotifyMapViewOfSection)( void *, void *, void *, SIZE_T, ULONG, ULONG ) = NULL;
+void     (WINAPI *pBTCpuNotifyMemoryAlloc)( void *, SIZE_T, ULONG, ULONG, BOOL, NTSTATUS ) = NULL;
+void     (WINAPI *pBTCpuNotifyMemoryDirty)( void *, SIZE_T ) = NULL;
+void     (WINAPI *pBTCpuNotifyMemoryFree)( void *, SIZE_T, ULONG, BOOL, NTSTATUS ) = NULL;
+void     (WINAPI *pBTCpuNotifyMemoryProtect)( void *, SIZE_T, ULONG, BOOL, NTSTATUS ) = NULL;
+void     (WINAPI *pBTCpuNotifyReadFile)( HANDLE, void *, SIZE_T, BOOL, NTSTATUS ) = NULL;
+void     (WINAPI *pBTCpuNotifyUnmapViewOfSection)( void *, BOOL, NTSTATUS ) = NULL;
 NTSTATUS (WINAPI *pBTCpuResetToConsistentState)( EXCEPTION_POINTERS * ) = NULL;
-void (WINAPI *pBTCpuUpdateProcessorInformation)( SYSTEM_CPU_INFORMATION * ) = NULL;
-void (WINAPI *pBTCpuThreadTerm)( HANDLE ) = NULL;
+void     (WINAPI *pBTCpuUpdateProcessorInformation)( SYSTEM_CPU_INFORMATION * ) = NULL;
+void     (WINAPI *pBTCpuProcessTerm)( HANDLE, BOOL, NTSTATUS ) = NULL;
+void     (WINAPI *pBTCpuThreadTerm)( HANDLE, LONG ) = NULL;
 
 BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, void *reserved )
 {
@@ -244,6 +246,7 @@ static void __attribute__((used)) call_user_exception_dispatcher( EXCEPTION_RECO
             ctx.Esp = PtrToUlong( stack );
             ctx.Eip = pLdrSystemDllInitBlock->pKiUserExceptionDispatcher;
             ctx.EFlags &= ~(0x100|0x400|0x40000);
+            ctx.ContextFlags = CONTEXT_I386_CONTROL;
             pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
 
             TRACE( "exception %08lx dispatcher %08lx stack %08lx eip %08lx\n",
@@ -271,6 +274,7 @@ static void __attribute__((used)) call_user_exception_dispatcher( EXCEPTION_RECO
             ctx.Pc = pLdrSystemDllInitBlock->pKiUserExceptionDispatcher;
             if (ctx.Pc & 1) ctx.Cpsr |= 0x20;
             else ctx.Cpsr &= ~0x20;
+            ctx.ContextFlags = CONTEXT_ARM_FULL;
             pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
 
             TRACE( "exception %08lx dispatcher %08lx stack %08lx pc %08lx\n",
@@ -286,16 +290,15 @@ static void __attribute__((used)) call_user_exception_dispatcher( EXCEPTION_RECO
  */
 static void __attribute__((used)) call_raise_user_exception_dispatcher( ULONG code )
 {
-    TEB32 *teb32 = (TEB32 *)((char *)NtCurrentTeb() + NtCurrentTeb()->WowTebOffset);
-
-    teb32->ExceptionCode = code;
+    NtCurrentTeb32()->ExceptionCode = code;
 
     switch (current_machine)
     {
     case IMAGE_FILE_MACHINE_I386:
         {
-            I386_CONTEXT ctx = { CONTEXT_I386_ALL };
+            I386_CONTEXT ctx;
 
+            ctx.ContextFlags = CONTEXT_I386_CONTROL;
             pBTCpuGetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
             ctx.Esp -= sizeof(ULONG);
             *(ULONG *)ULongToPtr( ctx.Esp ) = ctx.Eip;
@@ -306,8 +309,9 @@ static void __attribute__((used)) call_raise_user_exception_dispatcher( ULONG co
 
     case IMAGE_FILE_MACHINE_ARMNT:
         {
-            ARM_CONTEXT ctx = { CONTEXT_ARM_ALL };
+            ARM_CONTEXT ctx;
 
+            ctx.ContextFlags = CONTEXT_ARM_CONTROL;
             pBTCpuGetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
             ctx.Pc = (ULONG_PTR)pKiRaiseUserExceptionDispatcher;
             pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
@@ -420,6 +424,23 @@ NTSTATUS WINAPI wow64_NtAllocateLocallyUniqueId( UINT *args )
     return NtAllocateLocallyUniqueId( luid );
 }
 
+/**********************************************************************
+ *           wow64_NtAllocateReserveObject
+ */
+NTSTATUS WINAPI wow64_NtAllocateReserveObject( UINT *args )
+{
+    ULONG *handle_ptr = get_ptr( &args );
+    OBJECT_ATTRIBUTES32 *attr32 = get_ptr( &args );
+    MEMORY_RESERVE_OBJECT_TYPE type = get_ulong( &args );
+    NTSTATUS status;
+
+    struct object_attr64 attr;
+    HANDLE handle = 0;
+
+    status = NtAllocateReserveObject( &handle, objattr_32to64( &attr, attr32 ), type );
+    put_handle( handle_ptr, handle );
+    return status;
+}
 
 /**********************************************************************
  *           wow64_NtAllocateUuids
@@ -812,8 +833,10 @@ static DWORD WINAPI process_init( RTL_RUN_ONCE *once, void *param, void **contex
     GET_PTR( BTCpuNotifyMemoryDirty );
     GET_PTR( BTCpuNotifyMemoryFree );
     GET_PTR( BTCpuNotifyMemoryProtect );
+    GET_PTR( BTCpuNotifyReadFile );
     GET_PTR( BTCpuNotifyUnmapViewOfSection );
     GET_PTR( BTCpuUpdateProcessorInformation );
+    GET_PTR( BTCpuProcessTerm );
     GET_PTR( BTCpuThreadTerm );
     GET_PTR( __wine_get_unix_opcode );
 
@@ -846,11 +869,7 @@ static DWORD WINAPI process_init( RTL_RUN_ONCE *once, void *param, void **contex
  */
 static void thread_init(void)
 {
-    TEB32 *teb32 = (TEB32 *)((char *)NtCurrentTeb() + NtCurrentTeb()->WowTebOffset);
-    void *cpu_area_ctx;
-
-    teb32->WOW32Reserved = PtrToUlong( pBTCpuGetBopCode() );
-    RtlWow64GetCurrentCpuArea( NULL, &cpu_area_ctx, NULL );
+    NtCurrentTeb32()->WOW32Reserved = PtrToUlong( pBTCpuGetBopCode() );
     NtCurrentTeb()->TlsSlots[WOW64_TLS_WOW64INFO] = wow64info;
     if (pBTCpuThreadInit) pBTCpuThreadInit();
 
@@ -859,35 +878,36 @@ static void thread_init(void)
     {
     case IMAGE_FILE_MACHINE_I386:
         {
-            I386_CONTEXT *ctx_ptr, *ctx = cpu_area_ctx;
+            I386_CONTEXT *ctx_ptr, ctx = { CONTEXT_I386_FULL };
             ULONG *stack;
 
-            ctx_ptr = (I386_CONTEXT *)ULongToPtr( ctx->Esp ) - 1;
-            *ctx_ptr = *ctx;
-
+            pBTCpuGetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
+            ctx_ptr = (I386_CONTEXT *)ULongToPtr( ctx.Esp ) - 1;
+            *ctx_ptr = ctx;
             stack = (ULONG *)ctx_ptr;
             *(--stack) = 0;
             *(--stack) = 0;
             *(--stack) = 0;
             *(--stack) = PtrToUlong( ctx_ptr );
             *(--stack) = 0xdeadbabe;
-            ctx->Esp = PtrToUlong( stack );
-            ctx->Eip = pLdrSystemDllInitBlock->pLdrInitializeThunk;
-            pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, ctx );
+            ctx.Esp = PtrToUlong( stack );
+            ctx.Eip = pLdrSystemDllInitBlock->pLdrInitializeThunk;
+            pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
         }
         break;
 
     case IMAGE_FILE_MACHINE_ARMNT:
         {
-            ARM_CONTEXT *ctx_ptr, *ctx = cpu_area_ctx;
+            ARM_CONTEXT *ctx_ptr, ctx = { CONTEXT_ARM_FULL };
 
-            ctx_ptr = (ARM_CONTEXT *)ULongToPtr( ctx->Sp & ~15 ) - 1;
-            *ctx_ptr = *ctx;
+            pBTCpuGetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
+            ctx_ptr = (ARM_CONTEXT *)ULongToPtr( ctx.Sp & ~15 ) - 1;
+            *ctx_ptr = ctx;
 
-            ctx->R0 = PtrToUlong( ctx_ptr );
-            ctx->Sp = PtrToUlong( ctx_ptr );
-            ctx->Pc = pLdrSystemDllInitBlock->pLdrInitializeThunk;
-            pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, ctx );
+            ctx.R0 = PtrToUlong( ctx_ptr );
+            ctx.Sp = PtrToUlong( ctx_ptr );
+            ctx.Pc = pLdrSystemDllInitBlock->pLdrInitializeThunk;
+            pBTCpuSetContext( GetCurrentThread(), GetCurrentProcess(), NULL, &ctx );
         }
         break;
 
@@ -1172,7 +1192,7 @@ NTSTATUS WINAPI Wow64KiUserCallbackDispatcher( ULONG id, void *args, ULONG len,
                                                void **ret_ptr, ULONG *ret_len )
 {
     WOW64_CPURESERVED *cpu = NtCurrentTeb()->TlsSlots[WOW64_TLS_CPURESERVED];
-    TEB32 *teb32 = (TEB32 *)((char *)NtCurrentTeb() + NtCurrentTeb()->WowTebOffset);
+    TEB32 *teb32 = NtCurrentTeb32();
     ULONG teb_frame = teb32->Tib.ExceptionList;
     struct user_callback_frame frame;
     USHORT flags = cpu->Flags;

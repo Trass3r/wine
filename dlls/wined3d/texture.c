@@ -1770,6 +1770,17 @@ HRESULT CDECL wined3d_texture_set_color_key(struct wined3d_texture *texture,
         return WINED3DERR_INVALIDCALL;
     }
 
+    if (color_key)
+    {
+        if (flags & WINED3D_CKEY_SRC_BLT)
+            texture->src_blt_color_key = *color_key;
+        texture->color_key_flags |= flags;
+    }
+    else
+    {
+        texture->color_key_flags &= ~flags;
+    }
+
     wined3d_cs_emit_set_color_key(device->cs, texture, flags, color_key);
 
     return WINED3D_OK;

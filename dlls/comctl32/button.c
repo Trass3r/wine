@@ -57,6 +57,7 @@
 #include "wine/debug.h"
 
 #include "comctl32.h"
+#include "uiautomationclient.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(button);
 
@@ -884,6 +885,11 @@ static LRESULT CALLBACK BUTTON_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
         InvalidateRect( hWnd, NULL, FALSE );
         break;
 
+    case WM_GETOBJECT:
+        if ((LONG)lParam == OBJID_QUERYCLASSNAMEIDX)
+            return 0x10002;
+        break;
+
     case BM_SETSTYLE:
     {
         DWORD new_btn_type;
@@ -894,6 +900,8 @@ static LRESULT CALLBACK BUTTON_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
         style = (style & ~BS_TYPEMASK) | new_btn_type;
         SetWindowLongW( hWnd, GWL_STYLE, style );
+
+        NotifyWinEvent( EVENT_OBJECT_STATECHANGE, hWnd, OBJID_CLIENT, 0 );
 
         /* Only redraw if lParam flag is set.*/
         if (lParam)
@@ -995,6 +1003,8 @@ static LRESULT CALLBACK BUTTON_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
         {
             infoPtr->state = (infoPtr->state & ~3) | wParam;
             InvalidateRect( hWnd, NULL, FALSE );
+            NotifyWinEvent( UIA_ToggleToggleStatePropertyId, hWnd, OBJID_CLIENT, 0 );
+            NotifyWinEvent( EVENT_OBJECT_STATECHANGE, hWnd, OBJID_CLIENT, 0 );
         }
         if ((btn_type == BS_AUTORADIOBUTTON) && (wParam == BST_CHECKED) && (style & WS_CHILD))
             BUTTON_CheckAutoRadioButton( hWnd );
@@ -1018,6 +1028,8 @@ static LRESULT CALLBACK BUTTON_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 BUTTON_NOTIFY_PARENT( hWnd, (state & BST_PUSHED) ? BN_HILITE : BN_UNHILITE );
             infoPtr->state = state;
 
+            NotifyWinEvent( EVENT_OBJECT_STATECHANGE, hWnd, OBJID_CLIENT, 0 );
+
             InvalidateRect( hWnd, NULL, FALSE );
         }
         break;
@@ -1029,6 +1041,13 @@ static LRESULT CALLBACK BUTTON_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
         {
             infoPtr->state &= ~BST_DROPDOWNPUSHED;
             infoPtr->state |= new_state;
+            NotifyWinEvent( EVENT_OBJECT_STATECHANGE, hWnd, OBJID_CLIENT, 0 );
+            NotifyWinEvent( UIA_ExpandCollapseExpandCollapseStatePropertyId, hWnd, OBJID_CLIENT, 0 );
+
+            /* Windows sends this twice for some reason */
+            NotifyWinEvent( EVENT_OBJECT_STATECHANGE, hWnd, OBJID_CLIENT, 0 );
+            NotifyWinEvent( UIA_ExpandCollapseExpandCollapseStatePropertyId, hWnd, OBJID_CLIENT, 0 );
+
             InvalidateRect(hWnd, NULL, FALSE);
         }
         break;

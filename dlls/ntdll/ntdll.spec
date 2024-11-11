@@ -71,6 +71,7 @@
 @ stdcall -norelay KiUserApcDispatcher(ptr long long long ptr)
 @ stdcall -norelay KiUserCallbackDispatcher(long ptr long)
 @ stdcall -norelay -arch=arm,arm64,arm64ec KiUserCallbackDispatcherReturn()
+@ stdcall -norelay -arch=arm64ec KiUserEmulationDispatcher(ptr)
 @ stdcall -norelay KiUserExceptionDispatcher(ptr ptr)
 # @ stub LdrAccessOutOfProcessResource
 @ stdcall LdrAccessResource(long ptr ptr ptr)
@@ -144,6 +145,7 @@
 @ stdcall -syscall NtAlertThread(long)
 @ stdcall -syscall NtAlertThreadByThreadId(ptr)
 @ stdcall -syscall NtAllocateLocallyUniqueId(ptr)
+@ stdcall -syscall NtAllocateReserveObject(ptr long long)
 # @ stub NtAllocateUserPhysicalPages
 @ stdcall -syscall NtAllocateUuids(ptr ptr ptr ptr)
 @ stdcall -syscall NtAllocateVirtualMemory(long ptr long ptr long long)
@@ -449,6 +451,7 @@
 @ stdcall -syscall -arch=win32 NtWow64AllocateVirtualMemory64(long ptr int64 ptr long long)
 @ stdcall -syscall -arch=win32 NtWow64GetNativeSystemInformation(long ptr long ptr)
 @ stdcall -syscall -arch=win32 NtWow64IsProcessorFeaturePresent(long)
+@ stdcall -syscall -arch=win32 NtWow64QueryInformationProcess64(long long ptr long ptr)
 @ stdcall -syscall -arch=win32 NtWow64ReadVirtualMemory64(long int64 ptr int64 ptr)
 @ stdcall -syscall -arch=win32 NtWow64WriteVirtualMemory64(long int64 ptr int64 ptr)
 @ stdcall -syscall NtWriteFile(long long ptr ptr ptr ptr long ptr ptr)
@@ -460,6 +463,7 @@
 @ stub PfxInitialize
 @ stub PfxInsertPrefix
 @ stub PfxRemovePrefix
+@ stdcall -arch=arm64ec ProcessPendingCrossProcessEmulatorWork()
 # @ stub PropertyLengthAsVariant
 @ stub RtlAbortRXact
 @ stdcall RtlAbsoluteToSelfRelativeSD(ptr ptr ptr)
@@ -540,6 +544,7 @@
 # @ stub RtlComputeImportTableHash
 # @ stub RtlComputePrivatizedDllName_U
 @ stub RtlConsoleMultiByteToUnicodeN
+@ stdcall RtlConvertDeviceFamilyInfoToString(ptr ptr ptr ptr)
 @ stub RtlConvertExclusiveToShared
 @ stdcall -arch=win32 -ret64 RtlConvertLongToLargeInteger(long)
 # @ stub RtlConvertPropertyToVariant
@@ -949,6 +954,8 @@
 @ stdcall RtlRaiseStatus(long)
 @ stdcall RtlRandom(ptr)
 @ stdcall RtlRandomEx(ptr)
+@ stdcall RtlRbInsertNodeEx(ptr ptr long ptr)
+@ stdcall RtlRbRemoveNode(ptr ptr)
 @ stdcall RtlReAllocateHeap(long long ptr long)
 @ stub RtlReadMemoryStream
 @ stub RtlReadOutOfProcessMemoryStream

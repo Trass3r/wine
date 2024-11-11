@@ -107,7 +107,7 @@ static void test_iobuf_layout(void)
     fp.f = fopen(tempf, "wb");
     ok(fp.f != NULL, "fopen failed with error: %d\n", errno);
 
-    ok(!(fp.iobuf->_flag & 0x40), "fp.iobuf->_flag = %x\n", fp.iobuf->_flag);
+    ok(!(fp.iobuf->_flag & 0x440), "fp.iobuf->_flag = %x\n", fp.iobuf->_flag);
     r = fprintf(fp.f, "%s", "init");
     ok(r == 4, "fprintf returned %d\n", r);
     ok(fp.iobuf->_flag & 0x40, "fp.iobuf->_flag = %x\n", fp.iobuf->_flag);
@@ -129,6 +129,10 @@ static void test_iobuf_layout(void)
     ok(file_ptr == &fp.iobuf->_ptr, "_ptr = %p, expected %p\n", file_ptr, &fp.iobuf->_ptr);
     ok(file_cnt == &fp.iobuf->_cnt, "_cnt = %p, expected %p\n", file_cnt, &fp.iobuf->_cnt);
 
+    r = setvbuf(fp.f, NULL, _IONBF, 0);
+    ok(!r, "setvbuf returned %d\n", r);
+    ok(fp.iobuf->_flag & 0x400, "fp.iobuf->_flag = %x\n", fp.iobuf->_flag);
+
     ok(TryEnterCriticalSection(&fp.iobuf->_crit), "TryEnterCriticalSection section returned FALSE\n");
     LeaveCriticalSection(&fp.iobuf->_crit);
 
@@ -136,8 +140,31 @@ static void test_iobuf_layout(void)
     unlink(tempf);
 }
 
+static void test_std_stream_open(void)
+{
+    FILE *f;
+    int fd;
+
+    fd = _dup(STDIN_FILENO);
+    ok(fd != -1, "_dup failed\n");
+
+    ok(!fclose(stdin), "fclose failed\n");
+    f = fopen("nul", "r");
+    ok(f != stdin, "f = %p, stdin =  %p\n", f, stdin);
+    ok(_fileno(f) == STDIN_FILENO, "_fileno(f) = %d\n", _fileno(f));
+    ok(!fclose(f), "fclose failed\n");
+
+    f = freopen("nul", "r", stdin);
+    ok(f == stdin, "f = %p, expected %p\n", f, stdin);
+    ok(_fileno(f) == STDIN_FILENO, "_fileno(f) = %d\n", _fileno(f));
+
+    _dup2(fd, STDIN_FILENO);
+    close(fd);
+}
+
 START_TEST(file)
 {
     test_std_stream_buffering();
     test_iobuf_layout();
+    test_std_stream_open();
 }

@@ -26,6 +26,7 @@
 #include "winbase.h"
 #include "ntuser.h"
 #include "shellapi.h"
+#include "shlobj.h"
 #include "wow64win_private.h"
 #include "wine/debug.h"
 
@@ -1445,87 +1446,71 @@ static NTSTATUS WINAPI wow64_NtUserUnpackDDEMessage( void *arg, ULONG size )
     return status;
 }
 
-static NTSTATUS WINAPI wow64_NtUserCallFreeIcon( void *arg, ULONG size )
+static NTSTATUS WINAPI wow64_NtUserCallDispatchCallback( void *arg, ULONG size )
 {
-    return dispatch_callback( NtUserCallFreeIcon, arg, size );
+    return dispatch_callback( NtUserCallDispatchCallback, arg, size );
 }
 
-static NTSTATUS WINAPI wow64_NtUserThunkLock( void *arg, ULONG size )
+static NTSTATUS WINAPI wow64_NtUserDragDropEnter( void *arg, ULONG size )
 {
-    return dispatch_callback( NtUserThunkLock, arg, size );
+    return dispatch_callback( NtUserDragDropEnter, arg, size );
 }
 
-static NTSTATUS WINAPI wow64_NtUserCallVulkanDebugReportCallback( void *arg, ULONG size )
+static NTSTATUS WINAPI wow64_NtUserDragDropLeave( void *arg, ULONG size )
 {
-    FIXME( "\n" );
-    return 0;
+    return dispatch_callback( NtUserDragDropLeave, arg, size );
 }
 
-static NTSTATUS WINAPI wow64_NtUserCallVulkanDebugUtilsCallback( void *arg, ULONG size )
+static NTSTATUS WINAPI wow64_NtUserDragDropDrag( void *arg, ULONG size )
 {
-    FIXME( "\n" );
-    return 0;
+    const struct drag_drop_drag_params *params = arg;
+    struct
+    {
+        ULONG hwnd;
+        POINT point;
+        UINT effect;
+    } params32;
+    params32.hwnd = HandleToUlong( params->hwnd );
+    params32.point = params->point;
+    params32.effect = params->effect;
+    return dispatch_callback( NtUserDragDropDrag, &params32, sizeof(params32) );
 }
 
-static NTSTATUS WINAPI wow64_NtUserCallOpenGLDebugMessageCallback( void *arg, ULONG size )
+static NTSTATUS WINAPI wow64_NtUserDragDropDrop( void *arg, ULONG size )
 {
-    FIXME( "\n" );
-    return 0;
+    const struct drag_drop_drop_params *params = arg;
+    struct
+    {
+        ULONG hwnd;
+    } params32;
+    params32.hwnd = HandleToUlong( params->hwnd );
+    return dispatch_callback( NtUserDragDropDrop, &params32, sizeof(params32) );
 }
 
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst0( void *arg, ULONG size )
+static NTSTATUS WINAPI wow64_NtUserDragDropPost( void *arg, ULONG size )
 {
-    return dispatch_callback( NtUserDriverCallbackFirst + 0, arg, size );
+    struct drag_drop_post_params32
+    {
+        ULONG hwnd;
+        UINT drop_size;
+        struct drop_files drop;
+        BYTE files[];
+    };
+    const struct drag_drop_post_params *params = arg;
+    struct drag_drop_post_params32 *params32;
+
+    size = offsetof(struct drag_drop_post_params32, drop) + params->drop_size;
+    if (!(params32 = Wow64AllocateTemp( size ))) return STATUS_NO_MEMORY;
+    params32->hwnd = HandleToUlong( params->hwnd );
+    params32->drop_size = params->drop_size;
+    memcpy( &params32->drop, &params->drop, params->drop_size );
+    return dispatch_callback( NtUserDragDropPost, params32, size );
 }
 
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst1( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 1, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst2( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 2, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst3( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 3, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst4( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 4, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst5( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 5, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst6( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 6, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst7( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 7, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst8( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 8, arg, size );
-}
-
-static NTSTATUS WINAPI wow64_NtUserDriverCallbackFirst9( void *arg, ULONG size )
-{
-    return dispatch_callback( NtUserDriverCallbackFirst + 9, arg, size );
-}
-
-user_callback user_callbacks[] =
+ntuser_callback user_callbacks[] =
 {
     /* user32 callbacks */
+    wow64_NtUserCallDispatchCallback,
     wow64_NtUserCallEnumDisplayMonitor,
     wow64_NtUserCallSendAsyncCallback,
     wow64_NtUserCallWinEventHook,
@@ -1545,25 +1530,11 @@ user_callback user_callbacks[] =
     wow64_NtUserPostDDEMessage,
     wow64_NtUserRenderSynthesizedFormat,
     wow64_NtUserUnpackDDEMessage,
-    /* win16 hooks */
-    wow64_NtUserCallFreeIcon,
-    wow64_NtUserThunkLock,
-    /* Vulkan support */
-    wow64_NtUserCallVulkanDebugReportCallback,
-    wow64_NtUserCallVulkanDebugUtilsCallback,
-    /* OpenGL support */
-    wow64_NtUserCallOpenGLDebugMessageCallback,
-    /* Driver-specific callbacks */
-    wow64_NtUserDriverCallbackFirst0,
-    wow64_NtUserDriverCallbackFirst1,
-    wow64_NtUserDriverCallbackFirst2,
-    wow64_NtUserDriverCallbackFirst3,
-    wow64_NtUserDriverCallbackFirst4,
-    wow64_NtUserDriverCallbackFirst5,
-    wow64_NtUserDriverCallbackFirst6,
-    wow64_NtUserDriverCallbackFirst7,
-    wow64_NtUserDriverCallbackFirst8,
-    wow64_NtUserDriverCallbackFirst9,
+    wow64_NtUserDragDropEnter,
+    wow64_NtUserDragDropLeave,
+    wow64_NtUserDragDropDrag,
+    wow64_NtUserDragDropDrop,
+    wow64_NtUserDragDropPost,
 };
 
 C_ASSERT( ARRAYSIZE(user_callbacks) == NtUserCallCount );
@@ -2149,6 +2120,11 @@ NTSTATUS WINAPI wow64_NtUserEnableMouseInPointer( UINT *args )
     UINT enable = get_ulong( &args );
 
     return NtUserEnableMouseInPointer( enable );
+}
+
+NTSTATUS WINAPI wow64_NtUserEnableMouseInPointerForThread( UINT *args )
+{
+    return NtUserEnableMouseInPointerForThread();
 }
 
 NTSTATUS WINAPI wow64_NtUserEnableScrollBar( UINT *args )
@@ -3710,6 +3686,19 @@ NTSTATUS WINAPI wow64_NtUserMessageCall( UINT *args )
         default:
             return NtUserMessageCall( hwnd, msg, wparam, lparam, result_info, type, ansi );
         }
+
+    case NtUserDragDropCall:
+        if (msg == WINE_DRAG_DROP_ENTER)
+        {
+            ULONG *data32 = result_info;
+            NTSTATUS status;
+            void *data;
+
+            status = NtUserMessageCall( hwnd, msg, wparam, lparam, &data, type, ansi );
+            if (!status) *data32 = HandleToUlong( data );
+            return status;
+        }
+        return NtUserMessageCall( hwnd, msg, wparam, lparam, result_info, type, ansi );
     }
 
     return message_call_32to64( hwnd, msg, wparam, lparam, result_info, type, ansi );
@@ -3929,6 +3918,13 @@ NTSTATUS WINAPI wow64_NtUserRegisterRawInputDevices( UINT *args )
     }
 
     return NtUserRegisterRawInputDevices( devices64, count, sizeof(*devices64) );
+}
+
+NTSTATUS WINAPI wow64_NtUserRegisterTouchPadCapable( UINT *args )
+{
+    UINT capable = get_ulong( &args );
+
+    return NtUserRegisterTouchPadCapable( capable );
 }
 
 NTSTATUS WINAPI wow64_NtUserReleaseDC( UINT *args )

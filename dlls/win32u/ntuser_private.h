@@ -24,6 +24,7 @@
 
 #include "ntuser.h"
 #include "shellapi.h"
+#include "shlobj.h"
 #include "wine/list.h"
 #include "wine/vulkan.h"
 
@@ -54,9 +55,7 @@ typedef struct tagWND
     WNDPROC            winproc;       /* Window procedure */
     UINT               tid;           /* Owner thread id */
     HINSTANCE          hInstance;     /* Window hInstance (from CreateWindow) */
-    RECT               client_rect;   /* Client area rel. to parent client area */
-    RECT               window_rect;   /* Whole window rel. to parent client area */
-    RECT               visible_rect;  /* Visible part of the whole rect, rel. to parent client area */
+    struct window_rects rects;        /* window rects in window DPI, relative to the parent client area */
     RECT               normal_rect;   /* Normal window rect saved when maximized/minimized */
     POINT              min_pos;       /* Position for minimized window */
     POINT              max_pos;       /* Position for maximized window */
@@ -108,7 +107,8 @@ struct user_thread_info
 {
     struct ntuser_thread_info     client_info;            /* Data shared with client */
     HANDLE                        server_queue;           /* Handle to server-side queue */
-    WORD                          message_count;          /* Get/PeekMessage loop counter */
+    DWORD                         last_getmsg_time;       /* Get/PeekMessage last request time */
+    DWORD                         last_driver_time;       /* Get/PeekMessage driver event time */
     WORD                          hook_call_depth;        /* Number of recursively called hook procs */
     WORD                          hook_unicode;           /* Is current hook unicode? */
     HHOOK                         hook;                   /* Current hook */
@@ -217,12 +217,15 @@ extern void register_desktop_class(void);
 extern LRESULT ime_driver_call( HWND hwnd, enum wine_ime_call call, WPARAM wparam, LPARAM lparam,
                                 struct ime_driver_call_params *params );
 
+/* clipboard.c */
+extern LRESULT drag_drop_call( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, void *data );
+
 /* cursoricon.c */
 HICON alloc_cursoricon_handle( BOOL is_icon );
 
 /* dce.c */
 extern void free_dce( struct dce *dce, HWND hwnd );
-extern void invalidate_dce( WND *win, const RECT *extra_rect );
+extern void invalidate_dce( WND *win, const RECT *old_rect );
 
 /* message.c */
 struct peek_message_filter

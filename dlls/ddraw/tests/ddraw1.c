@@ -3247,6 +3247,13 @@ static void test_coop_level_mode_set(void)
     /* For Wine. */
     change_ret = ChangeDisplaySettingsW(NULL, CDS_FULLSCREEN);
     ok(change_ret == DISP_CHANGE_SUCCESSFUL, "Failed to change display mode, ret %#lx.\n", change_ret);
+    flush_events();
+
+    if (IsIconic(window)) /* make sure the window is restored, working around some Wine/X11 race condition */
+    {
+        ShowWindow(window, SW_RESTORE);
+        flush_events();
+    }
 
     memset(&ddsd, 0, sizeof(ddsd));
     ddsd.dwSize = sizeof(ddsd);
@@ -15580,16 +15587,16 @@ static void test_multiple_devices(void)
         0.0f, 0.0f, 0.0f, 4.0f,
     };
 
-    D3DTEXTUREHANDLE texture_handle, texture_handle2;
+    D3DTEXTUREHANDLE texture_handle, texture_handle2, texture_handle3;
+    IDirectDrawSurface *texture_surf, *texture_surf2;
     D3DMATERIALHANDLE mat_handle, mat_handle2;
     IDirect3DViewport *viewport, *viewport2;
+    IDirect3DTexture *texture, *texture2;
     IDirect3DDevice *device, *device2;
-    IDirectDrawSurface *texture_surf;
     D3DMATRIXHANDLE matrix_handle;
     IDirectDraw *ddraw, *ddraw2;
     IDirect3DMaterial *material;
     DDSURFACEDESC surface_desc;
-    IDirect3DTexture *texture;
     D3DMATRIX matrix;
     ULONG refcount;
     HWND window;
@@ -15639,13 +15646,34 @@ static void test_multiple_devices(void)
     surface_desc.dwHeight = 256;
     hr = IDirectDraw_CreateSurface(ddraw, &surface_desc, &texture_surf, NULL);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
-    hr = IDirectDrawSurface_QueryInterface(texture_surf, &IID_IDirect3DTexture2, (void **)&texture);
+    hr = IDirectDrawSurface_QueryInterface(texture_surf, &IID_IDirect3DTexture, (void **)&texture);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirectDraw_CreateSurface(ddraw, &surface_desc, &texture_surf2, NULL);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirectDrawSurface_QueryInterface(texture_surf2, &IID_IDirect3DTexture, (void **)&texture2);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+
+    hr = IDirect3DDevice_SwapTextureHandles(device, texture, texture2);
+    ok(hr == E_INVALIDARG, "got %#lx.\n", hr);
     hr = IDirect3DTexture_GetHandle(texture, device, &texture_handle);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirect3DDevice_SwapTextureHandles(device, texture, texture2);
+    ok(hr == E_INVALIDARG, "got %#lx.\n", hr);
     hr = IDirect3DTexture_GetHandle(texture, device2, &texture_handle2);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
-    ok(texture_handle != texture_handle2, "got same handles.\n");
+    ok(texture_handle == texture_handle2, "got same handles.\n");
+    hr = IDirect3DDevice_SwapTextureHandles(device, texture, texture2);
+    ok(hr == E_INVALIDARG, "got %#lx.\n", hr);
+    hr = IDirect3DTexture_GetHandle(texture2, device, &texture_handle2);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirect3DDevice_SwapTextureHandles(device, texture, texture2);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    hr = IDirect3DTexture_GetHandle(texture, device, &texture_handle3);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    ok(texture_handle3 == texture_handle2, "got different handles.\n");
+    hr = IDirect3DTexture_GetHandle(texture2, device2, &texture_handle3);
+    ok(hr == D3D_OK, "got %#lx.\n", hr);
+    ok(texture_handle3 == texture_handle, "got different handles.\n");
 
     hr = IDirect3DDevice_CreateMatrix(device, &matrix_handle);
     ok(hr == D3D_OK, "got %#lx.\n", hr);
@@ -15657,6 +15685,8 @@ static void test_multiple_devices(void)
     ok(hr == D3D_OK, "got %#lx.\n", hr);
     ok(!memcmp(&matrix, &test_matrix, sizeof(matrix)), "matrix does not match.\n");
 
+    IDirect3DTexture_Release(texture2);
+    IDirectDrawSurface_Release(texture_surf2);
     IDirect3DTexture_Release(texture);
     IDirectDrawSurface_Release(texture_surf);
     IDirect3DMaterial_Release(material);
