@@ -17,7 +17,7 @@ jobs:
         sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
         sudo apt-get build-dep wine -y
-        sudo apt install -y sudo git time wget build-essential clang mingw-w64 ccache
+        sudo apt install -y sudo git time wget build-essential clang mingw-w64 ccache rdfind
     - uses: Trass3r/setup-cpp@master
     - uses: hendrikmuhs/ccache-action@v1
       with:
@@ -36,6 +36,7 @@ jobs:
         time make -j$(($(nproc) + 1)) -k
         make -k install DESTDIR=../install
         cd ../install/usr/local
+        rdfind -makesymlinks true -makeresultsfile false . || true
         tar cvapf "$GITHUB_WORKSPACE/wine.tar.xz" *
     - uses: actions/upload-artifact@v4
       with:
