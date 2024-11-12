@@ -34,7 +34,7 @@ jobs:
             CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2" \
             --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
         time make -j$(($(nproc) + 1)) -k
-        make install DESTDIR=../install
+        make -k install DESTDIR=../install
         cd ../install/usr/local
         tar cvapf "$GITHUB_WORKSPACE/wine.tar.xz" *
     - uses: actions/upload-artifact@v4
