@@ -220,7 +220,7 @@ static const struct object_ops thread_input_ops =
 /* pointer to input structure of foreground thread */
 static unsigned int last_input_time;
 
-static cursor_pos_t cursor_history[64];
+static struct cursor_pos cursor_history[64];
 static unsigned int cursor_history_latest;
 
 static void queue_hardware_message( struct desktop *desktop, struct message *msg, int always_queue );
@@ -471,7 +471,7 @@ static struct message *alloc_hardware_message( lparam_t info, struct hw_msg_sour
 static int is_cursor_clipped( struct desktop *desktop )
 {
     const desktop_shm_t *desktop_shm = desktop->shared;
-    rectangle_t top_rect, clip_rect = desktop_shm->cursor.clip;
+    struct rectangle top_rect, clip_rect = desktop_shm->cursor.clip;
     get_virtual_screen_rect( desktop, &top_rect, 1 );
     return !is_rect_equal( &clip_rect, &top_rect );
 }
@@ -605,10 +605,10 @@ static void get_message_defaults( struct msg_queue *queue, int *x, int *y, unsig
 }
 
 /* set the cursor clip rectangle */
-void set_clip_rectangle( struct desktop *desktop, const rectangle_t *rect, unsigned int flags, int reset )
+void set_clip_rectangle( struct desktop *desktop, const struct rectangle *rect, unsigned int flags, int reset )
 {
     const desktop_shm_t *desktop_shm = desktop->shared;
-    rectangle_t top_rect, new_rect;
+    struct rectangle top_rect, new_rect;
     unsigned int old_flags;
     int x, y;
 
@@ -799,8 +799,8 @@ static inline unsigned int get_unique_id(void)
     return id;
 }
 
-/* try to merge a WM_MOUSEMOVE message with the last in the list; return 1 if successful */
-static int merge_mousemove( struct thread_input *input, const struct message *msg )
+/* lookup an already queued mouse message that matches the message, window and type */
+static struct message *find_mouse_message( struct thread_input *input, const struct message *msg )
 {
     struct message *prev;
     struct list *ptr;
@@ -808,14 +808,48 @@ static int merge_mousemove( struct thread_input *input, const struct message *ms
     for (ptr = list_tail( &input->msg_list ); ptr; ptr = list_prev( &input->msg_list, ptr ))
     {
         prev = LIST_ENTRY( ptr, struct message, entry );
+        if (prev->msg >> 31) continue; /* ignore internal messages */
         if (prev->msg != WM_INPUT) break;
     }
-    if (!ptr) return 0;
-    if (prev->result) return 0;
-    if (prev->win && msg->win && prev->win != msg->win) return 0;
-    if (prev->msg != msg->msg) return 0;
-    if (prev->type != msg->type) return 0;
-    /* now we can merge it */
+    if (!ptr) return NULL;
+    if (prev->result) return NULL;
+    if (prev->win && msg->win && prev->win != msg->win) return NULL;
+    if (prev->msg != msg->msg) return NULL;
+    if (prev->type != msg->type) return NULL;
+    return prev;
+}
+
+/* try to merge a WM_MOUSEWHEEL message with the last in the list; return 1 if successful */
+static int merge_mousewheel( struct thread_input *input, const struct message *msg )
+{
+    struct message *prev;
+
+    if (!(prev = find_mouse_message( input, msg ))) return 0;
+    if (prev->x != msg->x || prev->y != msg->y) return 0; /* don't merge if cursor has moved */
+
+    prev->wparam += msg->wparam; /* accumulate wheel delta */
+    prev->lparam  = msg->lparam;
+    prev->x       = msg->x;
+    prev->y       = msg->y;
+    prev->time    = msg->time;
+    if (msg->type == MSG_HARDWARE && prev->data && msg->data)
+    {
+        struct hardware_msg_data *prev_data = prev->data;
+        struct hardware_msg_data *msg_data = msg->data;
+        prev_data->info = msg_data->info;
+    }
+    list_remove( &prev->entry );
+    list_add_tail( &input->msg_list, &prev->entry );
+    return 1;
+}
+
+/* try to merge a WM_MOUSEMOVE message with the last in the list; return 1 if successful */
+static int merge_mousemove( struct thread_input *input, const struct message *msg )
+{
+    struct message *prev;
+
+    if (!(prev = find_mouse_message( input, msg ))) return 0;
+
     prev->wparam  = msg->wparam;
     prev->lparam  = msg->lparam;
     prev->x       = msg->x;
@@ -827,8 +861,8 @@ static int merge_mousemove( struct thread_input *input, const struct message *ms
         struct hardware_msg_data *msg_data = msg->data;
         prev_data->info = msg_data->info;
     }
-    list_remove( ptr );
-    list_add_tail( &input->msg_list, ptr );
+    list_remove( &prev->entry );
+    list_add_tail( &input->msg_list, &prev->entry );
     return 1;
 }
 
@@ -860,6 +894,7 @@ static int merge_unique_message( struct thread_input *input, unsigned int messag
 /* try to merge a message with the messages in the list; return 1 if successful */
 static int merge_message( struct thread_input *input, const struct message *msg )
 {
+    if (msg->msg == WM_MOUSEWHEEL) return merge_mousewheel( input, msg );
     if (msg->msg == WM_MOUSEMOVE) return merge_mousemove( input, msg );
     if (msg->msg == WM_WINE_CLIPCURSOR) return merge_unique_message( input, WM_WINE_CLIPCURSOR, msg );
     if (msg->msg == WM_WINE_SETCURSOR) return merge_unique_message( input, WM_WINE_SETCURSOR, msg );
@@ -1865,7 +1900,7 @@ static struct rawinput_device *find_rawinput_device( struct process *process, un
 
 static void prepend_cursor_history( int x, int y, unsigned int time, lparam_t info )
 {
-    cursor_pos_t *pos = &cursor_history[--cursor_history_latest % ARRAY_SIZE(cursor_history)];
+    struct cursor_pos *pos = &cursor_history[--cursor_history_latest % ARRAY_SIZE(cursor_history)];
 
     pos->x = x;
     pos->y = y;
@@ -1939,6 +1974,7 @@ static void queue_hardware_message( struct desktop *desktop, struct message *msg
     {
         if (input && !(flags & RIDEV_NOLEGACY)) update_thread_input_key_state( input, msg->msg, msg->wparam );
         free_message( msg );
+        if (thread) release_object( thread );
         return;
     }
 
@@ -2105,7 +2141,7 @@ static void rawkeyboard_init( struct rawinput *rawinput, RAWKEYBOARD *keyboard, 
     keyboard->ExtraInformation = info;
 }
 
-static void rawhid_init( struct rawinput *rawinput, RAWHID *hid, const hw_input_t *input )
+static void rawhid_init( struct rawinput *rawinput, RAWHID *hid, const union hw_input *input )
 {
     rawinput->type   = RIM_TYPEHID;
     rawinput->device = input->hw.hid.device;
@@ -2202,7 +2238,7 @@ static void dispatch_rawinput_message( struct desktop *desktop, struct rawinput_
 }
 
 /* queue a hardware message for a mouse event */
-static int queue_mouse_message( struct desktop *desktop, user_handle_t win, const hw_input_t *input,
+static int queue_mouse_message( struct desktop *desktop, user_handle_t win, const union hw_input *input,
                                 unsigned int origin, struct msg_queue *sender )
 {
     const desktop_shm_t *desktop_shm = desktop->shared;
@@ -2248,15 +2284,14 @@ static int queue_mouse_message( struct desktop *desktop, user_handle_t win, cons
         {
             x = input->mouse.x;
             y = input->mouse.y;
-            if (flags & ~(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE) &&
-                x == desktop_shm->cursor.x && y == desktop_shm->cursor.y)
-                flags &= ~MOUSEEVENTF_MOVE;
         }
         else
         {
             x = desktop_shm->cursor.x + input->mouse.x;
             y = desktop_shm->cursor.y + input->mouse.y;
         }
+        if (x == desktop_shm->cursor.x && y == desktop_shm->cursor.y)
+            flags &= ~MOUSEEVENTF_MOVE;
     }
     else
     {
@@ -2308,7 +2343,7 @@ static int queue_mouse_message( struct desktop *desktop, user_handle_t win, cons
     return wait;
 }
 
-static int queue_keyboard_message( struct desktop *desktop, user_handle_t win, const hw_input_t *input,
+static int queue_keyboard_message( struct desktop *desktop, user_handle_t win, const union hw_input *input,
                                    unsigned int origin, struct msg_queue *sender, int repeat );
 
 static void key_repeat_timeout( void *private )
@@ -2328,7 +2363,7 @@ static void stop_key_repeat( struct desktop *desktop )
 }
 
 /* queue a hardware message for a keyboard event */
-static int queue_keyboard_message( struct desktop *desktop, user_handle_t win, const hw_input_t *input,
+static int queue_keyboard_message( struct desktop *desktop, user_handle_t win, const union hw_input *input,
                                    unsigned int origin, struct msg_queue *sender, int repeat )
 {
     const desktop_shm_t *desktop_shm = desktop->shared;
@@ -2501,7 +2536,7 @@ struct pointer
     struct desktop *desktop;
     user_handle_t win;
     int primary;
-    hw_input_t input;
+    union hw_input input;
 };
 
 static void queue_pointer_message( struct pointer *pointer, int repeated );
@@ -2523,11 +2558,11 @@ static void queue_pointer_message( struct pointer *pointer, int repeated )
     struct hw_msg_source source = { IMDT_UNAVAILABLE, IMDT_TOUCH };
     struct desktop *desktop = pointer->desktop;
     const desktop_shm_t *desktop_shm = desktop->shared;
-    const hw_input_t *input = &pointer->input;
+    const union hw_input *input = &pointer->input;
     unsigned int i, wparam = input->hw.wparam;
     timeout_t time = get_tick_count();
     user_handle_t win = pointer->win;
-    rectangle_t top_rect;
+    struct rectangle top_rect;
     struct message *msg;
     int x, y;
 
@@ -2599,7 +2634,7 @@ static struct pointer *find_pointer_from_id( struct desktop *desktop, unsigned i
 
 /* queue a hardware message for a custom type of event */
 static void queue_custom_hardware_message( struct desktop *desktop, user_handle_t win,
-                                           unsigned int origin, const hw_input_t *input )
+                                           unsigned int origin, const union hw_input *input )
 {
     const desktop_shm_t *desktop_shm = desktop->shared;
     struct hw_msg_source source = { IMDT_UNAVAILABLE, origin };
@@ -2701,11 +2736,15 @@ static int get_hardware_message( struct thread *thread, unsigned int hw_id, user
                                  struct get_message_reply *reply )
 {
     struct thread_input *input = thread->queue->input;
+    const struct rawinput_device *device;
     struct thread *win_thread;
     struct list *ptr;
     user_handle_t win;
     int clear_bits, got_one = 0;
     unsigned int msg_code;
+    int no_legacy;
+
+    no_legacy = (device = thread->process->rawinput_mouse) && (device->flags & RIDEV_NOLEGACY);
 
     ptr = list_head( &input->msg_list );
     if (hw_id)
@@ -2731,6 +2770,12 @@ static int get_hardware_message( struct thread *thread, unsigned int hw_id, user
         struct hardware_msg_data *data = msg->data;
 
         ptr = list_next( &input->msg_list, ptr );
+        if (no_legacy && msg->msg == WM_MOUSEMOVE && msg->type == MSG_HARDWARE)
+        {
+            list_remove( &msg->entry );
+            free_message( msg );
+            continue;
+        }
         win = find_hardware_message_window( input->desktop, input, msg, &msg_code, &win_thread );
         if (!win || !win_thread)
         {
@@ -3888,6 +3933,8 @@ DECL_HANDLER(set_capture_window)
             reply->full_handle = shared->capture;
         }
         SHARED_WRITE_END;
+        if (reply->previous && !req->handle && !req->flags)
+            update_cursor_pos(input->desktop);
     }
 }
 
@@ -4034,7 +4081,7 @@ DECL_HANDLER(set_cursor)
 /* Get the history of the 64 last cursor positions */
 DECL_HANDLER(get_cursor_history)
 {
-    cursor_pos_t *pos;
+    struct cursor_pos *pos;
     unsigned int i, count = min( 64, get_reply_max_size() / sizeof(*pos) );
 
     if ((pos = set_reply_data_size( count * sizeof(*pos) )))

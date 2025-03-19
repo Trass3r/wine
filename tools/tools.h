@@ -39,6 +39,9 @@
 #ifdef HAVE_SYS_SYSCTL_H
 # include <sys/sysctl.h>
 #endif
+#ifdef __APPLE__
+# include <mach-o/dyld.h>
+#endif
 
 #ifdef _WIN32
 # include <direct.h>
@@ -193,17 +196,17 @@ static inline void strarray_addall( struct strarray *array, struct strarray adde
     for (i = 0; i < added.count; i++) strarray_add( array, added.str[i] );
 }
 
-static inline int strarray_exists( const struct strarray *array, const char *str )
+static inline int strarray_exists( struct strarray array, const char *str )
 {
     unsigned int i;
 
-    for (i = 0; i < array->count; i++) if (!strcmp( array->str[i], str )) return 1;
+    for (i = 0; i < array.count; i++) if (!strcmp( array.str[i], str )) return 1;
     return 0;
 }
 
 static inline void strarray_add_uniq( struct strarray *array, const char *str )
 {
-    if (!strarray_exists( array, str )) strarray_add( array, str );
+    if (!strarray_exists( *array, str )) strarray_add( array, str );
 }
 
 static inline void strarray_addall_uniq( struct strarray *array, struct strarray added )
@@ -257,12 +260,12 @@ static inline void strarray_qsort( struct strarray *array, int (*func)(const cha
     if (array->count) qsort( array->str, array->count, sizeof(*array->str), (void *)func );
 }
 
-static inline const char *strarray_bsearch( const struct strarray *array, const char *str,
+static inline const char *strarray_bsearch( struct strarray array, const char *str,
                                             int (*func)(const char **, const char **) )
 {
     char **res = NULL;
 
-    if (array->count) res = bsearch( &str, array->str, array->count, sizeof(*array->str), (void *)func );
+    if (array.count) res = bsearch( &str, array.str, array.count, sizeof(*array.str), (void *)func );
     return res ? *res : NULL;
 }
 
@@ -547,6 +550,14 @@ static inline void set_target_ptr_size( struct target *target, unsigned int size
 }
 
 
+static inline int is_pe_target( struct target target )
+{
+    return (target.platform == PLATFORM_WINDOWS ||
+            target.platform == PLATFORM_MINGW ||
+            target.platform == PLATFORM_CYGWIN);
+}
+
+
 static inline int get_cpu_from_name( const char *name )
 {
     static const struct
@@ -616,16 +627,7 @@ static inline const char *get_arch_dir( struct target target )
     };
 
     if (!cpu_names[target.cpu]) return "";
-
-    switch (target.platform)
-    {
-    case PLATFORM_WINDOWS:
-    case PLATFORM_CYGWIN:
-    case PLATFORM_MINGW:
-        return strmake( "/%s-windows", cpu_names[target.cpu] );
-    default:
-        return strmake( "/%s-unix", cpu_names[target.cpu] );
-    }
+    return strmake( "/%s-%s", cpu_names[target.cpu], is_pe_target( target ) ? "windows" : "unix" );
 }
 
 static inline int parse_target( const char *name, struct target *target )
@@ -703,6 +705,12 @@ static inline char *get_bindir( const char *argv0 )
     size_t path_size = PATH_MAX;
     char *path = xmalloc( path_size );
     if (!sysctl( pathname, ARRAY_SIZE(pathname), path, &path_size, NULL, 0 ))
+        dir = realpath( path, NULL );
+    free( path );
+#elif defined(__APPLE__)
+    uint32_t path_size = PATH_MAX;
+    char *path = xmalloc( path_size );
+    if (!_NSGetExecutablePath( path, &path_size ))
         dir = realpath( path, NULL );
     free( path );
 #endif

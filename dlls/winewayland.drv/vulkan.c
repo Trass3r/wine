@@ -32,9 +32,6 @@
 #include "waylanddrv.h"
 #include "wine/debug.h"
 
-#define VK_NO_PROTOTYPES
-#define WINE_VK_HOST
-
 #include "wine/vulkan.h"
 #include "wine/vulkan_driver.h"
 
@@ -69,7 +66,7 @@ static void wine_vk_surface_destroy(struct wayland_client_surface *client)
     if (data) wayland_win_data_release(data);
 }
 
-static VkResult wayland_vulkan_surface_create(HWND hwnd, VkInstance instance, VkSurfaceKHR *surface, void **private)
+static VkResult wayland_vulkan_surface_create(HWND hwnd, const struct vulkan_instance *instance, VkSurfaceKHR *surface, void **private)
 {
     VkResult res;
     VkWaylandSurfaceCreateInfoKHR create_info_host;
@@ -89,7 +86,7 @@ static VkResult wayland_vulkan_surface_create(HWND hwnd, VkInstance instance, Vk
     create_info_host.display = process_wayland.wl_display;
     create_info_host.surface = client->wl_surface;
 
-    res = pvkCreateWaylandSurfaceKHR(instance, &create_info_host,
+    res = pvkCreateWaylandSurfaceKHR(instance->host.instance, &create_info_host,
                                      NULL /* allocator */,
                                      surface);
     if (res != VK_SUCCESS)

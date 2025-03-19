@@ -1771,21 +1771,16 @@ BOOL elf_read_wine_loader_dbg_info(struct process* pcs, ULONG_PTR addr)
 {
     struct elf_info     elf_info;
     BOOL ret = FALSE;
-    WCHAR* loader;
+    const WCHAR *loader;
 
     elf_info.flags = ELF_INFO_DEBUG_HEADER | ELF_INFO_MODULE;
     loader = get_wine_loader_name(pcs);
-    if (loader)
-    {
-        ret = elf_search_and_load_file(pcs, loader, addr, 0, &elf_info);
-        HeapFree(GetProcessHeap(), 0, loader);
-    }
+    if (loader) ret = elf_search_and_load_file(pcs, loader, addr, 0, &elf_info);
     if (!ret || !elf_info.dbg_hdr_addr) return FALSE;
     if (elf_info.dbg_hdr_addr != (ULONG_PTR)elf_info.dbg_hdr_addr)
     {
         ERR("Unable to access ELF libraries (outside 32bit limit)\n");
         module_remove(pcs, elf_info.module);
-        pcs->loader = &empty_loader_ops;
         return FALSE;
     }
     TRACE("Found ELF debug header %#I64x\n", elf_info.dbg_hdr_addr);

@@ -141,7 +141,7 @@ struct startup_info
     struct process     *process;      /* created process */
     data_size_t         info_size;    /* size of startup info */
     data_size_t         data_size;    /* size of whole startup data */
-    startup_info_t     *data;         /* data for startup info */
+    struct startup_info_data *data;   /* data for startup info */
 };
 
 static void startup_info_dump( struct object *obj, int verbose );
@@ -638,7 +638,8 @@ static void start_sigkill_timer( struct process *process )
 
 /* create a new process */
 /* if the function fails the fd is closed */
-struct process *create_process( int fd, struct process *parent, unsigned int flags, const startup_info_t *info,
+struct process *create_process( int fd, struct process *parent, unsigned int flags,
+                                const struct startup_info_data *info,
                                 const struct security_descriptor *sd, const obj_handle_t *handles,
                                 unsigned int handle_count, struct token *token )
 {
@@ -805,6 +806,8 @@ static unsigned int process_map_access( struct object *obj, unsigned int access 
     access = default_map_access( obj, access );
     if (access & PROCESS_QUERY_INFORMATION) access |= PROCESS_QUERY_LIMITED_INFORMATION;
     if (access & PROCESS_SET_INFORMATION) access |= PROCESS_SET_LIMITED_INFORMATION;
+    if ((access & (PROCESS_VM_OPERATION | PROCESS_VM_WRITE)) == (PROCESS_VM_OPERATION | PROCESS_VM_WRITE))
+        access |= PROCESS_QUERY_LIMITED_INFORMATION;
     return access;
 }
 
@@ -1242,9 +1245,9 @@ DECL_HANDLER(new_process)
 
     if (req->info_size < sizeof(*info->data))
     {
-        /* make sure we have a full startup_info_t structure */
+        /* make sure we have a full startup_info_data structure */
         data_size_t env_size = info->data_size - info->info_size;
-        data_size_t info_size = min( req->info_size, FIELD_OFFSET( startup_info_t, curdir_len ));
+        data_size_t info_size = min( req->info_size, offsetof( struct startup_info_data, curdir_len ));
 
         if (!(info->data = mem_alloc( sizeof(*info->data) + env_size )))
         {
@@ -1254,7 +1257,7 @@ DECL_HANDLER(new_process)
         memcpy( info->data, info_ptr, info_size );
         memset( (char *)info->data + info_size, 0, sizeof(*info->data) - info_size );
         memcpy( info->data + 1, (const char *)info_ptr + req->info_size, env_size );
-        info->info_size = sizeof(startup_info_t);
+        info->info_size = sizeof(struct startup_info_data);
         info->data_size = info->info_size + env_size;
     }
     else
@@ -1387,6 +1390,40 @@ DECL_HANDLER(get_new_process_info)
         reply->exit_code = info->process->exit_code;
         release_object( info );
     }
+}
+
+/* Itererate processes using global process list */
+DECL_HANDLER(get_next_process)
+{
+    struct process *process;
+    struct list *ptr;
+
+    if (req->flags > 1)
+    {
+        set_error( STATUS_INVALID_PARAMETER );
+        return;
+    }
+
+    if (!req->last)
+    {
+        ptr = req->flags ? list_tail( &process_list ) : list_head( &process_list );
+    }
+    else
+    {
+        if (!(process = get_process_from_handle( req->last, 0 ))) return;
+        ptr = req->flags ? list_prev( &process_list, &process->entry )
+                         : list_next( &process_list, &process->entry );
+        release_object( process );
+    }
+
+    while (ptr)
+    {
+        process = LIST_ENTRY( ptr, struct process, entry );
+        if ((reply->handle = alloc_handle( current->process, process, req->access, req->attributes ))) return;
+        ptr = req->flags ? list_prev( &process_list, &process->entry )
+                         : list_next( &process_list, &process->entry );
+    }
+    set_error( STATUS_NO_MORE_ENTRIES );
 }
 
 /* Retrieve the new process startup info */
@@ -1596,6 +1633,18 @@ DECL_HANDLER(get_process_vm_counters)
     release_object( process );
 }
 
+void set_process_priority( struct process *process, int priority )
+{
+    struct thread *thread;
+
+    process->priority = priority;
+
+    LIST_FOR_EACH_ENTRY( thread, &process->thread_list, struct thread, proc_entry )
+    {
+        set_thread_priority( thread, priority, thread->priority );
+    }
+}
+
 static void set_process_affinity( struct process *process, affinity_t affinity )
 {
     struct thread *thread;
@@ -1621,7 +1670,7 @@ DECL_HANDLER(set_process_info)
 
     if ((process = get_process_from_handle( req->handle, PROCESS_SET_INFORMATION )))
     {
-        if (req->mask & SET_PROCESS_INFO_PRIORITY) process->priority = req->priority;
+        if (req->mask & SET_PROCESS_INFO_PRIORITY) set_process_priority( process, req->priority );
         if (req->mask & SET_PROCESS_INFO_AFFINITY) set_process_affinity( process, req->affinity );
         if (req->mask & SET_PROCESS_INFO_TOKEN)
         {
@@ -1714,6 +1763,24 @@ DECL_HANDLER(make_process_system)
         process->is_system = 1;
         if (!--user_processes && !shutdown_stage && master_socket_timeout != TIMEOUT_INFINITE)
             shutdown_timeout = add_timeout_user( master_socket_timeout, server_shutdown_timeout, NULL );
+    }
+    release_object( process );
+}
+
+/* grant a process a primary admin token with Default elevation */
+DECL_HANDLER(grant_process_admin_token)
+{
+    struct process *process;
+    struct token *token;
+
+    if (!(process = get_process_from_handle( req->handle, PROCESS_SET_INFORMATION )))
+        return;
+
+    if ((token = token_create_admin( TRUE, SecurityIdentification,
+                                     TokenElevationTypeDefault, default_session_id )))
+    {
+        release_object( process->token );
+        process->token = token;
     }
     release_object( process );
 }

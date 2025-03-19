@@ -164,16 +164,16 @@ msgid ""
 "install it for you.\n"
 "\n"
 "Note: it is recommended to use your distribution's packages instead. See <a "
-"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://gitlab."
-"winehq.org/wine/wine/-/wikis/Gecko</a> for details."
+"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://"
+"gitlab.winehq.org/wine/wine/-/wikis/Gecko</a> for details."
 msgstr ""
 "Wine could not find a Gecko package which is needed for applications "
 "embedding HTML to work correctly. Wine can automatically download and "
 "install it for you.\n"
 "\n"
 "Note: it is recommended to use your distribution's packages instead. See <a "
-"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://gitlab."
-"winehq.org/wine/wine/-/wikis/Gecko</a> for details."
+"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://"
+"gitlab.winehq.org/wine/wine/-/wikis/Gecko</a> for details."
 
 #: dlls/appwiz.cpl/appwiz.rc:110 dlls/appwiz.cpl/appwiz.rc:125
 msgid "&Install"
@@ -528,7 +528,7 @@ msgstr "See details"
 
 #: dlls/comctl32/comctl32.rc:31 dlls/cryptui/cryptui.rc:235
 #: programs/regedit/regedit.rc:291 programs/taskmgr/taskmgr.rc:434
-#: programs/winedbg/winedbg.rc:61 programs/winedbg/winedbg.rc:76
+#: programs/winedbg/winedbg.rc:62 programs/winedbg/winedbg.rc:77
 #: programs/wordpad/wordpad.rc:180
 msgid "Close"
 msgstr "Close"
@@ -579,7 +579,7 @@ msgstr "Save As"
 
 #: dlls/comdlg32/comdlg32.rc:202 dlls/comdlg32/comdlg32.rc:211
 #: dlls/comdlg32/comdlg32.rc:358 dlls/comdlg32/comdlg32.rc:55
-#: dlls/hhctrl.ocx/hhctrl.rc:49 programs/wordpad/wordpad.rc:173
+#: dlls/hhctrl.ocx/hhctrl.rc:51 programs/wordpad/wordpad.rc:173
 msgid "Print"
 msgstr "Print"
 
@@ -718,6 +718,7 @@ msgid "Scr&ipt:"
 msgstr "Scr&ipt:"
 
 #: dlls/comdlg32/comdlg32.rc:283 dlls/comdlg32/comdlg32.rc:288
+#: dlls/compstui/compstui.rc:33
 msgid "Color"
 msgstr "Color"
 
@@ -1333,7 +1334,7 @@ msgstr "mm"
 msgid "Properties"
 msgstr "Properties"
 
-#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:50
+#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:52
 #: programs/conhost/conhost.rc:51 programs/wordpad/wordpad.rc:166
 msgid "Options"
 msgstr "Options"
@@ -1341,6 +1342,34 @@ msgstr "Options"
 #: dlls/compstui/compstui.rc:31
 msgid "Default"
 msgstr "Default"
+
+#: dlls/compstui/compstui.rc:35
+msgid "&Copy count"
+msgstr "&Copy count"
+
+#: dlls/compstui/compstui.rc:36
+msgid "Print on Both Sides"
+msgstr "Print on Both Sides"
+
+#: dlls/compstui/compstui.rc:32
+msgid "C&olor"
+msgstr "C&olor"
+
+#: dlls/compstui/compstui.rc:34
+msgid "Bla&ck && White"
+msgstr "Bla&ck && White"
+
+#: dlls/compstui/compstui.rc:37
+msgid "&None"
+msgstr "&None"
+
+#: dlls/compstui/compstui.rc:38 dlls/compstui/compstui.rc:41
+msgid "Flip on Shor&t Edge"
+msgstr "Flip on Shor&t Edge"
+
+#: dlls/compstui/compstui.rc:39 dlls/compstui/compstui.rc:40
+msgid "Flip on Long E&dge"
+msgstr "Flip on Long E&dge"
 
 #: dlls/credui/credui.rc:45
 msgid "&User name:"
@@ -3159,6 +3188,10 @@ msgstr "Virtual Desktop"
 msgid "&Reset"
 msgstr "&Reset"
 
+#: dlls/desk.cpl/desk.rc:42
+msgid "Emulate display mode changes (requires restart)"
+msgstr "Emulate display mode changes (requires restart)"
+
 #: dlls/desk.cpl/desk.rc:29
 msgid "Display Settings"
 msgstr "Display Settings"
@@ -3324,60 +3357,60 @@ msgstr "Connecting to camera"
 msgid "Connecting to camera... Please Wait"
 msgstr "Connecting to camera... Please Wait"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:59
+#: dlls/hhctrl.ocx/hhctrl.rc:61
 msgid "S&ync"
 msgstr "S&ync"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:60 dlls/hhctrl.ocx/hhctrl.rc:73
+#: dlls/hhctrl.ocx/hhctrl.rc:62 dlls/hhctrl.ocx/hhctrl.rc:75
 #: dlls/shdoclc/shdoclc.rc:41 programs/winhlp32/winhlp32.rc:89
 msgid "&Back"
 msgstr "&Back"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:61 dlls/hhctrl.ocx/hhctrl.rc:74
+#: dlls/hhctrl.ocx/hhctrl.rc:63 dlls/hhctrl.ocx/hhctrl.rc:76
 msgid "&Forward"
 msgstr "&Forward"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:62
+#: dlls/hhctrl.ocx/hhctrl.rc:64
 msgctxt "table of contents"
 msgid "&Home"
 msgstr "&Home"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:63
+#: dlls/hhctrl.ocx/hhctrl.rc:65
 msgid "&Stop"
 msgstr "&Stop"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:64 dlls/hhctrl.ocx/hhctrl.rc:81
+#: dlls/hhctrl.ocx/hhctrl.rc:66 dlls/hhctrl.ocx/hhctrl.rc:83
 #: dlls/oledb32/version.rc:73 dlls/shdoclc/shdoclc.rc:59
 msgid "&Refresh"
 msgstr "&Refresh"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:65 dlls/hhctrl.ocx/hhctrl.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:67 dlls/hhctrl.ocx/hhctrl.rc:82
 #: programs/winhlp32/winhlp32.rc:34
 msgid "&Print..."
 msgstr "&Print..."
 
-#: dlls/hhctrl.ocx/hhctrl.rc:76 dlls/hhctrl.ocx/hhctrl.rc:90
+#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/hhctrl.ocx/hhctrl.rc:92
 #: dlls/shdoclc/shdoclc.rc:49 dlls/shdoclc/shdoclc.rc:98
 #: dlls/shdoclc/shdoclc.rc:120 dlls/user32/user32.rc:65
 msgid "Select &All"
 msgstr "Select &All"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/shdoclc/shdoclc.rc:54
+#: dlls/hhctrl.ocx/hhctrl.rc:80 dlls/shdoclc/shdoclc.rc:54
 msgid "&View Source"
 msgstr "&View Source"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:83
+#: dlls/hhctrl.ocx/hhctrl.rc:85
 msgid "Proper&ties"
 msgstr "Proper&ties"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:87 dlls/shdoclc/shdoclc.rc:79
+#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:79
 #: dlls/shdoclc/shdoclc.rc:93 dlls/shdoclc/shdoclc.rc:117
 #: dlls/shdoclc/shdoclc.rc:159 dlls/shdoclc/shdoclc.rc:183
 #: dlls/user32/user32.rc:60 programs/wordpad/wordpad.rc:112
 msgid "Cu&t"
 msgstr "Cu&t"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:88 dlls/shdoclc/shdoclc.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:90 dlls/shdoclc/shdoclc.rc:80
 #: dlls/shdoclc/shdoclc.rc:94 dlls/shdoclc/shdoclc.rc:118
 #: dlls/shdoclc/shdoclc.rc:133 dlls/shdoclc/shdoclc.rc:160
 #: dlls/shdoclc/shdoclc.rc:184 dlls/shell32/shell32.rc:98
@@ -3386,12 +3419,12 @@ msgstr "Cu&t"
 msgid "&Copy"
 msgstr "&Copy"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:119
+#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:119
 #: dlls/shell32/shell32.rc:64
 msgid "Paste"
 msgstr "Paste"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:121
+#: dlls/hhctrl.ocx/hhctrl.rc:93 dlls/shdoclc/shdoclc.rc:121
 #: dlls/shell32/shell32.rc:166
 msgid "&Print"
 msgstr "&Print"
@@ -3420,38 +3453,42 @@ msgstr "Hide &Tabs"
 msgid "Show &Tabs"
 msgstr "Show &Tabs"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:42
+#: dlls/hhctrl.ocx/hhctrl.rc:39
+msgid "Select Topic"
+msgstr "Select Topic"
+
+#: dlls/hhctrl.ocx/hhctrl.rc:44
 msgid "Show"
 msgstr "Show"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:43 dlls/winemac.drv/winemac.rc:34
+#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/winemac.drv/winemac.rc:34
 msgid "Hide"
 msgstr "Hide"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:44 dlls/ieframe/ieframe.rc:68
+#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:68
 #: dlls/shdoclc/shdoclc.rc:167 dlls/shdoclc/shdoclc.rc:191
 msgid "Stop"
 msgstr "Stop"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/ieframe/ieframe.rc:69
+#: dlls/hhctrl.ocx/hhctrl.rc:47 dlls/ieframe/ieframe.rc:69
 #: dlls/shell32/shell32.rc:62
 msgid "Refresh"
 msgstr "Refresh"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:66
+#: dlls/hhctrl.ocx/hhctrl.rc:48 dlls/ieframe/ieframe.rc:66
 msgid "Back"
 msgstr "Back"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:47
+#: dlls/hhctrl.ocx/hhctrl.rc:49
 msgctxt "table of contents"
 msgid "Home"
 msgstr "Home"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:48
+#: dlls/hhctrl.ocx/hhctrl.rc:50
 msgid "Sync"
 msgstr "Sync"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:51 dlls/ieframe/ieframe.rc:67
+#: dlls/hhctrl.ocx/hhctrl.rc:53 dlls/ieframe/ieframe.rc:67
 msgid "Forward"
 msgstr "Forward"
 
@@ -3907,7 +3944,7 @@ msgstr "Object doesn't support this property or method"
 msgid "Object doesn't support this action"
 msgstr "Object doesn't support this action"
 
-#: dlls/jscript/jscript.rc:36
+#: dlls/jscript/jscript.rc:36 dlls/vbscript/vbscript.rc:54
 msgid "Argument not optional"
 msgstr "Argument not optional"
 
@@ -8138,7 +8175,7 @@ msgstr "Entire Network"
 msgid "Sound Selection"
 msgstr "Sound Selection"
 
-#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:77
+#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:78
 msgid "&Save As..."
 msgstr "&Save As..."
 
@@ -10161,7 +10198,8 @@ msgctxt "display name"
 msgid "Desktop"
 msgstr "Desktop"
 
-#: dlls/shell32/shell32.rc:152 programs/regedit/regedit.rc:243
+#: dlls/shell32/shell32.rc:152 dlls/urlmon/urlmon.rc:56
+#: programs/regedit/regedit.rc:243
 msgid "My Computer"
 msgstr "My Computer"
 
@@ -12453,6 +12491,52 @@ msgstr "Install (%d)"
 msgid "Install"
 msgstr "Install"
 
+#: dlls/urlmon/urlmon.rc:58
+msgid "Local intranet"
+msgstr "Local intranet"
+
+#: dlls/urlmon/urlmon.rc:60
+msgid "Trusted sites"
+msgstr "Trusted sites"
+
+#: dlls/urlmon/urlmon.rc:62
+msgid "Internet"
+msgstr "Internet"
+
+#: dlls/urlmon/urlmon.rc:64
+msgid "Restricted sites"
+msgstr "Restricted sites"
+
+#: dlls/urlmon/urlmon.rc:57
+msgid "Your computer"
+msgstr "Your computer"
+
+#: dlls/urlmon/urlmon.rc:59
+msgid ""
+"This zone contains all Web sites that are on your organization's intranet."
+msgstr ""
+"This zone contains all Web sites that are on your organization's intranet."
+
+#: dlls/urlmon/urlmon.rc:61
+msgid ""
+"This zone contains Web sites that you trust not to damage your computer or "
+"data."
+msgstr ""
+"This zone contains Web sites that you trust not to damage your computer or "
+"data."
+
+#: dlls/urlmon/urlmon.rc:63
+msgid "This zone contains all Web sites you haven't placed in other zones"
+msgstr "This zone contains all Web sites you haven't placed in other zones"
+
+#: dlls/urlmon/urlmon.rc:65
+msgid ""
+"This zone contains Web sites that could potentially damage your computer or "
+"data."
+msgstr ""
+"This zone contains Web sites that could potentially damage your computer or "
+"data."
+
 #: dlls/user32/user32.rc:30 dlls/user32/user32.rc:43
 #: programs/taskmgr/taskmgr.rc:138
 msgctxt "window"
@@ -12594,7 +12678,7 @@ msgstr "Object doesn't support named arguments"
 msgid "Object doesn't support current locale setting"
 msgstr "Object doesn't support current locale setting"
 
-#: dlls/vbscript/vbscript.rc:53 dlls/vbscript/vbscript.rc:54
+#: dlls/vbscript/vbscript.rc:53
 msgid "Named argument not found"
 msgstr "Named argument not found"
 
@@ -18235,6 +18319,38 @@ msgstr "Running"
 msgid "Task"
 msgstr "Task"
 
+#: programs/timeout/timeout.rc:28
+msgid "Usage: timeout /T <timeout> [</NOBREAK>]\n"
+msgstr "Usage: timeout /T <timeout> [</NOBREAK>]\n"
+
+#: programs/timeout/timeout.rc:29
+msgid "TIMEOUT: Bad command line\n"
+msgstr "TIMEOUT: Bad command line\n"
+
+#: programs/timeout/timeout.rc:30
+msgid "waiting since %d sec. "
+msgstr "waiting since %d sec. "
+
+#: programs/timeout/timeout.rc:31
+msgid "press CTRL+C..."
+msgstr "press CTRL+C..."
+
+#: programs/timeout/timeout.rc:32
+msgid "press a key to continue..."
+msgstr "press a key to continue..."
+
+#: programs/timeout/timeout.rc:33
+msgid "ERROR: not possible to redirect input\n"
+msgstr "ERROR: not possible to redirect input\n"
+
+#: programs/timeout/timeout.rc:34
+msgid ""
+"ERROR: Timeout value out of range or invalid number. Valid range is -1 to "
+"99999.\n"
+msgstr ""
+"ERROR: Timeout value out of range or invalid number. Valid range is -1 to "
+"99999.\n"
+
 #: programs/uninstaller/uninstaller.rc:29
 msgid "Wine Application Uninstaller"
 msgstr "Wine Application Uninstaller"
@@ -18952,11 +19068,11 @@ msgstr ""
 "wineconsole: Starting program %s failed.\n"
 "The command is invalid.\n"
 
-#: programs/winedbg/winedbg.rc:50 programs/winedbg/winedbg.rc:38
+#: programs/winedbg/winedbg.rc:51 programs/winedbg/winedbg.rc:38
 msgid "Program Error"
 msgstr "Program Error"
 
-#: programs/winedbg/winedbg.rc:55
+#: programs/winedbg/winedbg.rc:56
 msgid ""
 "The program %s has encountered a serious problem and needs to close. We are "
 "sorry for the inconvenience."
@@ -18964,7 +19080,7 @@ msgstr ""
 "The program %s has encountered a serious problem and needs to close. We are "
 "sorry for the inconvenience."
 
-#: programs/winedbg/winedbg.rc:59
+#: programs/winedbg/winedbg.rc:60
 msgid ""
 "This can be caused by a problem in the program or a deficiency in Wine. You "
 "may want to check the <a href=\"https://appdb.winehq.org\">Application "
@@ -18974,15 +19090,15 @@ msgstr ""
 "may want to check the <a href=\"https://appdb.winehq.org\">Application "
 "Database</a> for tips about running this application."
 
-#: programs/winedbg/winedbg.rc:62
+#: programs/winedbg/winedbg.rc:63
 msgid "Show &Details"
 msgstr "Show &Details"
 
-#: programs/winedbg/winedbg.rc:67
+#: programs/winedbg/winedbg.rc:68
 msgid "Program Error Details"
 msgstr "Program Error Details"
 
-#: programs/winedbg/winedbg.rc:74
+#: programs/winedbg/winedbg.rc:75
 msgid ""
 "If this problem is not present under Windows and has not been reported yet, "
 "you can save the detailed information to a file using the \"Save As\" "

@@ -31,9 +31,11 @@
 #include <xkbcommon/xkbregistry.h>
 #include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "relative-pointer-unstable-v1-client-protocol.h"
+#include "text-input-unstable-v3-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
+#include "wlr-data-control-unstable-v1-client-protocol.h"
 
 #include "windef.h"
 #include "winbase.h"
@@ -105,9 +107,20 @@ struct wayland_pointer
     struct zwp_relative_pointer_v1 *zwp_relative_pointer_v1;
     HWND focused_hwnd;
     HWND constraint_hwnd;
+    BOOL pending_warp;
     uint32_t enter_serial;
     uint32_t button_serial;
     struct wayland_cursor cursor;
+    pthread_mutex_t mutex;
+};
+
+struct wayland_text_input
+{
+    struct zwp_text_input_v3 *zwp_text_input_v3;
+    WCHAR *preedit_string;
+    DWORD preedit_cursor_pos;
+    WCHAR *commit_string;
+    struct wl_surface *wl_surface;
     pthread_mutex_t mutex;
 };
 
@@ -115,6 +128,26 @@ struct wayland_seat
 {
     struct wl_seat *wl_seat;
     uint32_t global_id;
+    pthread_mutex_t mutex;
+};
+
+struct wayland_data_device
+{
+    union
+    {
+        struct
+        {
+            struct zwlr_data_control_device_v1 *zwlr_data_control_device_v1;
+            struct zwlr_data_control_source_v1 *zwlr_data_control_source_v1;
+            struct zwlr_data_control_offer_v1 *clipboard_zwlr_data_control_offer_v1;
+        };
+        struct
+        {
+            struct wl_data_device *wl_data_device;
+            struct wl_data_source *wl_data_source;
+            struct wl_data_offer *clipboard_wl_data_offer;
+        };
+    };
     pthread_mutex_t mutex;
 };
 
@@ -132,12 +165,18 @@ struct wayland
     struct wl_subcompositor *wl_subcompositor;
     struct zwp_pointer_constraints_v1 *zwp_pointer_constraints_v1;
     struct zwp_relative_pointer_manager_v1 *zwp_relative_pointer_manager_v1;
+    struct zwp_text_input_manager_v3 *zwp_text_input_manager_v3;
+    struct zwlr_data_control_manager_v1 *zwlr_data_control_manager_v1;
+    struct wl_data_device_manager *wl_data_device_manager;
     struct wayland_seat seat;
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
+    struct wayland_text_input text_input;
+    struct wayland_data_device data_device;
     struct wl_list output_list;
     /* Protects the output_list and the wayland_output.current states. */
     pthread_mutex_t output_mutex;
+    LONG input_serial;
 };
 
 struct wayland_output_mode
@@ -341,6 +380,19 @@ void wayland_pointer_deinit(void);
 void wayland_pointer_clear_constraint(void);
 
 /**********************************************************************
+ *          Wayland text input
+ */
+
+void wayland_text_input_init(void);
+void wayland_text_input_deinit(void);
+
+/**********************************************************************
+ *          Wayland data device
+ */
+
+void wayland_data_device_init(void);
+
+/**********************************************************************
  *          OpenGL
  */
 
@@ -371,12 +423,15 @@ RGNDATA *get_region_data(HRGN region);
  *          USER driver functions
  */
 
+LRESULT WAYLAND_ClipboardWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 BOOL WAYLAND_ClipCursor(const RECT *clip, BOOL reset);
 LRESULT WAYLAND_DesktopWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void WAYLAND_DestroyWindow(HWND hwnd);
+BOOL WAYLAND_SetIMECompositionRect(HWND hwnd, RECT rect);
 void WAYLAND_SetCursor(HWND hwnd, HCURSOR hcursor);
+BOOL WAYLAND_SetCursorPos(INT x, INT y);
 void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
-LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam);
+LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
 UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
 LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags, BOOL fullscreen,

@@ -170,8 +170,8 @@ msgid ""
 "install it for you.\n"
 "\n"
 "Note: it is recommended to use your distribution's packages instead. See <a "
-"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://gitlab."
-"winehq.org/wine/wine/-/wikis/Gecko</a> for details."
+"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://"
+"gitlab.winehq.org/wine/wine/-/wikis/Gecko</a> for details."
 msgstr ""
 "Wine kunne ikke finde Gecko Pakken, som er nødvendig for at få "
 "applikationers indlejring af HTML til at fungere korrekt. Wine kan "
@@ -548,7 +548,7 @@ msgstr "Detaljer"
 
 #: dlls/comctl32/comctl32.rc:31 dlls/cryptui/cryptui.rc:235
 #: programs/regedit/regedit.rc:291 programs/taskmgr/taskmgr.rc:434
-#: programs/winedbg/winedbg.rc:61 programs/winedbg/winedbg.rc:76
+#: programs/winedbg/winedbg.rc:62 programs/winedbg/winedbg.rc:77
 #: programs/wordpad/wordpad.rc:180
 msgid "Close"
 msgstr "Luk"
@@ -599,7 +599,7 @@ msgstr "Gem som"
 
 #: dlls/comdlg32/comdlg32.rc:202 dlls/comdlg32/comdlg32.rc:211
 #: dlls/comdlg32/comdlg32.rc:358 dlls/comdlg32/comdlg32.rc:55
-#: dlls/hhctrl.ocx/hhctrl.rc:49 programs/wordpad/wordpad.rc:173
+#: dlls/hhctrl.ocx/hhctrl.rc:51 programs/wordpad/wordpad.rc:173
 msgid "Print"
 msgstr "Udskriv"
 
@@ -738,6 +738,7 @@ msgid "Scr&ipt:"
 msgstr "Scr&ipt:"
 
 #: dlls/comdlg32/comdlg32.rc:283 dlls/comdlg32/comdlg32.rc:288
+#: dlls/compstui/compstui.rc:33
 msgid "Color"
 msgstr "Farve"
 
@@ -1358,7 +1359,7 @@ msgstr "mm"
 msgid "Properties"
 msgstr "Egenskaber"
 
-#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:50
+#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:52
 #: programs/conhost/conhost.rc:51 programs/wordpad/wordpad.rc:166
 msgid "Options"
 msgstr "Indstillinger"
@@ -1368,6 +1369,43 @@ msgstr "Indstillinger"
 #| msgid "Defaults"
 msgid "Default"
 msgstr "Standarder"
+
+#: dlls/compstui/compstui.rc:35
+#, fuzzy
+#| msgid "&Copy Background"
+msgid "&Copy count"
+msgstr "&Kopier baggrund"
+
+#: dlls/compstui/compstui.rc:36
+#, fuzzy
+#| msgid "Print to File"
+msgid "Print on Both Sides"
+msgstr "Udskriv til fil"
+
+#: dlls/compstui/compstui.rc:32
+#, fuzzy
+#| msgid "C&olor:"
+msgid "C&olor"
+msgstr "F&arve:"
+
+#: dlls/compstui/compstui.rc:34
+msgid "Bla&ck && White"
+msgstr ""
+
+#: dlls/compstui/compstui.rc:37
+#, fuzzy
+#| msgctxt "hotkey"
+#| msgid "None"
+msgid "&None"
+msgstr "Ingen"
+
+#: dlls/compstui/compstui.rc:38 dlls/compstui/compstui.rc:41
+msgid "Flip on Shor&t Edge"
+msgstr ""
+
+#: dlls/compstui/compstui.rc:39 dlls/compstui/compstui.rc:40
+msgid "Flip on Long E&dge"
+msgstr ""
 
 #: dlls/credui/credui.rc:45
 msgid "&User name:"
@@ -3211,6 +3249,10 @@ msgstr "Skrivebord"
 msgid "&Reset"
 msgstr "Nulstil"
 
+#: dlls/desk.cpl/desk.rc:42
+msgid "Emulate display mode changes (requires restart)"
+msgstr ""
+
 #: dlls/desk.cpl/desk.rc:29
 #, fuzzy
 #| msgid "Default Settings"
@@ -3378,62 +3420,62 @@ msgstr "Tilslutter til kamera"
 msgid "Connecting to camera... Please Wait"
 msgstr "Tilslutter til kamera... Vent venligst"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:59
+#: dlls/hhctrl.ocx/hhctrl.rc:61
 msgid "S&ync"
 msgstr "S&ynkroniser"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:60 dlls/hhctrl.ocx/hhctrl.rc:73
+#: dlls/hhctrl.ocx/hhctrl.rc:62 dlls/hhctrl.ocx/hhctrl.rc:75
 #: dlls/shdoclc/shdoclc.rc:41 programs/winhlp32/winhlp32.rc:89
 msgid "&Back"
 msgstr "Til&bage"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:61 dlls/hhctrl.ocx/hhctrl.rc:74
+#: dlls/hhctrl.ocx/hhctrl.rc:63 dlls/hhctrl.ocx/hhctrl.rc:76
 msgid "&Forward"
 msgstr "&Frem"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:62
+#: dlls/hhctrl.ocx/hhctrl.rc:64
 msgctxt "table of contents"
 msgid "&Home"
 msgstr "&Hjem"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:63
+#: dlls/hhctrl.ocx/hhctrl.rc:65
 msgid "&Stop"
 msgstr "&Stop"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:64 dlls/hhctrl.ocx/hhctrl.rc:81
+#: dlls/hhctrl.ocx/hhctrl.rc:66 dlls/hhctrl.ocx/hhctrl.rc:83
 #: dlls/oledb32/version.rc:73 dlls/shdoclc/shdoclc.rc:59
 msgid "&Refresh"
 msgstr "Opdate&r"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:65 dlls/hhctrl.ocx/hhctrl.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:67 dlls/hhctrl.ocx/hhctrl.rc:82
 #: programs/winhlp32/winhlp32.rc:34
 msgid "&Print..."
 msgstr "&Udskriv..."
 
-#: dlls/hhctrl.ocx/hhctrl.rc:76 dlls/hhctrl.ocx/hhctrl.rc:90
+#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/hhctrl.ocx/hhctrl.rc:92
 #: dlls/shdoclc/shdoclc.rc:49 dlls/shdoclc/shdoclc.rc:98
 #: dlls/shdoclc/shdoclc.rc:120 dlls/user32/user32.rc:65
 msgid "Select &All"
 msgstr "Markér &alt"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/shdoclc/shdoclc.rc:54
+#: dlls/hhctrl.ocx/hhctrl.rc:80 dlls/shdoclc/shdoclc.rc:54
 msgid "&View Source"
 msgstr "&Vis kildekode"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:83
+#: dlls/hhctrl.ocx/hhctrl.rc:85
 #, fuzzy
 #| msgid "Properties"
 msgid "Proper&ties"
 msgstr "Egenskaber"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:87 dlls/shdoclc/shdoclc.rc:79
+#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:79
 #: dlls/shdoclc/shdoclc.rc:93 dlls/shdoclc/shdoclc.rc:117
 #: dlls/shdoclc/shdoclc.rc:159 dlls/shdoclc/shdoclc.rc:183
 #: dlls/user32/user32.rc:60 programs/wordpad/wordpad.rc:112
 msgid "Cu&t"
 msgstr "&Klip"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:88 dlls/shdoclc/shdoclc.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:90 dlls/shdoclc/shdoclc.rc:80
 #: dlls/shdoclc/shdoclc.rc:94 dlls/shdoclc/shdoclc.rc:118
 #: dlls/shdoclc/shdoclc.rc:133 dlls/shdoclc/shdoclc.rc:160
 #: dlls/shdoclc/shdoclc.rc:184 dlls/shell32/shell32.rc:98
@@ -3442,12 +3484,12 @@ msgstr "&Klip"
 msgid "&Copy"
 msgstr "&Kopier"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:119
+#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:119
 #: dlls/shell32/shell32.rc:64
 msgid "Paste"
 msgstr "Indsæt"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:121
+#: dlls/hhctrl.ocx/hhctrl.rc:93 dlls/shdoclc/shdoclc.rc:121
 #: dlls/shell32/shell32.rc:166
 msgid "&Print"
 msgstr "&Udskriv"
@@ -3476,38 +3518,44 @@ msgstr "Skjul &faner"
 msgid "Show &Tabs"
 msgstr "Vis &faner"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:42
+#: dlls/hhctrl.ocx/hhctrl.rc:39
+#, fuzzy
+#| msgid "New Folder"
+msgid "Select Topic"
+msgstr "Ny mappe"
+
+#: dlls/hhctrl.ocx/hhctrl.rc:44
 msgid "Show"
 msgstr "Vis"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:43 dlls/winemac.drv/winemac.rc:34
+#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/winemac.drv/winemac.rc:34
 msgid "Hide"
 msgstr "Skjul"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:44 dlls/ieframe/ieframe.rc:68
+#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:68
 #: dlls/shdoclc/shdoclc.rc:167 dlls/shdoclc/shdoclc.rc:191
 msgid "Stop"
 msgstr "Stop"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/ieframe/ieframe.rc:69
+#: dlls/hhctrl.ocx/hhctrl.rc:47 dlls/ieframe/ieframe.rc:69
 #: dlls/shell32/shell32.rc:62
 msgid "Refresh"
 msgstr "Opdater"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:66
+#: dlls/hhctrl.ocx/hhctrl.rc:48 dlls/ieframe/ieframe.rc:66
 msgid "Back"
 msgstr "Tilbage"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:47
+#: dlls/hhctrl.ocx/hhctrl.rc:49
 msgctxt "table of contents"
 msgid "Home"
 msgstr "Hjem"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:48
+#: dlls/hhctrl.ocx/hhctrl.rc:50
 msgid "Sync"
 msgstr "Synkroniser"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:51 dlls/ieframe/ieframe.rc:67
+#: dlls/hhctrl.ocx/hhctrl.rc:53 dlls/ieframe/ieframe.rc:67
 msgid "Forward"
 msgstr "Frem"
 
@@ -3993,7 +4041,7 @@ msgstr "Objektet understøtter ikke denne egenskab eller metode"
 msgid "Object doesn't support this action"
 msgstr "Objektet understøtter ikke denne metode"
 
-#: dlls/jscript/jscript.rc:36
+#: dlls/jscript/jscript.rc:36 dlls/vbscript/vbscript.rc:54
 msgid "Argument not optional"
 msgstr "Argument ikke valgfrit"
 
@@ -8537,7 +8585,7 @@ msgstr "Hele netværket"
 msgid "Sound Selection"
 msgstr "Lyd valg"
 
-#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:77
+#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:78
 msgid "&Save As..."
 msgstr "Gem &som..."
 
@@ -10768,7 +10816,8 @@ msgctxt "display name"
 msgid "Desktop"
 msgstr "Skrivebord"
 
-#: dlls/shell32/shell32.rc:152 programs/regedit/regedit.rc:243
+#: dlls/shell32/shell32.rc:152 dlls/urlmon/urlmon.rc:56
+#: programs/regedit/regedit.rc:243
 msgid "My Computer"
 msgstr "Min computer"
 
@@ -13592,6 +13641,55 @@ msgstr "&Installer"
 msgid "Install"
 msgstr "&Installer"
 
+#: dlls/urlmon/urlmon.rc:58
+#, fuzzy
+#| msgid "Local Port"
+msgid "Local intranet"
+msgstr "Lokal port"
+
+#: dlls/urlmon/urlmon.rc:60
+#, fuzzy
+#| msgid "Trusted Publishers"
+msgid "Trusted sites"
+msgstr "Troværdige udgivere"
+
+#: dlls/urlmon/urlmon.rc:62
+#, fuzzy
+#| msgid "Ethernet"
+msgid "Internet"
+msgstr "Ethernet"
+
+#: dlls/urlmon/urlmon.rc:64
+msgid "Restricted sites"
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:57
+#, fuzzy
+#| msgid "My Computer"
+msgid "Your computer"
+msgstr "Min computer"
+
+#: dlls/urlmon/urlmon.rc:59
+msgid ""
+"This zone contains all Web sites that are on your organization's intranet."
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:61
+msgid ""
+"This zone contains Web sites that you trust not to damage your computer or "
+"data."
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:63
+msgid "This zone contains all Web sites you haven't placed in other zones"
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:65
+msgid ""
+"This zone contains Web sites that could potentially damage your computer or "
+"data."
+msgstr ""
+
 #: dlls/user32/user32.rc:30 dlls/user32/user32.rc:43
 #: programs/taskmgr/taskmgr.rc:138
 msgctxt "window"
@@ -13761,7 +13859,7 @@ msgstr "Objektet understøtter ikke denne metode"
 msgid "Object doesn't support current locale setting"
 msgstr "Objektet understøtter ikke denne metode"
 
-#: dlls/vbscript/vbscript.rc:53 dlls/vbscript/vbscript.rc:54
+#: dlls/vbscript/vbscript.rc:53
 #, fuzzy
 #| msgid "Element not found.\n"
 msgid "Named argument not found"
@@ -19432,6 +19530,40 @@ msgstr "Kører"
 msgid "Task"
 msgstr "Opgave"
 
+#: programs/timeout/timeout.rc:28
+msgid "Usage: timeout /T <timeout> [</NOBREAK>]\n"
+msgstr ""
+
+#: programs/timeout/timeout.rc:29
+#, fuzzy
+#| msgid "Invalid command line.\n"
+msgid "TIMEOUT: Bad command line\n"
+msgstr "Ugyldig kommando linje.\n"
+
+#: programs/timeout/timeout.rc:30
+msgid "waiting since %d sec. "
+msgstr ""
+
+#: programs/timeout/timeout.rc:31
+msgid "press CTRL+C..."
+msgstr ""
+
+#: programs/timeout/timeout.rc:32
+#, fuzzy
+#| msgid "Press any key to continue... "
+msgid "press a key to continue..."
+msgstr "Tryk på en tast for at fortsætte... "
+
+#: programs/timeout/timeout.rc:33
+msgid "ERROR: not possible to redirect input\n"
+msgstr ""
+
+#: programs/timeout/timeout.rc:34
+msgid ""
+"ERROR: Timeout value out of range or invalid number. Valid range is -1 to "
+"99999.\n"
+msgstr ""
+
 #: programs/uninstaller/uninstaller.rc:29
 msgid "Wine Application Uninstaller"
 msgstr "Afinstaller programmer"
@@ -20170,11 +20302,11 @@ msgstr ""
 "wineconsole: Start af programmet %s mislykkede.\n"
 "Kommandoen er ugyldig.\n"
 
-#: programs/winedbg/winedbg.rc:50 programs/winedbg/winedbg.rc:38
+#: programs/winedbg/winedbg.rc:51 programs/winedbg/winedbg.rc:38
 msgid "Program Error"
 msgstr "Program Fejl"
 
-#: programs/winedbg/winedbg.rc:55
+#: programs/winedbg/winedbg.rc:56
 msgid ""
 "The program %s has encountered a serious problem and needs to close. We are "
 "sorry for the inconvenience."
@@ -20182,7 +20314,7 @@ msgstr ""
 "Programmet %s er stødt på et alvorligt problem, og er nødt til at lukke. Vi "
 "beklager ulejligheden."
 
-#: programs/winedbg/winedbg.rc:59
+#: programs/winedbg/winedbg.rc:60
 msgid ""
 "This can be caused by a problem in the program or a deficiency in Wine. You "
 "may want to check the <a href=\"https://appdb.winehq.org\">Application "
@@ -20192,15 +20324,15 @@ msgstr ""
 "Wine. Du kan evt. tjekke <a href=\"https://appdb.winehq.org\">Program "
 "Database</a> for tips til at køre dette program."
 
-#: programs/winedbg/winedbg.rc:62
+#: programs/winedbg/winedbg.rc:63
 msgid "Show &Details"
 msgstr "Vis &detaljer"
 
-#: programs/winedbg/winedbg.rc:67
+#: programs/winedbg/winedbg.rc:68
 msgid "Program Error Details"
 msgstr "Programfejl detaljer"
 
-#: programs/winedbg/winedbg.rc:74
+#: programs/winedbg/winedbg.rc:75
 msgid ""
 "If this problem is not present under Windows and has not been reported yet, "
 "you can save the detailed information to a file using the \"Save As\" "
@@ -20209,9 +20341,9 @@ msgid ""
 msgstr ""
 "Hvis dette problem ikke er til stede under Windows, og det endnu ikke er "
 "blevet rapporteret, så kan du gemme den detaljerede information til en fil "
-"ved brug af \"Gem som\" knappen. Derefter <a href=\"https://gitlab.winehq."
-"org/wine/wine/-/wikis/Bugs\">indsend en fejlrapport</a> og vedhæft filen til "
-"rapporten."
+"ved brug af \"Gem som\" knappen. Derefter <a href=\"https://"
+"gitlab.winehq.org/wine/wine/-/wikis/Bugs\">indsend en fejlrapport</a> og "
+"vedhæft filen til rapporten."
 
 #: programs/winedbg/winedbg.rc:40
 msgid ""

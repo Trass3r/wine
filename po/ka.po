@@ -1,12 +1,12 @@
 # Georgian translation for Wine.
 #
-# Ekaterine Papava <papava.e@gtu.ge>, 2023.
+# Ekaterine Papava <papava.e@gtu.ge>, 2023 2025.
 msgid ""
 msgstr ""
 "Project-Id-Version: Wine\n"
 "Report-Msgid-Bugs-To: https://bugs.winehq.org\n"
 "POT-Creation-Date: N/A\n"
-"PO-Revision-Date: 2023-07-09 16:32+0200\n"
+"PO-Revision-Date: 2025-02-02 06:27+0100\n"
 "Last-Translator: Ekaterine Papava <papava.e@gtu.ge>\n"
 "Language-Team: Georgian\n"
 "Language: ka\n"
@@ -14,7 +14,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Poedit 3.3.2\n"
+"X-Generator: Poedit 3.5\n"
 
 #: dlls/aclui/aclui.rc:29 dlls/inetcpl.cpl/inetcpl.rc:90
 #: programs/winefile/winefile.rc:114
@@ -168,8 +168,8 @@ msgid ""
 "install it for you.\n"
 "\n"
 "Note: it is recommended to use your distribution's packages instead. See <a "
-"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://gitlab."
-"winehq.org/wine/wine/-/wikis/Gecko</a> for details."
+"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://"
+"gitlab.winehq.org/wine/wine/-/wikis/Gecko</a> for details."
 msgstr ""
 "Wine-მა ვერ იპოვა Gecko-ის პაკეტი, რომელიც აპლიკაციებში HTML-ის ჩაშენების "
 "სწორად მუშაობისთვის აუცილებელია. შეგვიძლია, გადმოვწეროთ და დავაყენოთ ის.\n"
@@ -530,7 +530,7 @@ msgstr "დეტალების ჩვენება"
 
 #: dlls/comctl32/comctl32.rc:31 dlls/cryptui/cryptui.rc:235
 #: programs/regedit/regedit.rc:291 programs/taskmgr/taskmgr.rc:434
-#: programs/winedbg/winedbg.rc:61 programs/winedbg/winedbg.rc:76
+#: programs/winedbg/winedbg.rc:62 programs/winedbg/winedbg.rc:77
 #: programs/wordpad/wordpad.rc:180
 msgid "Close"
 msgstr "დახურვა"
@@ -581,7 +581,7 @@ msgstr "შენახვა, როგორც"
 
 #: dlls/comdlg32/comdlg32.rc:202 dlls/comdlg32/comdlg32.rc:211
 #: dlls/comdlg32/comdlg32.rc:358 dlls/comdlg32/comdlg32.rc:55
-#: dlls/hhctrl.ocx/hhctrl.rc:49 programs/wordpad/wordpad.rc:173
+#: dlls/hhctrl.ocx/hhctrl.rc:51 programs/wordpad/wordpad.rc:173
 msgid "Print"
 msgstr "დაბეჭდვა"
 
@@ -720,6 +720,7 @@ msgid "Scr&ipt:"
 msgstr "&სკრიპტი:"
 
 #: dlls/comdlg32/comdlg32.rc:283 dlls/comdlg32/comdlg32.rc:288
+#: dlls/compstui/compstui.rc:33
 msgid "Color"
 msgstr "ფერი"
 
@@ -1335,7 +1336,7 @@ msgstr "მმ"
 msgid "Properties"
 msgstr "პარამეტრები"
 
-#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:50
+#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:52
 #: programs/conhost/conhost.rc:51 programs/wordpad/wordpad.rc:166
 msgid "Options"
 msgstr "მორგება"
@@ -1343,6 +1344,43 @@ msgstr "მორგება"
 #: dlls/compstui/compstui.rc:31
 msgid "Default"
 msgstr "ნაგულისხმები"
+
+#: dlls/compstui/compstui.rc:35
+#, fuzzy
+#| msgid "&Copy Background"
+msgid "&Copy count"
+msgstr "&ფონის სურათის კოპირება"
+
+#: dlls/compstui/compstui.rc:36
+#, fuzzy
+#| msgid "Print to File"
+msgid "Print on Both Sides"
+msgstr "ფაილში ბეჭდვა"
+
+#: dlls/compstui/compstui.rc:32
+#, fuzzy
+#| msgid "C&olor:"
+msgid "C&olor"
+msgstr "&ფერი:"
+
+#: dlls/compstui/compstui.rc:34
+msgid "Bla&ck && White"
+msgstr ""
+
+#: dlls/compstui/compstui.rc:37
+#, fuzzy
+#| msgctxt "hotkey"
+#| msgid "None"
+msgid "&None"
+msgstr "არაფერი"
+
+#: dlls/compstui/compstui.rc:38 dlls/compstui/compstui.rc:41
+msgid "Flip on Shor&t Edge"
+msgstr ""
+
+#: dlls/compstui/compstui.rc:39 dlls/compstui/compstui.rc:40
+msgid "Flip on Long E&dge"
+msgstr ""
 
 #: dlls/credui/credui.rc:45
 msgid "&User name:"
@@ -2981,12 +3019,16 @@ msgid ""
 "Software signed by this publisher will no longer be trusted.\n"
 "Are you sure you want to remove this certificate?"
 msgstr ""
+"ამ გამომცემლის მიერ ხელმოწერილი პროგრამები სანდო აღარაა.\n"
+"მართლა გნებავთ, წაშალოთ ეს სერტიფიკატი?"
 
 #: dlls/cryptui/cryptui.rc:119
 msgid ""
 "Software signed by these publishers will no longer be trusted.\n"
 "Are you sure you want to remove these certificates?"
 msgstr ""
+"ამ გამომცემლების მიერ ხელმოწერილი პროგრამები სანდო აღარაა.\n"
+"მართლა გნებავთ, წაშალოთ ეს სერტიფიკატები?"
 
 #: dlls/cryptui/cryptui.rc:120
 msgid "Are you sure you want to remove this certificate?"
@@ -3140,32 +3182,28 @@ msgid "Not yet implemented"
 msgstr "განხორციელებული არაა"
 
 #: dlls/desk.cpl/desk.rc:35
-#, fuzzy
-#| msgctxt "display name"
-#| msgid "Desktop"
 msgid "Desktop"
 msgstr "სამუშაო მაგიდა"
 
 #: dlls/desk.cpl/desk.rc:38
-#, fuzzy
-#| msgctxt "display name"
-#| msgid "Desktop"
 msgid "Virtual Desktop"
-msgstr "სამუშაო მაგიდა"
+msgstr "ვირტუალური სამუშაო მაგიდა"
 
 #: dlls/desk.cpl/desk.rc:40 dlls/joy.cpl/joy.rc:41
 msgid "&Reset"
 msgstr "&საწყისი მნიშვნელობებზე დაბრუნება"
 
+#: dlls/desk.cpl/desk.rc:42
+msgid "Emulate display mode changes (requires restart)"
+msgstr "ეკრანის რეჟიმის ცვლილებების ემულაცია (სჭირდება გადატვირთვა)"
+
 #: dlls/desk.cpl/desk.rc:29
-#, fuzzy
-#| msgid "Default Settings"
 msgid "Display Settings"
-msgstr "ნაგულისხმები პარამეტრები"
+msgstr "ეკრანის მორგება"
 
 #: dlls/desk.cpl/desk.rc:30
 msgid "Configure monitors and display devices."
-msgstr ""
+msgstr "მოირგეთ ეკრანები და ჩვენების მოწყობილობები."
 
 #: dlls/dinput/dinput.rc:34
 msgid "Configure Devices"
@@ -3324,60 +3362,60 @@ msgstr "კამერასთან მიერთება"
 msgid "Connecting to camera... Please Wait"
 msgstr "კამერასთან მიერთება... გთხოვთ მოითმინოთ"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:59
+#: dlls/hhctrl.ocx/hhctrl.rc:61
 msgid "S&ync"
 msgstr "სინქრონიზაცია"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:60 dlls/hhctrl.ocx/hhctrl.rc:73
+#: dlls/hhctrl.ocx/hhctrl.rc:62 dlls/hhctrl.ocx/hhctrl.rc:75
 #: dlls/shdoclc/shdoclc.rc:41 programs/winhlp32/winhlp32.rc:89
 msgid "&Back"
 msgstr "&უკან"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:61 dlls/hhctrl.ocx/hhctrl.rc:74
+#: dlls/hhctrl.ocx/hhctrl.rc:63 dlls/hhctrl.ocx/hhctrl.rc:76
 msgid "&Forward"
 msgstr "&წინ"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:62
+#: dlls/hhctrl.ocx/hhctrl.rc:64
 msgctxt "table of contents"
 msgid "&Home"
 msgstr "&სახლი"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:63
+#: dlls/hhctrl.ocx/hhctrl.rc:65
 msgid "&Stop"
 msgstr "გაჩერება"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:64 dlls/hhctrl.ocx/hhctrl.rc:81
+#: dlls/hhctrl.ocx/hhctrl.rc:66 dlls/hhctrl.ocx/hhctrl.rc:83
 #: dlls/oledb32/version.rc:73 dlls/shdoclc/shdoclc.rc:59
 msgid "&Refresh"
 msgstr "&განახლება"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:65 dlls/hhctrl.ocx/hhctrl.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:67 dlls/hhctrl.ocx/hhctrl.rc:82
 #: programs/winhlp32/winhlp32.rc:34
 msgid "&Print..."
 msgstr "&ბეჭდვა..."
 
-#: dlls/hhctrl.ocx/hhctrl.rc:76 dlls/hhctrl.ocx/hhctrl.rc:90
+#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/hhctrl.ocx/hhctrl.rc:92
 #: dlls/shdoclc/shdoclc.rc:49 dlls/shdoclc/shdoclc.rc:98
 #: dlls/shdoclc/shdoclc.rc:120 dlls/user32/user32.rc:65
 msgid "Select &All"
 msgstr "&ყველას არჩევა"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/shdoclc/shdoclc.rc:54
+#: dlls/hhctrl.ocx/hhctrl.rc:80 dlls/shdoclc/shdoclc.rc:54
 msgid "&View Source"
 msgstr "&წყაროს ნახვა"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:83
+#: dlls/hhctrl.ocx/hhctrl.rc:85
 msgid "Proper&ties"
 msgstr "&თვისებები"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:87 dlls/shdoclc/shdoclc.rc:79
+#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:79
 #: dlls/shdoclc/shdoclc.rc:93 dlls/shdoclc/shdoclc.rc:117
 #: dlls/shdoclc/shdoclc.rc:159 dlls/shdoclc/shdoclc.rc:183
 #: dlls/user32/user32.rc:60 programs/wordpad/wordpad.rc:112
 msgid "Cu&t"
 msgstr "ამ&ოჭრა"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:88 dlls/shdoclc/shdoclc.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:90 dlls/shdoclc/shdoclc.rc:80
 #: dlls/shdoclc/shdoclc.rc:94 dlls/shdoclc/shdoclc.rc:118
 #: dlls/shdoclc/shdoclc.rc:133 dlls/shdoclc/shdoclc.rc:160
 #: dlls/shdoclc/shdoclc.rc:184 dlls/shell32/shell32.rc:98
@@ -3386,12 +3424,12 @@ msgstr "ამ&ოჭრა"
 msgid "&Copy"
 msgstr "&კოპირება"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:119
+#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:119
 #: dlls/shell32/shell32.rc:64
 msgid "Paste"
 msgstr "ჩასმა"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:121
+#: dlls/hhctrl.ocx/hhctrl.rc:93 dlls/shdoclc/shdoclc.rc:121
 #: dlls/shell32/shell32.rc:166
 msgid "&Print"
 msgstr "&ბეჭდვა"
@@ -3420,38 +3458,44 @@ msgstr "&ჩანართების დამალვა"
 msgid "Show &Tabs"
 msgstr "&ჩანართების ჩვენება"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:42
+#: dlls/hhctrl.ocx/hhctrl.rc:39
+#, fuzzy
+#| msgid "Select Source"
+msgid "Select Topic"
+msgstr "წყაროს არჩევა"
+
+#: dlls/hhctrl.ocx/hhctrl.rc:44
 msgid "Show"
 msgstr "ჩვენება"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:43 dlls/winemac.drv/winemac.rc:34
+#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/winemac.drv/winemac.rc:34
 msgid "Hide"
 msgstr "დამალვა"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:44 dlls/ieframe/ieframe.rc:68
+#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:68
 #: dlls/shdoclc/shdoclc.rc:167 dlls/shdoclc/shdoclc.rc:191
 msgid "Stop"
 msgstr "შეჩერება"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/ieframe/ieframe.rc:69
+#: dlls/hhctrl.ocx/hhctrl.rc:47 dlls/ieframe/ieframe.rc:69
 #: dlls/shell32/shell32.rc:62
 msgid "Refresh"
 msgstr "განახლება"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:66
+#: dlls/hhctrl.ocx/hhctrl.rc:48 dlls/ieframe/ieframe.rc:66
 msgid "Back"
 msgstr "უკან"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:47
+#: dlls/hhctrl.ocx/hhctrl.rc:49
 msgctxt "table of contents"
 msgid "Home"
 msgstr "საწყისი"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:48
+#: dlls/hhctrl.ocx/hhctrl.rc:50
 msgid "Sync"
 msgstr "სინქრონიზაცია"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:51 dlls/ieframe/ieframe.rc:67
+#: dlls/hhctrl.ocx/hhctrl.rc:53 dlls/ieframe/ieframe.rc:67
 msgid "Forward"
 msgstr "წინ"
 
@@ -3757,16 +3801,12 @@ msgid "&Enable"
 msgstr "ჩარ&თვა"
 
 #: dlls/joy.cpl/joy.rc:44
-#, fuzzy
-#| msgid "Connected (xinput device)"
 msgid "Connected (DirectInput devices)"
-msgstr "მიერთებულია (xinput მოწყობილობა)"
+msgstr "მიერთებულია (DirectInput მოწყობილობები)"
 
 #: dlls/joy.cpl/joy.rc:46
-#, fuzzy
-#| msgid "Connected (xinput device)"
 msgid "Connected (XInput devices)"
-msgstr "მიერთებულია (xinput მოწყობილობა)"
+msgstr "მიერთებულია (XInput მოწყობილობები)"
 
 #: dlls/joy.cpl/joy.rc:48
 msgid "Disabled"
@@ -3775,18 +3815,15 @@ msgstr "გამოირთო"
 #: dlls/joy.cpl/joy.rc:51
 msgid "Advanced settings (restart prefix required to take effect)"
 msgstr ""
+"დამატებითი პარამეტრები (ძალაში შესასვლელად საჭიროა პრეფიქსის გადატვირთვა)"
 
 #: dlls/joy.cpl/joy.rc:52
-#, fuzzy
-#| msgid "&Enable"
 msgid "Enable SDL"
-msgstr "ჩარ&თვა"
+msgstr "SDL-ის ჩართვა"
 
 #: dlls/joy.cpl/joy.rc:53
-#, fuzzy
-#| msgid "Disabled"
 msgid "Disable hidraw"
-msgstr "გამოირთო"
+msgstr "'hidraw'-ის გათიშვა"
 
 #: dlls/joy.cpl/joy.rc:58
 msgid "DInput"
@@ -3841,24 +3878,32 @@ msgid ""
 "No user detected on slot #0, make sure your gamepad is plugged in, and not "
 "overridden for DInput in the Joysticks tab."
 msgstr ""
+"სლოტზე #0 მომხმარებელი აღმოჩენილი არაა. დარწმუნდით, რომ გეიმპადი მიერთებულია "
+"და რომ მას ჯოისტიკების ჩანართში DInput არ ფარავს."
 
 #: dlls/joy.cpl/joy.rc:85
 msgid ""
 "No user detected on slot #1, make sure your gamepad is plugged in, and not "
 "overridden for DInput in the Joysticks tab."
 msgstr ""
+"სლოტზე #1 მომხმარებელი აღმოჩენილი არაა. დარწმუნდით, რომ გეიმპადი მიერთებულია "
+"და რომ მას ჯოისტიკების ჩანართში DInput არ ფარავს."
 
 #: dlls/joy.cpl/joy.rc:89
 msgid ""
 "No user detected on slot #2, make sure your gamepad is plugged in, and not "
 "overridden for DInput in the Joysticks tab."
 msgstr ""
+"სლოტზე #2 მომხმარებელი აღმოჩენილი არაა. დარწმუნდით, რომ გეიმპადი მიერთებულია "
+"და რომ მას ჯოისტიკების ჩანართში DInput არ ფარავს."
 
 #: dlls/joy.cpl/joy.rc:93
 msgid ""
 "No user detected on slot #3, make sure your gamepad is plugged in, and not "
 "overridden for DInput in the Joysticks tab."
 msgstr ""
+"სლოტზე #3 მომხმარებელი აღმოჩენილი არაა. დარწმუნდით, რომ გეიმპადი მიერთებულია "
+"და რომ მას ჯოისტიკების ჩანართში DInput არ ფარავს."
 
 #: dlls/joy.cpl/joy.rc:98 dlls/joy.cpl/joy.rc:99 dlls/joy.cpl/joy.rc:100
 #: dlls/joy.cpl/joy.rc:101
@@ -3905,7 +3950,7 @@ msgstr "ობიექტს თვისების ან მეთოდი
 msgid "Object doesn't support this action"
 msgstr "ობიექტს ამ ქმედების მხარდაჭერა არ გააჩნია"
 
-#: dlls/jscript/jscript.rc:36
+#: dlls/jscript/jscript.rc:36 dlls/vbscript/vbscript.rc:54
 msgid "Argument not optional"
 msgstr "არგუმენტი არასავალდებულო არაა"
 
@@ -4101,10 +4146,8 @@ msgid "Cannot modify non-writable property '|'"
 msgstr "არაჩაწერადი თვისების '|' შეცვლა შეუძლებელია"
 
 #: dlls/jscript/jscript.rc:81
-#, fuzzy
-#| msgid "'this' is not a | object"
 msgid "'this' is not a DataView object"
-msgstr "'this'-ი | ტიპის ობიექტი არაა"
+msgstr "'this'-ი DataView ტიპის ობიექტი არაა"
 
 #: dlls/jscript/jscript.rc:82
 msgid "Required argument offset or value in DataView method is not specified"
@@ -4112,27 +4155,23 @@ msgstr ""
 
 #: dlls/jscript/jscript.rc:83
 msgid "DataView operation access beyond specified buffer length"
-msgstr ""
+msgstr "DataView ოპერაციის წვდომა მითითებული ბუფერის სიგრძის მიღმა"
 
 #: dlls/jscript/jscript.rc:84
 msgid "DataView constructor argument offset is invalid"
-msgstr ""
+msgstr "DataView კონსტრუქტორის არგუმენტის წანაცვლება არასწორია"
 
 #: dlls/jscript/jscript.rc:85
 msgid "'this' is not a | object"
 msgstr "'this'-ი | ტიპის ობიექტი არაა"
 
 #: dlls/jscript/jscript.rc:86
-#, fuzzy
-#| msgid "'this' is not a | object"
 msgid "'key' is not an object"
-msgstr "'this'-ი | ტიპის ობიექტი არაა"
+msgstr "'key' ობიექტი არაა"
 
 #: dlls/jscript/jscript.rc:87
-#, fuzzy
-#| msgid "Array object expected"
 msgid "ArrayBuffer object expected"
-msgstr "მოველოდი მასივის ობიექტს"
+msgstr "მოველოდი ArrayBuffer ტიპის ობიექტს"
 
 #: dlls/jscript/jscript.rc:88
 msgid "Property cannot have both accessors and a value"
@@ -5717,7 +5756,7 @@ msgstr ""
 
 #: dlls/kernelbase/winerror.mc:1953
 msgid "No impersonation token.\n"
-msgstr ""
+msgstr "განსახიერების კოდის გარეშე.\n"
 
 #: dlls/kernelbase/winerror.mc:1958
 msgid "Can't disable mandatory group.\n"
@@ -5861,7 +5900,7 @@ msgstr "არასწორი ჯგუფის ატრიბუტებ�
 
 #: dlls/kernelbase/winerror.mc:2133
 msgid "Bad impersonation level.\n"
-msgstr ""
+msgstr "არასწორი განსახიერების დონე,\n"
 
 #: dlls/kernelbase/winerror.mc:2138
 msgid "Can't open anonymous security token.\n"
@@ -5949,7 +5988,7 @@ msgstr "არასწორი შესვლის ტიპი.\n"
 
 #: dlls/kernelbase/winerror.mc:2243
 msgid "Cannot impersonate.\n"
-msgstr ""
+msgstr "განსახიერება შეუძლებელია.\n"
 
 #: dlls/kernelbase/winerror.mc:2248
 msgid "Invalid transaction state.\n"
@@ -6291,7 +6330,7 @@ msgstr "სვოპის ფაილის კვოტის გარეშ
 
 #: dlls/kernelbase/winerror.mc:2673
 msgid "Exceeded commitment limit.\n"
-msgstr ""
+msgstr "გადაჭარბებულია ოპერაციების გადაცემის ზღვარი.\n"
 
 #: dlls/kernelbase/winerror.mc:2678
 msgid "Menu item not found.\n"
@@ -6819,7 +6858,7 @@ msgstr "ბაიტების რაოდენობა მეტისმ�
 
 #: dlls/kernelbase/winerror.mc:3328
 msgid "Bad stub data.\n"
-msgstr ""
+msgstr "არასწორი ადგილმჭერის მონაცემები.\n"
 
 #: dlls/kernelbase/winerror.mc:3333
 msgid "Invalid user buffer.\n"
@@ -7007,7 +7046,7 @@ msgstr ""
 
 #: dlls/kernelbase/winerror.mc:3558
 msgid "Wrong stub version.\n"
-msgstr ""
+msgstr "არასწორი ადგილმჭერის ვერსია.\n"
 
 #: dlls/kernelbase/winerror.mc:3563
 msgid "Invalid pipe object.\n"
@@ -7175,7 +7214,7 @@ msgstr "არასწორი არგუმენტი.\n"
 
 #: dlls/kernelbase/winerror.mc:3778
 msgid "Cannot assign requested address.\n"
-msgstr ""
+msgstr "მითითებული მისამართის მინიჭება შეუძლებელია.\n"
 
 #: dlls/kernelbase/winerror.mc:3783
 msgid "Connection reset by peer.\n"
@@ -7428,7 +7467,7 @@ msgstr "A4 ექსტრა"
 
 #: dlls/localspl/localspl.rc:88
 msgid "Letter Transverse"
-msgstr ""
+msgstr "წერილი განივი"
 
 #: dlls/localspl/localspl.rc:89
 msgid "A4 Transverse"
@@ -8160,7 +8199,7 @@ msgstr "მთელი ქსელი"
 msgid "Sound Selection"
 msgstr "ხმის არჩევა"
 
-#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:77
+#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:78
 msgid "&Save As..."
 msgstr "&შენახვა, როგორც..."
 
@@ -8205,6 +8244,8 @@ msgid ""
 "The specified installation package could not be opened. Please check the "
 "file path and try again."
 msgstr ""
+"მითითებული დაყენების პაკეტის გახსნა შეუძლებელია. შეამოწმეთ ფაილის ბილიკი და "
+"თავიდან სცადეთ."
 
 #: dlls/msi/msi.rc:32
 msgid "path %s not found"
@@ -9254,7 +9295,7 @@ msgstr "ქსელის მორგება"
 
 #: dlls/oledb32/version.rc:96
 msgid "&Impersonation level:"
-msgstr ""
+msgstr "განსახ&იერების დონე:"
 
 #: dlls/oledb32/version.rc:98
 msgid "P&rotection level:"
@@ -10126,7 +10167,8 @@ msgctxt "display name"
 msgid "Desktop"
 msgstr "სამუშაო მაგიდა"
 
-#: dlls/shell32/shell32.rc:152 programs/regedit/regedit.rc:243
+#: dlls/shell32/shell32.rc:152 dlls/urlmon/urlmon.rc:56
+#: programs/regedit/regedit.rc:243
 msgid "My Computer"
 msgstr "ჩემი კომპიუტერი"
 
@@ -10136,7 +10178,7 @@ msgstr "მართვის პანელი"
 
 #: dlls/shell32/shell32.rc:162
 msgid "Ne&w"
-msgstr ""
+msgstr "ახა&ლი"
 
 #: dlls/shell32/shell32.rc:164
 msgid "E&xplore"
@@ -10144,7 +10186,7 @@ msgstr "&დათვალიერება"
 
 #: dlls/shell32/shell32.rc:167
 msgid "Run as &Administrator"
-msgstr ""
+msgstr "გაშვება &ადმინის მომხმარებლით"
 
 #: dlls/shell32/shell32.rc:189
 msgid "Restart"
@@ -12398,6 +12440,55 @@ msgstr "დაყენება (%d)"
 msgid "Install"
 msgstr "დაყენება"
 
+#: dlls/urlmon/urlmon.rc:58
+#, fuzzy
+#| msgid "Local Port"
+msgid "Local intranet"
+msgstr "ლოკალური პორტი"
+
+#: dlls/urlmon/urlmon.rc:60
+#, fuzzy
+#| msgid "Trusted Publishers"
+msgid "Trusted sites"
+msgstr "სანდო გამომცემლები"
+
+#: dlls/urlmon/urlmon.rc:62
+#, fuzzy
+#| msgid "Ethernet"
+msgid "Internet"
+msgstr "Ethernet"
+
+#: dlls/urlmon/urlmon.rc:64
+msgid "Restricted sites"
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:57
+#, fuzzy
+#| msgid "My Computer"
+msgid "Your computer"
+msgstr "ჩემი კომპიუტერი"
+
+#: dlls/urlmon/urlmon.rc:59
+msgid ""
+"This zone contains all Web sites that are on your organization's intranet."
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:61
+msgid ""
+"This zone contains Web sites that you trust not to damage your computer or "
+"data."
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:63
+msgid "This zone contains all Web sites you haven't placed in other zones"
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:65
+msgid ""
+"This zone contains Web sites that could potentially damage your computer or "
+"data."
+msgstr ""
+
 #: dlls/user32/user32.rc:30 dlls/user32/user32.rc:43
 #: programs/taskmgr/taskmgr.rc:138
 msgctxt "window"
@@ -12539,7 +12630,7 @@ msgstr "ობიექტს სახელიანი არგუმენ�
 msgid "Object doesn't support current locale setting"
 msgstr "ობიექტს მიმდინარე ენის პარამეტრის მხარდაჭერა არ გააჩნია"
 
-#: dlls/vbscript/vbscript.rc:53 dlls/vbscript/vbscript.rc:54
+#: dlls/vbscript/vbscript.rc:53
 msgid "Named argument not found"
 msgstr "მითითებული არგუმენტი ვერ ვიპოვე"
 
@@ -12562,7 +12653,7 @@ msgstr "დაშორებული სერვერის მანქა�
 
 #: dlls/vbscript/vbscript.rc:60
 msgid "Invalid or unqualified reference"
-msgstr ""
+msgstr "არასწორი ან შეუსაბამო მიმართვა"
 
 #: dlls/vbscript/vbscript.rc:62
 msgid "Microsoft VBScript compilation error"
@@ -12621,10 +12712,8 @@ msgid "Duplex:"
 msgstr "დუპლექსი:"
 
 #: dlls/wineps.drv/wineps.rc:45
-#, fuzzy
-#| msgid "&Tray:"
 msgid "Paper &Tray:"
-msgstr "&თარო:"
+msgstr "ქაღალდის &თარო:"
 
 #: dlls/wininet/wininet.rc:53 dlls/wininet/wininet.rc:73
 msgid "Realm"
@@ -12669,7 +12758,7 @@ msgstr "სერტიფიკატს სულ ცოტა ერთი �
 
 #: dlls/wininet/wininet.rc:35
 msgid "Effective Date"
-msgstr ""
+msgstr "ძალაში შესვლის თარიღი"
 
 #: dlls/wininet/wininet.rc:37
 msgid "Security Protocol"
@@ -13094,35 +13183,46 @@ msgid ""
 "The filename is invalid. Make sure the filename is not longer than 8 "
 "characters, followed by a period and an extension."
 msgstr ""
+"ფაილის სახელი არასწორია. დარწმუნდით, რომ ფაილის სახელი 8 სიმბოლოზე ნაკლებია, "
+"შემდეგ არის წერტილი და შემდეგ ფაილის გაფართოება."
 
 #: dlls/winmm/winmm.rc:104
 msgid ""
 "Cannot specify extra characters after a string enclosed in quotation marks."
 msgstr ""
+"სტრიქონის ბრჭყალებში ჩასმის შემდეგ დამატებით სიმბოლოებს ვეღარ მიუთითებთ."
 
 #: dlls/winmm/winmm.rc:105
 msgid ""
 "The specified device is not installed on the system. Use the Drivers option "
 "in Control Panel to install the device."
 msgstr ""
+"მითითებული მოწყობილობა თქვენს სისტემაში დაყენებული არაა. გამოიყენეთ "
+"დრაივერების პარამეტრი კონტროლის პანელში, რომ დააყენოთ მოწყობილობა."
 
 #: dlls/winmm/winmm.rc:106
 msgid ""
 "Cannot access the specified file or MCI device. Try changing directories or "
 "restarting your computer."
 msgstr ""
+"მითითებულ ფაილთან ან MCI მოწყობილობასთან წვდომა შეუძლებელი. სცადეთ, შეცვალოთ "
+"საქაღალდეები, ან გადატვირთოთ თქვენი კომპიუტერი."
 
 #: dlls/winmm/winmm.rc:107
 msgid ""
 "Cannot access the specified file or MCI device because the application "
 "cannot change directories."
 msgstr ""
+"მითითებულ ფაილთან ან MCI მოწყობილობასთან წვომა შეუძლებელია, რადგან აპლიკაცია "
+"საქაღალდეებს ვერ ცვლის."
 
 #: dlls/winmm/winmm.rc:108
 msgid ""
 "Cannot access specified file or MCI device because the application cannot "
 "change drives."
 msgstr ""
+"მითითებულ ფაილთან ან MCI მოწყობილობასთან წვომა შეუძლებელია, რადგან აპლიკაცია "
+"დისკს ვერ ცვლის."
 
 #: dlls/winmm/winmm.rc:109
 msgid "Specify a device or driver name that is less than 79 characters."
@@ -13209,12 +13309,16 @@ msgid ""
 "The specified MIDI port is already in use. Wait until it is free, and then "
 "try again."
 msgstr ""
+"მითითებული MIDI პორტი უკვე გამოიყენება. მოითმინეთ, სანამ ის გადათვისუფლდება "
+"და თავიდან სცადეთ."
 
 #: dlls/winmm/winmm.rc:131
 msgid ""
 "The specified MIDI device is not installed on the system. Use the Drivers "
 "option from the Control Panel to install a MIDI device."
 msgstr ""
+"მითითებული MIDI მოწყობილობა სისტემაში დაყენებული არაა. MIDI მოწყობილობის "
+"დასაყენებლად კონტროლის პანელში დრაივერების პარამეტრი აირჩიეთ."
 
 #: dlls/winmm/winmm.rc:130
 msgid "An error occurred with the specified port."
@@ -13225,6 +13329,8 @@ msgid ""
 "All multimedia timers are being used by other applications. Quit one of "
 "these applications, and then try again."
 msgstr ""
+"ყველა მულტიმედია ტაიმერი ამჟამად სხვა მოწყობილობების მიერ გამოიყენება. "
+"გამორთეთ ერთ-ერთი ასეთი აპლიკაცია და თავიდან სცადეთ."
 
 #: dlls/winmm/winmm.rc:132
 msgid "The system doesn't have a current MIDI port specified."
@@ -13235,6 +13341,8 @@ msgid ""
 "The system has no installed MIDI devices. Use the Drivers option from the "
 "Control Panel to install a MIDI driver."
 msgstr ""
+"თქვენს სისტემაში MIDI მოწყობილობები დაყენებული არაა. MIDI დრაივერის "
+"დასაყენებლად კონტროლის პანელიდან დრაივერების არჩევანი გამოიყენეთ."
 
 #: dlls/winmm/winmm.rc:122
 msgid "There is no display window."
@@ -13249,12 +13357,16 @@ msgid ""
 "Cannot read the specified file. Make sure the file is still present, or "
 "check your disk or network connection."
 msgstr ""
+"მითითებული ფაილის წაკითხვა შეუძლებელია. დარწმუნდით, რომ ფაილი ჯერ კიდევ "
+"არსებობს, ან შეამოწმეთ თქვენი დისკი ან ქსელთან მიერთების სტატუსი."
 
 #: dlls/winmm/winmm.rc:125
 msgid ""
 "Cannot write to the specified file. Make sure you have enough disk space or "
 "are still connected to the network."
 msgstr ""
+"მითითებული ფაილში ჩაწერა შეუძლებელია. დარწმუნდით, რომ დისკზე ადგილი ჯერ "
+"კიდევ გაქვთ, ან ქსელთან მიერთების სტატუსი."
 
 #: dlls/winmm/winmm.rc:136
 msgid "Wine Sound Mapper"
@@ -13526,7 +13638,7 @@ msgstr "მარყუჟი მიმართვების დამუშ�
 
 #: dlls/wldap32/wldap32.rc:129
 msgid "Referral hop limit exceeded"
-msgstr ""
+msgstr "გადაჭარბებულია მიმართვის ნახტომების ზღვარი"
 
 #: programs/attrib/attrib.rc:30 programs/cmd/cmd.rc:370
 msgid ""
@@ -13897,7 +14009,7 @@ msgstr ""
 
 #: programs/cmd/cmd.rc:253
 msgid "VER displays the version of cmd you are running.\n"
-msgstr ""
+msgstr "VER აჩვენებს თქვენი cmd-ის ვერსიას.\n"
 
 #: programs/cmd/cmd.rc:256
 msgid "VOL shows the volume label of a disk device.\n"
@@ -14041,7 +14153,7 @@ msgstr "დ"
 #: programs/cmd/cmd.rc:364 programs/reg/reg.rc:127 programs/xcopy/xcopy.rc:44
 msgctxt "No key"
 msgid "N"
-msgstr "ა"
+msgstr "N"
 
 #: programs/cmd/cmd.rc:365
 msgid "File association missing for extension %1\n"
@@ -14110,7 +14222,7 @@ msgstr "სკრიპტის ჭდის გამოყენება შ
 #: programs/cmd/cmd.rc:383 programs/reg/reg.rc:128 programs/xcopy/xcopy.rc:45
 msgctxt "All key"
 msgid "A"
-msgstr "ა"
+msgstr "A"
 
 #: programs/cmd/cmd.rc:384
 msgid "Delete %1?"
@@ -14208,22 +14320,16 @@ msgid ""
 msgstr ""
 
 #: programs/cmd/cmd.rc:407
-#, fuzzy
-#| msgid "Syntax error\n"
 msgid "Syntax error: unexpected %1\n"
-msgstr "სინტაქსური შეცდომა\n"
+msgstr "სინტაქსური შეცდომა: მოულოდნელი %1\n"
 
 #: programs/cmd/cmd.rc:408
-#, fuzzy
-#| msgid "End of file.\n"
 msgid "End of line"
-msgstr "ფაილის დასასრული.\n"
+msgstr "სტრიქონის დასასრული"
 
 #: programs/cmd/cmd.rc:409
-#, fuzzy
-#| msgid "End of file.\n"
 msgid "End of file"
-msgstr "ფაილის დასასრული.\n"
+msgstr "ფაილის ბოლო"
 
 #: programs/conhost/conhost.rc:54
 msgid "Cursor size"
@@ -14399,24 +14505,19 @@ msgid "&Run..."
 msgstr "&გაშვება..."
 
 #: programs/explorer/explorer.rc:36
-#, fuzzy
-#| msgid "E&xit Windows"
 msgid "E&xit desktop"
-msgstr "&Windows-დან გასვლა"
+msgstr "&გასვლა სამუშაო მაგიდიდან"
 
 #: programs/explorer/explorer.rc:37
-#, fuzzy
-#| msgid "Are you sure you want to delete these values?"
 msgid ""
 "Are you sure you want to close all programs and exit the virtual desktop?"
-msgstr "დარწმუნებული ბრძანდებით, რომ გნებავთ, წაშალოთ ეს მნიშვნელობები?"
+msgstr ""
+"დარწმუნებული ბრძანდებით, რომ გნებავთ, დახუროთ ყველა პროგრამა და გახვიდეთ "
+"ვირტუალური სამუშაო მაგიდიდან?"
 
 #: programs/explorer/explorer.rc:38
-#, fuzzy
-#| msgctxt "display name"
-#| msgid "Desktop"
 msgid "Wine Desktop"
-msgstr "სამუშაო მაგიდა"
+msgstr "Wine-ის სამუშაო მაგიდა"
 
 #: programs/findstr/findstr.rc:28
 msgid "Usage: findstr /options string\n"
@@ -14553,53 +14654,38 @@ msgid "Usage: klist <tickets | tgt | purge | get [service principal name]>\n"
 msgstr ""
 
 #: programs/klist/klist.rc:29
-#, fuzzy
-#| msgid "Unknown error"
 msgid "Unknown error\n"
-msgstr "უცნობი შეცდომა"
+msgstr "უცნობი შეცდომა\n"
 
 #: programs/klist/klist.rc:30
-#, fuzzy
-#| msgid "Start Menu"
 msgid "Start Time"
-msgstr "Start Menu"
+msgstr "დაწყების დრო"
 
 #: programs/klist/klist.rc:31
-#, fuzzy
-#| msgctxt "maximum 31 characters"
-#| msgid "FLE Standard Time"
 msgid "End Time"
-msgstr "FLE-ის სტანდარტული დრო"
+msgstr "დასრულების დრო"
 
 #: programs/klist/klist.rc:32
-#, fuzzy
-#| msgid "Enter new time: "
 msgid "Renew Time"
-msgstr "შეიყვანეთ ახალი დრო: "
+msgstr "დროის თავიდან განახლება"
 
 #: programs/klist/klist.rc:33
 msgid "Ticket Flags"
-msgstr ""
+msgstr "ბილეთის ალმები"
 
 #: programs/klist/klist.rc:34
 msgid "Cached Tickets"
-msgstr ""
+msgstr "დაკეშილი ბილეთები"
 
 #: programs/klist/klist.rc:36
-#, fuzzy
-#| msgid "Encryption Type"
 msgid "KerbTicket Encryption Type"
-msgstr "დაშიფვრის ტიპი"
+msgstr "KerbTicket დაშიფვრის ტიპი"
 
 #: programs/klist/klist.rc:37
-#, fuzzy
-#| msgid "Current Connections"
 msgid "Current LogonId is"
-msgstr "მიმდინარე შეერთებები"
+msgstr "მიმდინარე LogonId-ის მნიშვნელობაა"
 
 #: programs/klist/klist.rc:38
-#, fuzzy
-#| msgid "client"
 msgid "Client"
 msgstr "კლიენტი"
 
@@ -14721,7 +14807,7 @@ msgstr "გაშვებულია შემდეგი სერვის�
 
 #: programs/net/net.rc:44
 msgid "A command was used with conflicting switches.\n"
-msgstr ""
+msgstr "ბრძანება ურთიერთგამომრიცხავი პარამეტრებით გამოიყენება.\n"
 
 #: programs/netstat/netstat.rc:30
 msgid "Active Connections"
@@ -15926,15 +16012,15 @@ msgstr "რეე: არასწორი პარამეტრი [%1]. "
 
 #: programs/reg/reg.rc:122
 msgid "reg: The option [/d] must be followed by a valid numeric value\n"
-msgstr ""
+msgstr "reg: პარამეტრს [/d] სწორი რიცხვითი მნიშვნელობა უნდა მოჰყვებოდეს\n"
 
 #: programs/reg/reg.rc:123
 msgid "reg: The option [/d] must be followed by a valid hexadecimal value\n"
-msgstr ""
+msgstr "reg: პარამეტრს [/d] სწორი თექვსმეტობითი მნიშვნელობა უნდა მოჰყვებოდეს\n"
 
 #: programs/reg/reg.rc:136
 msgid "reg: The option [/d] must be followed by a valid string\n"
-msgstr ""
+msgstr "reg: პარამეტრს [/d] სწორი სტრიქონი უნდა მოჰყვებოდეს\n"
 
 #: programs/reg/reg.rc:124
 msgid "reg: Unhandled registry data type [/t 0x%1!x!, /d %2]\n"
@@ -16379,7 +16465,7 @@ msgstr "regedit: ხაზი '%1' ვერ ვიცანი.\n"
 
 #: programs/regedit/regedit.rc:428
 msgid "regedit: Unable to add the registry value '%1' to '%2'.\n"
-msgstr ""
+msgstr "regedit: ვერ დავამატე რეესტრის მნიშვნელობა '%1' გასაღებს '%2'.\n"
 
 #: programs/regedit/regedit.rc:429
 msgid "regedit: Unable to open the registry key '%1'.\n"
@@ -16389,10 +16475,14 @@ msgstr "regedit: რეესტრის გასაღების '%1' გ�
 msgid ""
 "regedit: Unsupported registry data type [0x%1!x!] encountered in '%2'.\n"
 msgstr ""
+"regedit: აღმოჩენილია მხარდაუჭერელი რეესტრის მონაცემების ტიპი [0x%1!x!] "
+"ფაილში '%2'.\n"
 
 #: programs/regedit/regedit.rc:431
 msgid "regedit: The registry value '%1' will be exported as binary data.\n"
 msgstr ""
+"regedit: რეესტრის მნიშვნელობის '%1' გატანა ბინარული მონაცემების სახით "
+"მოხდება.\n"
 
 #: programs/regedit/regedit.rc:432
 msgid "regedit: Invalid system key [%1]\n"
@@ -16431,7 +16521,7 @@ msgstr "სტატუსის ზოლის ჩვენება/დამ
 
 #: programs/regedit/regedit.rc:195
 msgid "Changes the position of the split between two panes"
-msgstr ""
+msgstr "ცვლის გაყოფის მდებარეობას ორ პანელს შორის"
 
 #: programs/regedit/regedit.rc:196
 msgid "Refreshes the window"
@@ -17600,6 +17690,40 @@ msgstr "გაშვებულია"
 msgid "Task"
 msgstr "დავალება"
 
+#: programs/timeout/timeout.rc:28
+msgid "Usage: timeout /T <timeout> [</NOBREAK>]\n"
+msgstr ""
+
+#: programs/timeout/timeout.rc:29
+#, fuzzy
+#| msgid "FINDSTR: Bad command line\n"
+msgid "TIMEOUT: Bad command line\n"
+msgstr "FINDSTR: არასორი ბრძანების სტრიქონი\n"
+
+#: programs/timeout/timeout.rc:30
+msgid "waiting since %d sec. "
+msgstr ""
+
+#: programs/timeout/timeout.rc:31
+msgid "press CTRL+C..."
+msgstr ""
+
+#: programs/timeout/timeout.rc:32
+#, fuzzy
+#| msgid "Press any key to continue... "
+msgid "press a key to continue..."
+msgstr "გასაგრძელებლად დააჭირეთ ნებისმიერ ღილაკს... "
+
+#: programs/timeout/timeout.rc:33
+msgid "ERROR: not possible to redirect input\n"
+msgstr ""
+
+#: programs/timeout/timeout.rc:34
+msgid ""
+"ERROR: Timeout value out of range or invalid number. Valid range is -1 to "
+"99999.\n"
+msgstr ""
+
 #: programs/uninstaller/uninstaller.rc:29
 msgid "Wine Application Uninstaller"
 msgstr "Wine-ის აპლიკაციების წამშლელი"
@@ -17909,10 +18033,8 @@ msgid "&Theme:"
 msgstr "&თემა:"
 
 #: programs/winecfg/winecfg.rc:295
-#, fuzzy
-#| msgid "&WinRT app theme:"
 msgid "&WinRT theme:"
-msgstr "&WinRT აპის თემა:"
+msgstr "&WinRT თემა:"
 
 #: programs/winecfg/winecfg.rc:297
 msgid "&Install theme..."
@@ -17931,10 +18053,8 @@ msgid "MIME types"
 msgstr "MIME ტიპები"
 
 #: programs/winecfg/winecfg.rc:311
-#, fuzzy
-#| msgid "Manage file &associations"
 msgid "Manage file and protocol &associations"
-msgstr "ფაილების &ასოციაციების მართვა"
+msgstr "ფაილის და პროტოკოლის &ასოციაციების მართვა"
 
 #: programs/winecfg/winecfg.rc:314
 msgid "Folders"
@@ -18134,6 +18254,11 @@ msgid ""
 "Most Windows applications expect drive C to exist, and will die messily if "
 "it doesn't. If you proceed, remember to recreate it!"
 msgstr ""
+"დარწმუნებული ბრძანდებით, რომ გნებავთ, წაშალოთ დისკი C?\n"
+"\n"
+"Windows-ის აპლიკაციების უმრავლესობა ელოდება, რომ დისკი C არსებობს და "
+"შეიძლება, აირიოს, თუ ეს ასე არაა. თუ ამას მაინც იზამთ, არ დაგავიწყდეთ ის "
+"თავიდან შექმნათ!"
 
 #: programs/winecfg/winecfg.rc:76
 msgctxt "Drive letter"
@@ -18260,7 +18385,7 @@ msgstr "აკონტროლებს ალტერნატიულ ფ�
 
 #: programs/winecfg/winecfg.rc:131
 msgid "Hot Tracked Item"
-msgstr ""
+msgstr "ბმული, გამოკვეთა"
 
 #: programs/winecfg/winecfg.rc:132
 msgid "Active Title Bar Gradient"
@@ -18286,32 +18411,34 @@ msgstr ""
 "wineconsole: პროგრამის %s გაშვების შეცდომა.\n"
 "ბრძანება არასწორია.\n"
 
-#: programs/winedbg/winedbg.rc:50 programs/winedbg/winedbg.rc:38
+#: programs/winedbg/winedbg.rc:51 programs/winedbg/winedbg.rc:38
 msgid "Program Error"
 msgstr "პროგრამის შეცდომა"
 
-#: programs/winedbg/winedbg.rc:55
+#: programs/winedbg/winedbg.rc:56
 msgid ""
 "The program %s has encountered a serious problem and needs to close. We are "
 "sorry for the inconvenience."
 msgstr ""
+"პროგრამას %s სერიოზულ პრობლემა შეექმნა და საჭიროა, დაიხუროს. უკაცრავად "
+"უხერხულობისთვის."
 
-#: programs/winedbg/winedbg.rc:59
+#: programs/winedbg/winedbg.rc:60
 msgid ""
 "This can be caused by a problem in the program or a deficiency in Wine. You "
 "may want to check the <a href=\"https://appdb.winehq.org\">Application "
 "Database</a> for tips about running this application."
 msgstr ""
 
-#: programs/winedbg/winedbg.rc:62
+#: programs/winedbg/winedbg.rc:63
 msgid "Show &Details"
 msgstr "&დეტალების ჩვენება"
 
-#: programs/winedbg/winedbg.rc:67
+#: programs/winedbg/winedbg.rc:68
 msgid "Program Error Details"
 msgstr "პროგრამის შეცდომის დეტალები"
 
-#: programs/winedbg/winedbg.rc:74
+#: programs/winedbg/winedbg.rc:75
 msgid ""
 "If this problem is not present under Windows and has not been reported yet, "
 "you can save the detailed information to a file using the \"Save As\" "
@@ -18395,7 +18522,7 @@ msgstr "&გაფილტვრა..."
 
 #: programs/winefile/winefile.rc:66
 msgid "&Drive Bar"
-msgstr ""
+msgstr "&დისკების პანელი"
 
 #: programs/winefile/winefile.rc:68
 msgid "F&ull Screen\tCtrl+Shift+S"
@@ -18711,10 +18838,8 @@ msgid "Help topics: "
 msgstr "დახმარების თემები: "
 
 #: programs/wmic/wmic.rc:28
-#, fuzzy
-#| msgid "Error: Command line not supported\n"
 msgid "Error: Command not supported\n"
-msgstr "შეცდომა: ბრძანების სტრიქონი მხარდაჭერილიარაა\n"
+msgstr "შეცდომა: ბრძანება მხარდაჭერილი არაა\n"
 
 #: programs/wmic/wmic.rc:29
 msgid "Error: Alias not found\n"
@@ -18729,10 +18854,8 @@ msgid "Error: Invalid syntax for PATH\n"
 msgstr "შეცდომა: PATH-ის სინტაქსი არასწორია\n"
 
 #: programs/wmic/wmic.rc:32
-#, fuzzy
-#| msgid "Bad command.\n"
 msgid "Supply a command\n"
-msgstr "არასწორი ბრძანება.\n"
+msgstr "მიუთითეთ ბრძანება\n"
 
 #: programs/wordpad/wordpad.rc:31
 msgid "&New...\tCtrl+N"
@@ -19148,6 +19271,9 @@ msgid ""
 "on the target?\n"
 "(F - File, D - Directory)\n"
 msgstr ""
+"'%1' ფაილის სახელია თუ საქაღალდის\n"
+"სამიზნეზე?\n"
+"(F ფაილი, D - საქაღალდე)\n"
 
 #: programs/xcopy/xcopy.rc:38
 msgid "%1? (Yes|No)\n"
@@ -19168,12 +19294,12 @@ msgstr "შეცდომა \"%1\"-ის კითხვისას\n"
 #: programs/xcopy/xcopy.rc:46
 msgctxt "File key"
 msgid "F"
-msgstr "პარ"
+msgstr "F"
 
 #: programs/xcopy/xcopy.rc:47
 msgctxt "Directory key"
 msgid "D"
-msgstr "რე"
+msgstr "D"
 
 #: programs/xcopy/xcopy.rc:81
 msgid ""

@@ -162,8 +162,10 @@
 @ stdcall CompareStringW(long long wstr long wstr long)
 @ stdcall ConnectNamedPipe(long ptr)
 @ stdcall ContinueDebugEvent(long long long)
+@ stdcall ConvertAuxiliaryCounterToPerformanceCounter(int64 ptr ptr)
 @ stdcall ConvertDefaultLocale(long)
 @ stdcall ConvertFiberToThread()
+@ stdcall ConvertPerformanceCounterToAuxiliaryCounter(int64 ptr ptr)
 @ stdcall ConvertThreadToFiber(ptr)
 @ stdcall ConvertThreadToFiberEx(ptr long)
 @ stdcall ConvertToAutoInheritPrivateObjectSecurity(ptr ptr ptr ptr long ptr)
@@ -241,6 +243,7 @@
 @ stdcall CtrlRoutine(ptr)
 # @ stub CveEventWrite
 @ stdcall DeactivateActCtx(long long)
+@ stdcall DeriveCapabilitySidsFromName(ptr ptr ptr ptr ptr)
 @ stdcall DebugActiveProcess(long)
 @ stdcall DebugActiveProcessStop(long)
 @ stdcall DebugBreak()
@@ -478,7 +481,7 @@
 @ stdcall GetCurrencyFormatEx(wstr long wstr ptr ptr long)
 @ stdcall GetCurrencyFormatW(long long wstr ptr ptr long)
 @ stdcall GetCurrentActCtx(ptr)
-# @ stub GetCurrentApplicationUserModelId
+@ stdcall GetCurrentApplicationUserModelId(ptr ptr)
 @ stdcall GetCurrentConsoleFont(long long ptr)
 @ stdcall GetCurrentConsoleFontEx(long long ptr)
 @ stdcall GetCurrentDirectoryA(long ptr)
@@ -489,7 +492,7 @@
 @ stdcall GetCurrentPackageFamilyName(ptr ptr)
 @ stdcall GetCurrentPackageFullName(ptr ptr)
 @ stdcall GetCurrentPackageId(ptr ptr)
-# @ stub GetCurrentPackageInfo
+@ stdcall GetCurrentPackageInfo(long ptr ptr ptr)
 @ stdcall GetCurrentPackagePath(ptr ptr)
 # @ stub GetCurrentPackageResourcesContext
 # @ stub GetCurrentPackageSecurityContext
@@ -512,6 +515,8 @@
 @ stdcall GetDiskFreeSpaceExA(str ptr ptr ptr)
 @ stdcall GetDiskFreeSpaceExW(wstr ptr ptr ptr)
 @ stdcall GetDiskFreeSpaceW(wstr ptr ptr ptr ptr)
+@ stdcall GetDiskSpaceInformationA(str ptr)
+@ stdcall GetDiskSpaceInformationW(wstr ptr)
 @ stdcall GetDriveTypeA(str)
 @ stdcall GetDriveTypeW(wstr)
 # @ stub GetDurationFormatEx
@@ -1749,10 +1754,12 @@
 @ stdcall WakeByAddressSingle(ptr) ntdll.RtlWakeAddressSingle
 @ stdcall WakeConditionVariable(ptr) ntdll.RtlWakeConditionVariable
 @ stdcall WerGetFlags(ptr ptr)
+@ stdcall WerRegisterCustomMetadata(wstr wstr)
 @ stdcall WerRegisterFile(wstr long long)
 @ stdcall WerRegisterMemoryBlock(ptr long)
 @ stdcall WerRegisterRuntimeExceptionModule(wstr ptr)
 @ stdcall WerSetFlags(long)
+@ stdcall WerUnregisterCustomMetadata(wstr)
 @ stdcall WerUnregisterFile(wstr)
 @ stdcall WerUnregisterMemoryBlock(ptr)
 @ stdcall WerUnregisterRuntimeExceptionModule(wstr ptr)

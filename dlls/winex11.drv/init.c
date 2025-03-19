@@ -194,12 +194,34 @@ static HFONT X11DRV_SelectFont( PHYSDEV dev, HFONT hfont, UINT *aa_flags )
     return dev->funcs->pSelectFont( dev, hfont, aa_flags );
 }
 
+static BOOL needs_client_window_clipping( HWND hwnd )
+{
+    RECT rect, client;
+    UINT ret = 0;
+    HRGN region;
+    HDC hdc;
+
+    NtUserGetClientRect( hwnd, &client, NtUserGetDpiForWindow( hwnd ) );
+    OffsetRect( &client, -client.left, -client.top );
+
+    if (!(hdc = NtUserGetDCEx( hwnd, 0, DCX_CACHE | DCX_USESTYLE ))) return FALSE;
+    if ((region = NtGdiCreateRectRgn( 0, 0, 0, 0 )))
+    {
+        ret = NtGdiGetRandomRgn( hdc, region, SYSRGN );
+        if (ret > 0 && (ret = NtGdiGetRgnBox( region, &rect )) < NULLREGION) ret = 0;
+        if (ret == SIMPLEREGION && EqualRect( &rect, &client )) ret = 0;
+        NtGdiDeleteObjectApp( region );
+    }
+    NtUserReleaseDC( hwnd, hdc );
+
+    return ret > 0;
+}
+
 BOOL needs_offscreen_rendering( HWND hwnd, BOOL known_child )
 {
     if (NtUserGetDpiForWindow( hwnd ) != NtUserGetWinMonitorDpi( hwnd, MDT_RAW_DPI )) return TRUE; /* needs DPI scaling */
     if (NtUserGetAncestor( hwnd, GA_PARENT ) != NtUserGetDesktopWindow()) return TRUE; /* child window, needs compositing */
-    if (NtUserGetWindowRelative( hwnd, GW_CHILD )) return TRUE; /* window has children, needs compositing */
-    if (known_child) return TRUE; /* window is/have children, needs compositing */
+    if (NtUserGetWindowRelative( hwnd, GW_CHILD ) || known_child) return needs_client_window_clipping( hwnd ); /* window has children, needs compositing */
     return FALSE;
 }
 
@@ -349,14 +371,6 @@ static INT X11DRV_ExtEscape( PHYSDEV dev, INT escape, INT in_count, LPCVOID in_d
     return 0;
 }
 
-/**********************************************************************
- *           X11DRV_wine_get_wgl_driver
- */
-static struct opengl_funcs *X11DRV_wine_get_wgl_driver( UINT version )
-{
-    return get_glx_driver( version );
-}
-
 
 static const struct user_driver_funcs x11drv_funcs =
 {
@@ -447,6 +461,7 @@ static const struct user_driver_funcs x11drv_funcs =
     .pWindowMessage = X11DRV_WindowMessage,
     .pWindowPosChanging = X11DRV_WindowPosChanging,
     .pGetWindowStyleMasks = X11DRV_GetWindowStyleMasks,
+    .pGetWindowStateUpdates = X11DRV_GetWindowStateUpdates,
     .pCreateWindowSurface = X11DRV_CreateWindowSurface,
     .pMoveWindowBits = X11DRV_MoveWindowBits,
     .pWindowPosChanged = X11DRV_WindowPosChanged,

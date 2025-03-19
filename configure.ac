@@ -177,25 +177,31 @@ esac
 m4_set_add_all([_AC_SUBST_VARS],[HOST_ARCH]m4_foreach([cpu],[aarch64,arm,arm64ec,i386,x86_64],
                                 [m4_foreach([var],[CC,CFLAGS,EXTRACFLAGS,LDFLAGS,DEBUG,TARGET,STRIP,DELAYLOADFLAG,DISABLED_SUBDIRS],[,cpu[_]var])]))
 
-AC_CACHE_CHECK([for the directory containing the Wine tools], wine_cv_toolsdir,
-  [wine_cv_toolsdir="$with_wine_tools"
-   if test -z "$with_wine_tools"; then
-     if test "$cross_compiling" = "yes"; then
-       AC_MSG_ERROR([you must use the --with-wine-tools option when cross-compiling.])
-     elif test -n "$with_wine64"; then
-       wine_cv_toolsdir="$with_wine64"
-     fi
-   fi])
-if test -z "$wine_cv_toolsdir"; then
-    wine_makedep=tools/makedep$toolsext
-elif test -d "$wine_cv_toolsdir/tools/winebuild"; then
-    wine_makedep=$wine_cv_toolsdir/tools/makedep$toolsext
-    enable_tools=${enable_tools:-no}
-    test -f "$wine_makedep" || AC_MSG_ERROR([the Wine tools have not yet been built in $wine_cv_toolsdir])
-else
-    AC_MSG_ERROR([could not find Wine tools in $wine_cv_toolsdir])
+AC_SUBST(toolsdir,[$with_wine_tools])
+AC_MSG_CHECKING([for the directory containing the Wine tools])
+if test -z "$toolsdir"; then
+    if test "$cross_compiling" = "yes"; then
+        AC_MSG_ERROR([you must use the --with-wine-tools option when cross-compiling.])
+    elif test -n "$with_wine64"; then
+        toolsdir="$with_wine64"
+        libdir64=$(grep "^libdir *=" $with_wine64/Makefile | sed 's/^libdir *= *//')
+        if test "$libdir64" != "$libdir"; then
+            AS_ECHO(["$as_me:${as_lineno-$LINENO}: libdir64: $libdir64"]) >&AS_MESSAGE_LOG_FD
+            AC_MSG_ERROR([when using --with-wine64 you must use the same --libdir in both build trees.])
+        fi
+    fi
 fi
-AC_SUBST(toolsdir,[$wine_cv_toolsdir])
+if test -z "$toolsdir"; then
+    wine_makedep=tools/makedep$toolsext
+elif test -d "$toolsdir/tools/winebuild"; then
+    wine_makedep=$toolsdir/tools/makedep$toolsext
+    enable_tools=${enable_tools:-no}
+    test -f "$wine_makedep" || AC_MSG_ERROR([the Wine tools have not yet been built in $toolsdir])
+else
+    AC_MSG_ERROR([could not find Wine tools in $toolsdir])
+fi
+AC_MSG_RESULT([${toolsdir:-none needed}])
+AC_SUBST(wine64dir,[$with_wine64])
 AC_SUBST(RUNTESTFLAGS,["-q -P wine"])
 AC_SUBST(SED_CMD,["LC_ALL=C sed -e 's,@bindir@,\${bindir},g' -e 's,@PACKAGE_STRING@,$PACKAGE_STRING,g' -e 's,@PACKAGE_VERSION@,$PACKAGE_VERSION,g'"])
 
@@ -608,12 +614,13 @@ case $host_os in
     dnl Disable modules that can't be used on Windows
     enable_loader=${enable_loader:-no}
     enable_server=${enable_server:-no}
+    enable_wine=${enable_wine:-no}
     dnl Disable dependencies that are not useful on Windows
     with_x=${with_x:-no}
     with_pthread=${with_pthread:-no}
     ;;
 
-  darwin*|macosx*)
+  darwin*)
     LIBEXT="dylib"
     DLLFLAGS="$DLLFLAGS -fPIC"
     LDDLLFLAGS="-fPIC"
@@ -829,12 +836,12 @@ do
             ;;
         esac])
 
-    CFLAGS=${CROSSCFLAGS:-"-g -O2"}
     CPPFLAGS=""
-    LDFLAGS=$CROSSLDFLAGS
+    AS_VAR_SET_IF([${wine_arch}_CFLAGS],[],[AS_VAR_SET([${wine_arch}_CFLAGS],[${CROSSCFLAGS:-"-g -O2"}])])
+    AS_VAR_SET_IF([${wine_arch}_LDFLAGS],[],[AS_VAR_SET([${wine_arch}_LDFLAGS],[$CROSSLDFLAGS])])
     AS_VAR_COPY([CC],[${wine_arch}_CC])
-    AS_VAR_COPY([${wine_arch}_CFLAGS],[CFLAGS])
-    AS_VAR_COPY([${wine_arch}_LDFLAGS],[LDFLAGS])
+    AS_VAR_COPY([CFLAGS],[${wine_arch}_CFLAGS])
+    AS_VAR_COPY([LDFLAGS],[${wine_arch}_LDFLAGS])
     AS_VAR_SET([${wine_arch}_EXTRACFLAGS],["-D__WINE_PE_BUILD -Wall"])
 
     target=""
@@ -879,7 +886,7 @@ do
         AS_VAR_SET([${wine_arch}_DELAYLOADFLAG],["-Wl,-delayload,"])
         AS_VAR_APPEND([${wine_arch}_EXTRACFLAGS],[" $llvm_extra_cflags"])
         AS_VAR_APPEND([${wine_arch}_LDFLAGS],[" $llvm_extra_ldflags"])
-        CFLAGS="$llvm_extra_cflags $llvm_cflags"
+        CFLAGS="$CFLAGS $llvm_extra_cflags $llvm_cflags"
     else
         AS_VAR_PUSHDEF([wine_cv_crosscc], [wine_cv_${wine_arch}_crosscc])
         AC_CACHE_CHECK([whether $CC works], wine_cv_crosscc,
@@ -940,6 +947,10 @@ This is an error since --enable-archs=$wine_arch was requested.])])
 
     AS_VAR_IF([wine_arch],[$extra_arch],[],[AS_VAR_APPEND([PE_ARCHS],[" $wine_arch"])])
 
+    case "$target" in
+      *-windows) wine_compiler_rt_libs="compiler-rt" ;;
+    esac
+
     WINE_TRY_PE_CFLAGS([-fno-strict-aliasing])
     dnl clang needs to be told to fail on unknown options
     WINE_TRY_PE_CFLAGS([-Werror=unknown-warning-option],[CFLAGS="$CFLAGS -Werror=unknown-warning-option"])
@@ -961,6 +972,12 @@ This is an error since --enable-archs=$wine_arch was requested.])])
     WINE_TRY_PE_CFLAGS([-Wlogical-op])
     WINE_TRY_PE_CFLAGS([-Wabsolute-value])
     WINE_TRY_PE_CFLAGS([-Wenum-enum-conversion],[:],WINE_TRY_PE_CFLAGS([-Wenum-conversion]))
+    WINE_TRY_PE_CFLAGS([-ffunction-sections])
+
+    dnl clang had broken -fms-hotpatch support before version 18 (https://github.com/llvm/llvm-project/pull/77245)
+    WINE_TRY_PE_CFLAGS([-fms-hotpatch -DMIN_CLANG_VERSION=18],
+                       [AS_VAR_APPEND([${wine_arch}_EXTRACFLAGS],[" -fms-hotpatch"])
+                        AS_VAR_APPEND([${wine_arch}_LDFLAGS],[" -fms-hotpatch"])])
 
     dnl GCC can't handle large files when -Wmisleading-indentation is enabled (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=89549)
     WINE_TRY_PE_CFLAGS([-flarge-source-files -Wmisleading-indentation],[AS_VAR_APPEND(${wine_arch}_EXTRACFLAGS,[" -Wno-misleading-indentation"])])
@@ -998,16 +1015,19 @@ This is an error since --enable-archs=$wine_arch was requested.])])
     if test "x$ac_debug_format_seen" = x
     then
       case $wine_crossdebug in
-        *dwarf)  WINE_TRY_PE_CFLAGS([-gdwarf-4]) ;;
+        *dwarf)  dnl clang emits a warning without -Wl,-debug:dwarf, so ensure linker option is present
+                 WINE_TRY_PE_CFLAGS([-Wl,-debug:dwarf],[AS_VAR_APPEND([${wine_arch}_LDFLAGS],[" -Wl,-debug:dwarf"])
+                                                        CFLAGS="$CFLAGS -Wl,-debug:dwarf"])
+                 WINE_TRY_PE_CFLAGS([-gdwarf-4]) ;;
         pdb)     WINE_TRY_PE_CFLAGS([-gcodeview]) ;;
       esac
     fi
     AS_VAR_SET([${wine_arch}_DEBUG],[$wine_crossdebug])
 
     test "x$enable_werror" != xyes || WINE_TRY_PE_CFLAGS([-Werror])
-    test "x$enable_build_id" != xyes || WINE_TRY_PE_CFLAGS([-Wl,--build-id],
-                                         [AS_VAR_APPEND([${wine_arch}_CFLAGS],[" -Wl,--build-id"])
-                                          AS_VAR_APPEND([${wine_arch}_LDFLAGS],[" -Wl,--build-id"])])
+    dnl clang for PE target wants -build-id (and not --build-id as gcc/mingw or clang in unix target)
+    dnl don't bother testing flags, compilation will fail afterwards
+    test "x$enable_build_id" != xyes || AS_VAR_APPEND([${wine_arch}_LDFLAGS],[" -Wl,--build-id"])
 
 done
 
@@ -1125,14 +1145,14 @@ then
         WINE_NOTICE([libxslt ${notice_platform}MinGW development files not found; using bundled version.])
     fi
 
-    WINE_MINGW_PACKAGE_FLAGS(VKD3D,[libvkd3d libvkd3d-shader],[-lvkd3d -lvkd3d-shader],
-        [WINE_CHECK_MINGW_HEADER(vkd3d.h)
+    WINE_MINGW_PACKAGE_FLAGS(VKD3D,[libvkd3d-utils libvkd3d libvkd3d-shader],[-lvkd3d-utils -lvkd3d -lvkd3d-shader],
+        [WINE_CHECK_MINGW_HEADER(vkd3d_utils.h)
         WINE_CHECK_MINGW_HEADER(vkd3d_shader.h)
-        if test "$ac_cv_mingw_header_vkd3d_h" = "yes" -a "$ac_cv_mingw_header_vkd3d_shader_h" = "yes"
+        if test "$ac_cv_mingw_header_vkd3d_utils_h" = "yes" -a "$ac_cv_mingw_header_vkd3d_shader_h" = "yes"
         then
-            WINE_CHECK_MINGW_LIB(vkd3d,vkd3d_set_log_callback,[:],[:],[$VKD3D_PE_LIBS])
+            WINE_CHECK_MINGW_LIB(vkd3d-utils,vkd3d_utils_set_log_callback,[:],[:],[$VKD3D_PE_LIBS])
             WINE_CHECK_MINGW_LIB(vkd3d-shader,vkd3d_shader_build_varying_map,[:],[:],[$VKD3D_PE_LIBS])
-            if test "$ac_cv_mingw_lib_vkd3d" = "no" -o "$ac_cv_mingw_lib_vkd3d_shader" = "no"
+            if test "$ac_cv_mingw_lib_vkd3d_utils" = "no" -o "$ac_cv_mingw_lib_vkd3d_shader" = "no"
             then
                 VKD3D_PE_CFLAGS=""
                 VKD3D_PE_LIBS=""
@@ -1157,6 +1177,7 @@ then
 fi
 
 WINE_EXTLIB_FLAGS(CAPSTONE, capstone, capstone, "-I\$(top_srcdir)/libs/capstone/include")
+WINE_EXTLIB_FLAGS(COMPILER_RT, compiler-rt, "$wine_compiler_rt_libs")
 WINE_EXTLIB_FLAGS(FAUDIO, faudio, "faudio mfplat mfreadwrite mfuuid propsys", "-I\$(top_srcdir)/libs/faudio/include")
 WINE_EXTLIB_FLAGS(FLUIDSYNTH, fluidsynth, "fluidsynth", "-I\$(top_srcdir)/libs/fluidsynth/include")
 WINE_EXTLIB_FLAGS(GSM, gsm, gsm, "-I\$(top_srcdir)/libs/gsm/inc")
@@ -1168,6 +1189,7 @@ WINE_EXTLIB_FLAGS(MPG123, mpg123, mpg123, "-I\$(top_srcdir)/libs/mpg123/src/incl
 WINE_EXTLIB_FLAGS(MUSL, musl, musl)
 WINE_EXTLIB_FLAGS(PNG, png, "png \$(ZLIB_PE_LIBS)", "-I\$(top_srcdir)/libs/png")
 WINE_EXTLIB_FLAGS(TIFF, tiff, "tiff \$(ZLIB_PE_LIBS)", "-I\$(top_srcdir)/libs/tiff/libtiff")
+WINE_EXTLIB_FLAGS(TOMCRYPT, tomcrypt, tomcrypt, "-I\$(top_srcdir)/libs/tomcrypt/src/headers -DLTC_NO_PROTOTYPES -DLTC_SOURCE")
 WINE_EXTLIB_FLAGS(VKD3D, vkd3d, vkd3d, "-I\$(top_srcdir)/libs/vkd3d/include")
 WINE_EXTLIB_FLAGS(XML2, xml2, xml2, "-I\$(top_srcdir)/libs/xml2/include -DLIBXML_STATIC")
 WINE_EXTLIB_FLAGS(XSLT, xslt, xslt, "-I\$(top_srcdir)/libs/xslt/libxslt -I\$(top_srcdir)/libs/xslt -DLIBXSLT_STATIC")
@@ -1424,7 +1446,7 @@ if test "x$with_pcsclite" != "xno"
 then
     AC_CHECK_LIB(pcsclite,SCardEstablishContext,[AC_SUBST(PCSCLITE_LIBS,["-lpcsclite"])],
                  [case $host_os in
-                    darwin*|macosx*) AC_SUBST(PCSCLITE_LIBS,"-framework PCSC") ;;
+                    darwin*) AC_SUBST(PCSCLITE_LIBS,"-framework PCSC") ;;
                   esac])
 fi
 WINE_NOTICE_WITH(pcsclite,[test "x$PCSCLITE_LIBS" = x],
@@ -1450,7 +1472,7 @@ then
             [DBUS_CFLAGS=""])])
 fi
 case $host_os in
-  darwin*|macosx*) ;;
+  darwin*) ;;
   *) WINE_NOTICE_WITH(dbus,[test "x$ac_cv_lib_soname_dbus_1" = "x"],
                       [libdbus ${notice_platform}development files not found, no dynamic device support.]) ;;
 esac
@@ -1988,11 +2010,8 @@ int a(int b, ...) { __builtin_ms_va_list list; __builtin_ms_va_start(list,b); }]
   then
       WINE_TRY_CFLAGS([-Werror])
   fi
-  if test "x$enable_build_id" = "xyes"
-  then
-      WINE_TRY_CFLAGS([-Wl,--build-id], [CFLAGS="$CFLAGS -Wl,--build-id"
-                      LDFLAGS="$LDFLAGS -Wl,--build-id"])
-  fi
+
+  AS_VAR_IF([enable_build_id],[yes],[WINE_TRY_CFLAGS([-Wl,--build-id],[LDFLAGS="$LDFLAGS -Wl,--build-id"])])
 fi
 
 dnl **** Disable Fortify, it has too many false positives
@@ -2025,12 +2044,7 @@ fi
 
 dnl **** Platform-specific checks ****
 
-case "$HOST_ARCH,$PE_ARCHS" in
-  x86_64,*i386*) wine_binary="wine" ;;
-  x86_64,*) wine_binary="wine64" ;;
-  *) wine_binary="wine" ;;
-esac
-AC_SUBST(WINELOADER_PROGRAMS,"$wine_binary")
+AC_SUBST(WINELOADER_PROGRAMS,"wine")
 
 case $host_os in
   linux*)
@@ -2043,8 +2057,7 @@ esac
 
 if test "$wine_use_preloader" = "yes"
 then
-  test "$wine_binary" = wine || WINE_IGNORE_FILE(loader/wine-preloader)
-  WINELOADER_PROGRAMS="$WINELOADER_PROGRAMS $wine_binary-preloader"
+  WINELOADER_PROGRAMS="$WINELOADER_PROGRAMS wine-preloader"
   AC_DEFINE(HAVE_WINE_PRELOADER, 1, [Define to 1 if the Wine preloader is being used.])
 fi
 
@@ -2059,6 +2072,7 @@ AC_CHECK_FUNCS(\
         dladdr1 \
 	dlinfo \
 	epoll_create \
+	epoll_pwait2 \
 	fstatfs \
 	futimens \
 	futimes \
@@ -2074,6 +2088,7 @@ AC_CHECK_FUNCS(\
 	posix_fadvise \
 	posix_fallocate \
 	prctl \
+	sched_getcpu \
 	sched_yield \
 	setproctitle \
 	setprogname \
@@ -2344,6 +2359,7 @@ else
     enable_wow64win=${enable_wow64win:-no}
     enable_wow64cpu=${enable_wow64cpu:-no}
     enable_xtajit64=${enable_xtajit64:-no}
+    enable_compiler_rt=${enable_compiler_rt:-no}
 fi
 
 dnl Explicitly enable some programs for arm64ec
@@ -2373,9 +2389,6 @@ test "x$enable_silent_rules" = xyes && makedep_flags="$makedep_flags -S"
 
 wine_srcdir=
 test "$srcdir" = . || wine_srcdir="$srcdir/"
-
-WINE_CONFIG_SYMLINK(wine,tools/winewrapper)
-WINE_CONFIG_SYMLINK(wine64,tools/winewrapper,["$wine_binary" = wine64 -o -n "$with_wine64"])
 
 WINE_CONFIG_MAKEFILE(dlls/acledit)
 WINE_CONFIG_MAKEFILE(dlls/aclui)
@@ -2460,6 +2473,7 @@ WINE_CONFIG_MAKEFILE(dlls/credui/tests)
 WINE_CONFIG_MAKEFILE(dlls/crtdll)
 WINE_CONFIG_MAKEFILE(dlls/crypt32)
 WINE_CONFIG_MAKEFILE(dlls/crypt32/tests)
+WINE_CONFIG_MAKEFILE(dlls/cryptbase)
 WINE_CONFIG_MAKEFILE(dlls/cryptdlg)
 WINE_CONFIG_MAKEFILE(dlls/cryptdll)
 WINE_CONFIG_MAKEFILE(dlls/cryptext)
@@ -2502,6 +2516,7 @@ WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_39)
 WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_40)
 WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_41)
 WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_42)
+WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_42/tests)
 WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_43)
 WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_43/tests)
 WINE_CONFIG_MAKEFILE(dlls/d3dcompiler_46)
@@ -2549,6 +2564,7 @@ WINE_CONFIG_MAKEFILE(dlls/d3dx9_32)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_33)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_34)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_35)
+WINE_CONFIG_MAKEFILE(dlls/d3dx9_35/tests)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_36)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_36/tests)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_37)
@@ -2557,7 +2573,9 @@ WINE_CONFIG_MAKEFILE(dlls/d3dx9_39)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_40)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_41)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_42)
+WINE_CONFIG_MAKEFILE(dlls/d3dx9_42/tests)
 WINE_CONFIG_MAKEFILE(dlls/d3dx9_43)
+WINE_CONFIG_MAKEFILE(dlls/d3dx9_43/tests)
 WINE_CONFIG_MAKEFILE(dlls/d3dxof)
 WINE_CONFIG_MAKEFILE(dlls/d3dxof/tests)
 WINE_CONFIG_MAKEFILE(dlls/dataexchange)
@@ -2697,6 +2715,8 @@ WINE_CONFIG_MAKEFILE(dlls/hvsimanagementapi/tests)
 WINE_CONFIG_MAKEFILE(dlls/ia2comproxy)
 WINE_CONFIG_MAKEFILE(dlls/iccvid)
 WINE_CONFIG_MAKEFILE(dlls/icmp)
+WINE_CONFIG_MAKEFILE(dlls/icmui)
+WINE_CONFIG_MAKEFILE(dlls/icmui/tests)
 WINE_CONFIG_MAKEFILE(dlls/ieframe)
 WINE_CONFIG_MAKEFILE(dlls/ieframe/tests)
 WINE_CONFIG_MAKEFILE(dlls/ieproxy)
@@ -3223,6 +3243,8 @@ WINE_CONFIG_MAKEFILE(dlls/windows.media.speech)
 WINE_CONFIG_MAKEFILE(dlls/windows.media.speech/tests)
 WINE_CONFIG_MAKEFILE(dlls/windows.media)
 WINE_CONFIG_MAKEFILE(dlls/windows.media/tests)
+WINE_CONFIG_MAKEFILE(dlls/windows.networking.connectivity)
+WINE_CONFIG_MAKEFILE(dlls/windows.networking.connectivity/tests)
 WINE_CONFIG_MAKEFILE(dlls/windows.networking.hostname)
 WINE_CONFIG_MAKEFILE(dlls/windows.networking.hostname/tests)
 WINE_CONFIG_MAKEFILE(dlls/windows.networking)
@@ -3234,8 +3256,14 @@ WINE_CONFIG_MAKEFILE(dlls/windows.security.credentials.ui.userconsentverifier)
 WINE_CONFIG_MAKEFILE(dlls/windows.security.credentials.ui.userconsentverifier/tests)
 WINE_CONFIG_MAKEFILE(dlls/windows.storage.applicationdata)
 WINE_CONFIG_MAKEFILE(dlls/windows.storage.applicationdata/tests)
+WINE_CONFIG_MAKEFILE(dlls/windows.storage)
+WINE_CONFIG_MAKEFILE(dlls/windows.storage/tests)
+WINE_CONFIG_MAKEFILE(dlls/windows.system.profile.systemid)
+WINE_CONFIG_MAKEFILE(dlls/windows.system.profile.systemid/tests)
 WINE_CONFIG_MAKEFILE(dlls/windows.system.profile.systemmanufacturers)
 WINE_CONFIG_MAKEFILE(dlls/windows.system.profile.systemmanufacturers/tests)
+WINE_CONFIG_MAKEFILE(dlls/windows.ui.xaml)
+WINE_CONFIG_MAKEFILE(dlls/windows.ui.xaml/tests)
 WINE_CONFIG_MAKEFILE(dlls/windows.ui)
 WINE_CONFIG_MAKEFILE(dlls/windows.ui/tests)
 WINE_CONFIG_MAKEFILE(dlls/windows.web)
@@ -3246,6 +3274,7 @@ WINE_CONFIG_MAKEFILE(dlls/windowscodecsext)
 WINE_CONFIG_MAKEFILE(dlls/windowscodecsext/tests)
 WINE_CONFIG_MAKEFILE(dlls/winealsa.drv)
 WINE_CONFIG_MAKEFILE(dlls/wineandroid.drv)
+WINE_CONFIG_MAKEFILE(dlls/winebth.sys)
 WINE_CONFIG_MAKEFILE(dlls/winebus.sys)
 WINE_CONFIG_MAKEFILE(dlls/winecoreaudio.drv)
 WINE_CONFIG_MAKEFILE(dlls/winecrt0)
@@ -3387,6 +3416,7 @@ WINE_CONFIG_MAKEFILE(fonts)
 WINE_CONFIG_MAKEFILE(include)
 WINE_CONFIG_MAKEFILE(libs/adsiid)
 WINE_CONFIG_MAKEFILE(libs/capstone)
+WINE_CONFIG_MAKEFILE(libs/compiler-rt)
 WINE_CONFIG_MAKEFILE(libs/dmoguids)
 WINE_CONFIG_MAKEFILE(libs/dxerr8)
 WINE_CONFIG_MAKEFILE(libs/dxerr9)
@@ -3405,6 +3435,7 @@ WINE_CONFIG_MAKEFILE(libs/png)
 WINE_CONFIG_MAKEFILE(libs/strmbase)
 WINE_CONFIG_MAKEFILE(libs/strmiids)
 WINE_CONFIG_MAKEFILE(libs/tiff)
+WINE_CONFIG_MAKEFILE(libs/tomcrypt)
 WINE_CONFIG_MAKEFILE(libs/uuid)
 WINE_CONFIG_MAKEFILE(libs/vkd3d)
 WINE_CONFIG_MAKEFILE(libs/wbemuuid)
@@ -3456,12 +3487,14 @@ WINE_CONFIG_MAKEFILE(programs/iexplore)
 WINE_CONFIG_MAKEFILE(programs/ipconfig)
 WINE_CONFIG_MAKEFILE(programs/klist)
 WINE_CONFIG_MAKEFILE(programs/lodctr)
+WINE_CONFIG_MAKEFILE(programs/makecab)
 WINE_CONFIG_MAKEFILE(programs/mofcomp)
 WINE_CONFIG_MAKEFILE(programs/mshta)
 WINE_CONFIG_MAKEFILE(programs/msidb)
 WINE_CONFIG_MAKEFILE(programs/msiexec)
 WINE_CONFIG_MAKEFILE(programs/msinfo32)
 WINE_CONFIG_MAKEFILE(programs/net)
+WINE_CONFIG_MAKEFILE(programs/net/tests)
 WINE_CONFIG_MAKEFILE(programs/netsh)
 WINE_CONFIG_MAKEFILE(programs/netstat)
 WINE_CONFIG_MAKEFILE(programs/ngen)
@@ -3507,6 +3540,8 @@ WINE_CONFIG_MAKEFILE(programs/tasklist)
 WINE_CONFIG_MAKEFILE(programs/tasklist/tests)
 WINE_CONFIG_MAKEFILE(programs/taskmgr)
 WINE_CONFIG_MAKEFILE(programs/termsv)
+WINE_CONFIG_MAKEFILE(programs/timeout)
+WINE_CONFIG_MAKEFILE(programs/timeout/tests)
 WINE_CONFIG_MAKEFILE(programs/uninstaller)
 WINE_CONFIG_MAKEFILE(programs/unlodctr)
 WINE_CONFIG_MAKEFILE(programs/view)
@@ -3545,6 +3580,7 @@ WINE_CONFIG_MAKEFILE(server)
 WINE_CONFIG_MAKEFILE(tools,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/sfnt2fon,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/widl,,[test "x$enable_tools" = xno])
+WINE_CONFIG_MAKEFILE(tools/wine,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/winebuild,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/winedump,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/winegcc,,[test "x$enable_tools" = xno])
@@ -3557,13 +3593,7 @@ dnl Main ignore file
 
 WINE_IGNORE_FILE(TAGS)
 WINE_IGNORE_FILE(tags)
-WINE_IGNORE_FILE(autom4te.cache)
-WINE_IGNORE_FILE(compile_commands.json)
 WINE_IGNORE_FILE(config.log)
-WINE_IGNORE_FILE(config.status)
-WINE_IGNORE_FILE(include/config.h)
-WINE_IGNORE_FILE(include/stamp-h)
-test "$wine_binary" = wine || WINE_IGNORE_FILE(loader/wine)
 
 if test "x$enable_tools" != xno
 then
@@ -3607,17 +3637,6 @@ AC_SUBST(SHELL,[/bin/sh])
 
 dnl Rules for re-running configure
 
-WINE_APPEND_RULE(
-[all: wine
-	@echo \"Wine build complete.\"
-Makefile: config.status
-	@./config.status Makefile
-config.status: ${wine_srcdir}configure
-	@./config.status --recheck
-include/config.h: include/stamp-h
-include/stamp-h: ${wine_srcdir}include/config.h.in config.status
-	@./config.status include/config.h include/stamp-h])
-
 if test "x$enable_maintainer_mode" = xyes
 then
     WINE_APPEND_RULE(
@@ -3631,25 +3650,8 @@ fi
 
 dnl Rules for wineloader
 
-if test -n "$with_wine64"
+if test -z "$with_wine64"
 then
-    case "$with_wine64" in
-      /*) reldir="" ;;
-      *)  reldir="../" ;;
-    esac
-    dnl Get rid of old symlinks
-    rm -f fonts server 2>/dev/null
-    WINE_APPEND_RULE(
-[all: loader/wine64 loader/wine64-preloader $with_wine64/loader/wine $with_wine64/loader/wine-preloader
-loader/wine64 loader/wine64-preloader:
-	rm -f \$[@] && \$(LN_S) $reldir$with_wine64/\$[@] \$[@]
-$with_wine64/loader/wine:
-	rm -f \$[@] && \$(LN_S) $ac_pwd/loader/wine \$[@]
-$with_wine64/loader/wine-preloader:
-	rm -f \$[@] && \$(LN_S) $ac_pwd/loader/wine-preloader \$[@]
-clean::
-	rm -f loader/wine64 loader/wine64-preloader $with_wine64/loader/wine $with_wine64/loader/wine-preloader])
-else
     TOP_INSTALL_DEV="$TOP_INSTALL_DEV include"
     TOP_INSTALL_LIB="$TOP_INSTALL_LIB \
 fonts \
@@ -3670,18 +3672,10 @@ programs/winepath/winepath \
 server/wineserver"
 
     case $host_os in
-      cygwin*|mingw32*|darwin*|macosx*|linux-android*) ;;
+      cygwin*|mingw32*|darwin*|linux-android*) ;;
       *) TOP_INSTALL_LIB="$TOP_INSTALL_LIB loader/wine.desktop" ;;
     esac
 fi
-
-dnl Rules for cleaning
-
-WINE_APPEND_RULE(
-[distclean:: clean
-	rm -rf autom4te.cache
-maintainer-clean::
-	rm -f configure include/config.h.in])
 
 dnl Rules for generated source files
 

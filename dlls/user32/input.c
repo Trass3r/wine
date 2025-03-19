@@ -26,7 +26,6 @@
 
 #include "user_private.h"
 #include "dbt.h"
-#include "wine/server.h"
 #include "wine/debug.h"
 #include "wine/plugplay.h"
 
@@ -104,49 +103,11 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetCursorPos( POINT *pt )
 
 
 /**********************************************************************
- *		ReleaseCapture (USER32.@)
- */
-BOOL WINAPI DECLSPEC_HOTPATCH ReleaseCapture(void)
-{
-    return NtUserReleaseCapture();
-}
-
-
-/**********************************************************************
  *		GetCapture (USER32.@)
  */
 HWND WINAPI GetCapture(void)
 {
-    GUITHREADINFO info;
-    info.cbSize = sizeof(info);
-    return NtUserGetGUIThreadInfo( GetCurrentThreadId(), &info ) ? info.hwndCapture : 0;
-}
-
-
-/*****************************************************************
- *		DestroyCaret (USER32.@)
- */
-BOOL WINAPI DestroyCaret(void)
-{
-    return NtUserDestroyCaret();
-}
-
-
-/*****************************************************************
- *		SetCaretPos (USER32.@)
- */
-BOOL WINAPI SetCaretPos( int x, int y )
-{
-    return NtUserSetCaretPos( x, y );
-}
-
-
-/*****************************************************************
- *		SetCaretBlinkTime (USER32.@)
- */
-BOOL WINAPI SetCaretBlinkTime( unsigned int time )
-{
-    return NtUserSetCaretBlinkTime( time );
+    return (HWND)NtUserGetThreadState( UserThreadStateCaptureWindow );
 }
 
 
@@ -155,7 +116,7 @@ BOOL WINAPI SetCaretBlinkTime( unsigned int time )
  */
 BOOL WINAPI GetInputState(void)
 {
-    return NtUserGetInputState();
+    return NtUserGetThreadState( UserThreadStateInputState );
 }
 
 
@@ -164,8 +125,6 @@ BOOL WINAPI GetInputState(void)
  */
 BOOL WINAPI GetLastInputInfo(PLASTINPUTINFO plii)
 {
-    BOOL ret;
-
     TRACE("%p\n", plii);
 
     if (plii->cbSize != sizeof (*plii) )
@@ -173,15 +132,8 @@ BOOL WINAPI GetLastInputInfo(PLASTINPUTINFO plii)
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
-
-    SERVER_START_REQ( get_last_input_time )
-    {
-        ret = !wine_server_call_err( req );
-        if (ret)
-            plii->dwTime = reply->time;
-    }
-    SERVER_END_REQ;
-    return ret;
+    plii->dwTime = NtUserGetLastInputTime();
+    return TRUE;
 }
 
 
@@ -625,10 +577,7 @@ HDEVNOTIFY WINAPI RegisterDeviceNotificationW( HANDLE handle, void *filter, DWOR
         return I_ScRegisterDeviceNotification( handle, (DEV_BROADCAST_HDR *)&iface, callback );
     }
     if (header->dbch_devicetype == DBT_DEVTYP_HANDLE)
-    {
-        FIXME( "DBT_DEVTYP_HANDLE not implemented\n" );
         return I_ScRegisterDeviceNotification( handle, header, callback );
-    }
 
     FIXME( "type %#lx not implemented\n", header->dbch_devicetype );
     SetLastError( ERROR_INVALID_DATA );
@@ -822,9 +771,7 @@ BOOL WINAPI SetForegroundWindow( HWND hwnd )
  */
 HWND WINAPI GetActiveWindow(void)
 {
-    GUITHREADINFO info;
-    info.cbSize = sizeof(info);
-    return NtUserGetGUIThreadInfo( GetCurrentThreadId(), &info ) ? info.hwndActive : 0;
+    return (HWND)NtUserGetThreadState( UserThreadStateActiveWindow );
 }
 
 
@@ -833,9 +780,7 @@ HWND WINAPI GetActiveWindow(void)
  */
 HWND WINAPI GetFocus(void)
 {
-    GUITHREADINFO info;
-    info.cbSize = sizeof(info);
-    return NtUserGetGUIThreadInfo( GetCurrentThreadId(), &info ) ? info.hwndFocus : 0;
+    return (HWND)NtUserGetThreadState( UserThreadStateFocusWindow );
 }
 
 
@@ -858,15 +803,6 @@ HWND WINAPI GetShellWindow(void)
 
 
 /***********************************************************************
- *           SetProgmanWindow (USER32.@)
- */
-HWND WINAPI SetProgmanWindow( HWND hwnd )
-{
-    return NtUserSetProgmanWindow( hwnd );
-}
-
-
-/***********************************************************************
  *           GetProgmanWindow (USER32.@)
  */
 HWND WINAPI GetProgmanWindow(void)
@@ -874,14 +810,6 @@ HWND WINAPI GetProgmanWindow(void)
     return NtUserGetProgmanWindow();
 }
 
-
-/***********************************************************************
- *           SetTaskmanWindow (USER32.@)
- */
-HWND WINAPI SetTaskmanWindow( HWND hwnd )
-{
-    return NtUserSetTaskmanWindow( hwnd );
-}
 
 /***********************************************************************
  *           GetTaskmanWindow (USER32.@)

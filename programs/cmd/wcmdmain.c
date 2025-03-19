@@ -57,6 +57,8 @@ static int max_height;
 static int max_width;
 static int numChars;
 
+static HANDLE control_c_event;
+
 #define MAX_WRITECONSOLE_SIZE 65535
 
 /*
@@ -193,8 +195,9 @@ void WCMD_enter_paged_mode(const WCHAR *msg)
   CONSOLE_SCREEN_BUFFER_INFO consoleInfo;
 
   if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &consoleInfo)) {
-    max_height = consoleInfo.dwSize.Y;
-    max_width  = consoleInfo.dwSize.X;
+    /* Use console window dimensions, not screen buffer dimensions. */
+    max_height = consoleInfo.srWindow.Bottom - consoleInfo.srWindow.Top + 1;
+    max_width  = consoleInfo.srWindow.Right - consoleInfo.srWindow.Left + 1;
   } else {
     max_height = 25;
     max_width  = 80;
@@ -209,6 +212,69 @@ void WCMD_leave_paged_mode(void)
 {
   paged_mode = FALSE;
   pagedMessage = NULL;
+}
+
+static BOOL has_pending_char_events(HANDLE h)
+{
+    INPUT_RECORD ir;
+    DWORD count;
+    BOOL ret = FALSE;
+
+    while (!ret && GetNumberOfConsoleInputEvents(h, &count) && count)
+    {
+        /* FIXME could be racy if another thread/process gets the input record */
+        if (ReadConsoleInputA(h, &ir, 1, &count) && count)
+            ret = ir.EventType == KEY_EVENT &&
+                ir.Event.KeyEvent.bKeyDown &&
+                ir.Event.KeyEvent.uChar.AsciiChar;
+    }
+    return ret;
+}
+
+/***************************************************************************
+ * WCMD_wait_for_input
+ *
+ * Wait for input from a console/file.
+ * Used by commands like PAUSE and DIR /P that need to wait for user
+ * input before continuing.
+ */
+RETURN_CODE WCMD_wait_for_input(HANDLE hIn)
+{
+    RETURN_CODE return_code;
+    DWORD oldmode;
+    DWORD count;
+    WCHAR key;
+
+    return_code = ERROR_INVALID_FUNCTION;
+    if (GetConsoleMode(hIn, &oldmode))
+    {
+        HANDLE h[2] = {hIn, control_c_event};
+
+        SetConsoleMode(hIn, oldmode & ~ENABLE_LINE_INPUT);
+        FlushConsoleInputBuffer(hIn);
+        while (return_code == ERROR_INVALID_FUNCTION)
+        {
+            switch (WaitForMultipleObjects(2, h, FALSE, INFINITE))
+            {
+            case WAIT_OBJECT_0:
+                if (has_pending_char_events(hIn))
+                    return_code = NO_ERROR;
+                /* will make both hIn no long signaled, and also process the pending input record */
+                FlushConsoleInputBuffer(hIn);
+                break;
+            case WAIT_OBJECT_0 + 1:
+                return_code = STATUS_CONTROL_C_EXIT;
+                break;
+            default: break;
+            }
+        }
+        SetConsoleMode(hIn, oldmode);
+    }
+    else if (WCMD_ReadFile(hIn, &key, 1, &count) && count)
+        return_code = NO_ERROR;
+    else
+        return_code = ERROR_INVALID_FUNCTION;
+    return return_code;
 }
 
 /***************************************************************************
@@ -241,10 +307,9 @@ BOOL WCMD_ReadFile(const HANDLE hIn, WCHAR *intoBuf, const DWORD maxChars, LPDWO
  *
  * Send output to specified handle without formatting e.g. when message contains '%'
  */
-static void WCMD_output_asis_handle (DWORD std_handle, const WCHAR *message) {
-  DWORD count;
+static RETURN_CODE WCMD_output_asis_handle (DWORD std_handle, const WCHAR *message) {
+  RETURN_CODE return_code = NO_ERROR;
   const WCHAR* ptr;
-  WCHAR string[1024];
   HANDLE handle = GetStdHandle(std_handle);
 
   if (paged_mode) {
@@ -260,12 +325,17 @@ static void WCMD_output_asis_handle (DWORD std_handle, const WCHAR *message) {
       if (++line_count >= max_height - 1) {
         line_count = 0;
         WCMD_output_asis_len(pagedMessage, lstrlenW(pagedMessage), handle);
-        WCMD_ReadFile(GetStdHandle(STD_INPUT_HANDLE), string, ARRAY_SIZE(string), &count);
+        return_code = WCMD_wait_for_input(GetStdHandle(STD_INPUT_HANDLE));
+        WCMD_output_asis_len(L"\r\n", 2, handle);
+        if (return_code)
+          break;
       }
     } while (((message = ptr) != NULL) && (*ptr));
   } else {
     WCMD_output_asis_len(message, lstrlenW(message), handle);
   }
+
+  return return_code;
 }
 
 /*******************************************************************
@@ -274,8 +344,8 @@ static void WCMD_output_asis_handle (DWORD std_handle, const WCHAR *message) {
  * Send output to current standard output device, without formatting
  * e.g. when message contains '%'
  */
-void WCMD_output_asis (const WCHAR *message) {
-    WCMD_output_asis_handle(STD_OUTPUT_HANDLE, message);
+RETURN_CODE WCMD_output_asis (const WCHAR *message) {
+    return WCMD_output_asis_handle(STD_OUTPUT_HANDLE, message);
 }
 
 /*******************************************************************
@@ -284,8 +354,8 @@ void WCMD_output_asis (const WCHAR *message) {
  * Send output to current standard error device, without formatting
  * e.g. when message contains '%'
  */
-void WCMD_output_asis_stderr (const WCHAR *message) {
-    WCMD_output_asis_handle(STD_ERROR_HANDLE, message);
+RETURN_CODE WCMD_output_asis_stderr (const WCHAR *message) {
+    return WCMD_output_asis_handle(STD_ERROR_HANDLE, message);
 }
 
 /****************************************************************************
@@ -514,6 +584,13 @@ WCHAR *WCMD_strip_quotes(WCHAR *cmd) {
   return lastquote;
 }
 
+static inline int read_int_in_range(const WCHAR *from, WCHAR **after, int low, int high)
+{
+    int val = wcstol(from, after, 10);
+    val += (val < 0) ? high : low;
+    return val <= low ? low : (val >= high ? high : val);
+}
+
 /*************************************************************************
  * WCMD_expand_envvar
  *
@@ -598,34 +675,21 @@ static WCHAR *WCMD_expand_envvar(WCHAR *start)
      */
 
     /* ~ is substring manipulation */
-    if (colonpos[1] == L'~') {
+    if (colonpos[1] == L'~')
+    {
+        int   substr_beg, substr_end;
+        WCHAR *ptr;
 
-      int   substrposition, substrlength = 0;
-      WCHAR *commapos = wcschr(colonpos+2, L',');
-      WCHAR *startCopy;
-
-      substrposition = wcstol(colonpos+2, NULL, 10);
-      if (commapos) substrlength = wcstol(commapos+1, NULL, 10);
-
-      /* Check bounds */
-      if (substrposition >= 0) {
-        startCopy = &thisVarContents[min(substrposition, len - 1)];
-      } else {
-        startCopy = &thisVarContents[max(0, len + substrposition)];
-      }
-
-      if (commapos == NULL)
-        /* Copy the lot */
-        return WCMD_strsubstW(start, endOfVar + 1, startCopy, -1);
-      if (substrlength < 0) {
-
-        int copybytes = len + substrlength - (startCopy - thisVarContents);
-        if (copybytes >= len) copybytes = len - 1;
-        else if (copybytes < 0) copybytes = 0;
-        return WCMD_strsubstW(start, endOfVar + 1, startCopy, copybytes);
-      }
-      substrlength = min(substrlength, len - (startCopy - thisVarContents));
-      return WCMD_strsubstW(start, endOfVar + 1, startCopy, substrlength);
+        substr_beg = read_int_in_range(colonpos + 2, &ptr, 0, len);
+        if (*ptr == L',')
+            substr_end = read_int_in_range(ptr + 1, &ptr, substr_beg, len);
+        else
+            substr_end = len;
+        if (*ptr == L'\0')
+            return WCMD_strsubstW(start, endOfVar + 1, &thisVarContents[substr_beg], substr_end - substr_beg);
+        /* error, remove enclosing % pair (in place) */
+        memmove(start, start + 1, (endOfVar - start - 1) * sizeof(WCHAR));
+        return WCMD_strsubstW(endOfVar - 1, endOfVar + 1, NULL, 0);
     /* search and replace manipulation */
     } else {
       WCHAR *equalspos = wcschr(colonpos, L'=');
@@ -638,8 +702,6 @@ static WCHAR *WCMD_expand_envvar(WCHAR *start)
       if (equalspos == NULL) return start+1;
       s = xstrdupW(endOfVar + 1);
 
-      /* Null terminate both strings */
-      thisVar[lstrlenW(thisVar)-1] = 0x00;
       *equalspos = 0x00;
 
       /* Since we need to be case insensitive, copy the 2 buffers */
@@ -1326,8 +1388,6 @@ static RETURN_CODE run_full_path(const WCHAR *file, WCHAR *full_cmdline, BOOL ca
             TRACE("Batch completed, but was not 'called' so skipping outer batch too\n");
             context->skip_rest = TRUE;
         }
-        if (return_code != RETURN_CODE_ABORTED)
-            errorlevel = return_code;
         return return_code;
     }
 
@@ -1907,8 +1967,11 @@ RETURN_CODE WCMD_call_command(WCHAR *command)
   return_code = search_command(command, &sc, FALSE);
   if (return_code == NO_ERROR)
   {
+      unsigned old_echo_mode = echo_mode;
       if (!*sc.path) return NO_ERROR;
-      return run_full_path(sc.path, command, TRUE);
+      return_code = run_full_path(sc.path, command, TRUE);
+      if (interactive) echo_mode = old_echo_mode;
+      return return_code;
   }
 
   if (sc.cmd_index <= WCMD_EXIT)
@@ -2122,9 +2185,8 @@ static CMD_FOR_CONTROL *for_control_parse(WCHAR *opts_var)
             p[len - 1] = L'\0';
             p++;
         }
-        for ( ; *p; p = end)
+        for ( ; *(p = WCMD_skip_leading_spaces(p)); p = end)
         {
-            p = WCMD_skip_leading_spaces(p);
             /* Save End of line character (Ignore line if first token (based on delims) starts with it) */
             if ((end = for_fileset_option_split(p, L"eol=")))
             {
@@ -2541,6 +2603,11 @@ static BOOL node_builder_generate(struct node_builder *builder, CMD_NODE **node)
     }
     else
     {
+        if (!builder->num) /* line without tokens */
+        {
+            *node = NULL;
+            return TRUE;
+        }
         if (node_builder_parse(builder, 0, node) &&
             builder->pos + 1 >= builder->num) /* consumed all tokens? */
             return TRUE;
@@ -2627,8 +2694,20 @@ static void lexer_push_command(struct node_builder *builder,
 
             if (*p == L'<')
             {
-                filename = WCMD_parameter(p + 1, 0, NULL, FALSE, FALSE);
-                tkn_pmt.redirection = redirection_create_file(REDIR_READ_FROM, 0, filename);
+                unsigned fd = 0;
+
+                if (p > redirs && p[-1] >= L'0' && p[-1] <= L'9') fd = p[-1] - L'0';
+                p++;
+                if (*p == L'&' && (p[1] >= L'0' && p[1] <= L'9'))
+                {
+                    tkn_pmt.redirection = redirection_create_clone(fd, p[1] - L'0');
+                    p++;
+                }
+                else
+                {
+                    filename = WCMD_parameter(p + 1, 0, NULL, FALSE, FALSE);
+                    tkn_pmt.redirection = redirection_create_file(REDIR_READ_FROM, 0, filename);
+                }
             }
             else
             {
@@ -2984,7 +3063,7 @@ enum read_parse_line WCMD_ReadAndParseLine(const WCHAR *optionalcmd, CMD_NODE **
 
                 /* If a redirect is immediately followed by '&' (ie. 2>&1) then
                     do not process that ampersand as an AND operator */
-                if (thisChar == '>' && *(curPos+1) == '&') {
+                if ((thisChar == '>' || thisChar == '<') && *(curPos+1) == '&') {
                     curCopyTo[(*curLen)++] = *(curPos+1);
                     curPos++;
                 }
@@ -3198,14 +3277,14 @@ static BOOL if_condition_evaluate(CMD_IF_CONDITION *cond, int *test)
             handleExpansion(expanded_left, TRUE);
             if ((len = wcslen(expanded_left)))
             {
-                /* FindFirstFile does not like a directory path ending in '\' or '/', so append a '.' */
-                if ((expanded_left[len - 1] == '\\' || expanded_left[len - 1] == '/') && len < MAXSTRING - 1)
+                if (!wcspbrk(expanded_left, L"*?"))
+                    *test = GetFileAttributesW(expanded_left) != INVALID_FILE_ATTRIBUTES;
+                else
                 {
-                    wcscat(expanded_left, L".");
+                    hff = FindFirstFileW(expanded_left, &fd);
+                    *test = (hff != INVALID_HANDLE_VALUE);
+                    if (*test) FindClose(hff);
                 }
-                hff = FindFirstFileW(expanded_left, &fd);
-                *test = (hff != INVALID_HANDLE_VALUE);
-                if (*test) FindClose(hff);
             }
         }
         break;
@@ -3839,9 +3918,19 @@ RETURN_CODE node_execute(CMD_NODE *node)
     return return_code;
 }
 
+
+RETURN_CODE WCMD_ctrlc_status(void)
+{
+    return (WAIT_OBJECT_0 == WaitForSingleObject(control_c_event, 0)) ? STATUS_CONTROL_C_EXIT : NO_ERROR;
+}
+
 static BOOL WINAPI my_event_handler(DWORD ctrl)
 {
     WCMD_output(L"\n");
+    if (ctrl == CTRL_C_EVENT)
+    {
+        SetEvent(control_c_event);
+    }
     return ctrl == CTRL_C_EVENT;
 }
 
@@ -3891,6 +3980,11 @@ int __cdecl wmain (int argc, WCHAR *argvW[])
   /* init for loop context */
   forloopcontext = NULL;
   WCMD_save_for_loop_context(TRUE);
+
+  /* Initialize the event here because the command loop at the bottom will
+   * reset it unconditionally even if the Control-C handler is not installed.
+   */
+  control_c_event = CreateEventW(NULL, TRUE, FALSE, NULL);
 
   /* Can't use argc/argv as it will have stripped quotes from parameters
    * meaning cmd.exe /C echo "quoted string" is impossible
@@ -4225,10 +4319,12 @@ int __cdecl wmain (int argc, WCHAR *argvW[])
   {
       if (rpl_status == RPL_SUCCESS && toExecute)
       {
+          ResetEvent(control_c_event);
           node_execute(toExecute);
           node_dispose_tree(toExecute);
           if (echo_mode) WCMD_output_asis(L"\r\n");
       }
   }
+  CloseHandle(control_c_event);
   return 0;
 }

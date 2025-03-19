@@ -40,8 +40,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
-#include "wine/wgl.h"
-#include "wine/wgl_driver.h"
+#include "wine/opengl_driver.h"
 
 static void *egl_handle;
 static struct opengl_funcs opengl_funcs;
@@ -50,10 +49,6 @@ static char wgl_extensions[4096];
 static EGLConfig *egl_configs;
 static int num_egl_configs;
 static BOOL has_egl_ext_pixel_format_float;
-
-#define USE_GL_FUNC(name) #name,
-static const char *opengl_func_names[] = { ALL_WGL_FUNCS };
-#undef USE_GL_FUNC
 
 #define DECL_FUNCPTR(f) static typeof(f) * p_##f
 DECL_FUNCPTR(eglBindAPI);
@@ -73,6 +68,9 @@ DECL_FUNCPTR(eglMakeCurrent);
 DECL_FUNCPTR(eglQueryString);
 DECL_FUNCPTR(eglSwapBuffers);
 DECL_FUNCPTR(eglSwapInterval);
+#undef DECL_FUNCPTR
+
+#define DECL_FUNCPTR(f) static PFN_##f p_##f
 DECL_FUNCPTR(glClear);
 #undef DECL_FUNCPTR
 
@@ -194,6 +192,7 @@ static struct wayland_gl_drawable *wayland_gl_drawable_create(HWND hwnd, int for
     struct wayland_gl_drawable *gl;
     int client_width, client_height;
     RECT client_rect = {0};
+    const EGLint attribs[] = {EGL_PRESENT_OPAQUE_EXT, EGL_TRUE, EGL_NONE};
 
     TRACE("hwnd=%p format=%d\n", hwnd, format);
 
@@ -223,7 +222,7 @@ static struct wayland_gl_drawable *wayland_gl_drawable_create(HWND hwnd, int for
     }
 
     gl->surface = p_eglCreateWindowSurface(egl_display, egl_config_for_format(format),
-                                           gl->wl_egl_window, NULL);
+                                           gl->wl_egl_window, attribs);
     if (!gl->surface)
     {
         ERR("Failed to create EGL surface\n");
@@ -987,7 +986,7 @@ static BOOL wayland_wglBindTexImageARB(struct wgl_pbuffer *pbuffer, int buffer)
         pbuffer->prev_context = prev_context;
     }
 
-    opengl_funcs.gl.p_glGetIntegerv(pbuffer->texture_binding, &prev_bound_texture);
+    opengl_funcs.p_glGetIntegerv(pbuffer->texture_binding, &prev_bound_texture);
 
     p_eglMakeCurrent(egl_display, pbuffer->gl->surface, pbuffer->gl->surface,
                      pbuffer->tmp_context);
@@ -996,8 +995,8 @@ static BOOL wayland_wglBindTexImageARB(struct wgl_pbuffer *pbuffer, int buffer)
      * state isn't shared between contexts. After that copy the pbuffer texture
      * data. Note that at the moment we ignore the 'buffer' argument and always
      * copy from the pbuffer back buffer. */
-    opengl_funcs.gl.p_glBindTexture(pbuffer->texture_target, prev_bound_texture);
-    opengl_funcs.gl.p_glCopyTexImage2D(pbuffer->texture_target, 0,
+    opengl_funcs.p_glBindTexture(pbuffer->texture_target, prev_bound_texture);
+    opengl_funcs.p_glCopyTexImage2D(pbuffer->texture_target, 0,
                                        pbuffer->texture_format, 0, 0,
                                        pbuffer->width, pbuffer->height, 0);
 
@@ -1155,19 +1154,12 @@ static void describe_pixel_format(EGLConfig config, struct wgl_pixel_format *fmt
 #undef SET_ATTRIB_ARB
 }
 
-static BOOL has_opengl(void);
-
 static void wayland_get_pixel_formats(struct wgl_pixel_format *formats,
                                       UINT max_formats, UINT *num_formats,
                                       UINT *num_onscreen_formats)
 {
     UINT i;
 
-    if (!has_opengl())
-    {
-        *num_formats = *num_onscreen_formats = 0;
-        return;
-    }
     if (formats)
     {
         for (i = 0; i < min(max_formats, num_egl_configs); ++i)
@@ -1204,46 +1196,44 @@ static void register_extension(const char *ext)
 
 static BOOL init_opengl_funcs(void)
 {
-    unsigned int i;
-
-    for (i = 0; i < ARRAY_SIZE(opengl_func_names); i++)
-    {
-        if (!(((void **)&opengl_funcs.gl)[i] = p_eglGetProcAddress(opengl_func_names[i])))
-        {
-            ERR("%s not found, disabling OpenGL.\n", opengl_func_names[i]);
-            return FALSE;
+#define USE_GL_FUNC(func) \
+        if (!(opengl_funcs.p_##func = (void *)p_eglGetProcAddress(#func))) \
+        { \
+            ERR("%s not found, disabling OpenGL.\n", #func); \
+            return FALSE; \
         }
-    }
+    ALL_GL_FUNCS
+#undef USE_GL_FUNC
 
-    p_glClear = opengl_funcs.gl.p_glClear;
-    opengl_funcs.gl.p_glClear = wayland_glClear;
+    p_glClear = opengl_funcs.p_glClear;
+    opengl_funcs.p_glClear = wayland_glClear;
 
     register_extension("WGL_ARB_extensions_string");
-    opengl_funcs.ext.p_wglGetExtensionsStringARB = wayland_wglGetExtensionsStringARB;
+    opengl_funcs.p_wglGetExtensionsStringARB = wayland_wglGetExtensionsStringARB;
 
     register_extension("WGL_EXT_extensions_string");
-    opengl_funcs.ext.p_wglGetExtensionsStringEXT = wayland_wglGetExtensionsStringEXT;
+    opengl_funcs.p_wglGetExtensionsStringEXT = wayland_wglGetExtensionsStringEXT;
 
     register_extension("WGL_WINE_pixel_format_passthrough");
-    opengl_funcs.ext.p_wglSetPixelFormatWINE = wayland_wglSetPixelFormatWINE;
+    opengl_funcs.p_wglSetPixelFormatWINE = wayland_wglSetPixelFormatWINE;
 
     register_extension("WGL_ARB_make_current_read");
-    opengl_funcs.ext.p_wglGetCurrentReadDCARB = (void *)1;  /* never called */
-    opengl_funcs.ext.p_wglMakeContextCurrentARB = wayland_wglMakeContextCurrentARB;
+    opengl_funcs.p_wglGetCurrentReadDCARB = (void *)1;  /* never called */
+    opengl_funcs.p_wglMakeContextCurrentARB = wayland_wglMakeContextCurrentARB;
 
     register_extension("WGL_ARB_create_context");
     register_extension("WGL_ARB_create_context_no_error");
     register_extension("WGL_ARB_create_context_profile");
-    opengl_funcs.ext.p_wglCreateContextAttribsARB = wayland_wglCreateContextAttribsARB;
+    opengl_funcs.p_wglCreateContextAttribsARB = wayland_wglCreateContextAttribsARB;
 
     register_extension("WGL_EXT_swap_control");
-    opengl_funcs.ext.p_wglGetSwapIntervalEXT = wayland_wglGetSwapIntervalEXT;
-    opengl_funcs.ext.p_wglSwapIntervalEXT = wayland_wglSwapIntervalEXT;
+    opengl_funcs.p_wglGetSwapIntervalEXT = wayland_wglGetSwapIntervalEXT;
+    opengl_funcs.p_wglSwapIntervalEXT = wayland_wglSwapIntervalEXT;
 
     register_extension("WGL_ARB_pixel_format");
-    opengl_funcs.ext.p_wglChoosePixelFormatARB = (void *)1; /* never called */
-    opengl_funcs.ext.p_wglGetPixelFormatAttribfvARB = (void *)1; /* never called */
-    opengl_funcs.ext.p_wglGetPixelFormatAttribivARB = (void *)1; /* never called */
+    opengl_funcs.p_wglChoosePixelFormatARB = (void *)1; /* never called */
+    opengl_funcs.p_wglGetPixelFormatAttribfvARB = (void *)1; /* never called */
+    opengl_funcs.p_wglGetPixelFormatAttribivARB = (void *)1; /* never called */
 
     if (has_egl_ext_pixel_format_float)
     {
@@ -1252,16 +1242,16 @@ static BOOL init_opengl_funcs(void)
     }
 
     register_extension("WGL_ARB_pbuffer");
-    opengl_funcs.ext.p_wglCreatePbufferARB = wayland_wglCreatePbufferARB;
-    opengl_funcs.ext.p_wglDestroyPbufferARB = wayland_wglDestroyPbufferARB;
-    opengl_funcs.ext.p_wglGetPbufferDCARB = wayland_wglGetPbufferDCARB;
-    opengl_funcs.ext.p_wglQueryPbufferARB = wayland_wglQueryPbufferARB;
-    opengl_funcs.ext.p_wglReleasePbufferDCARB = wayland_wglReleasePbufferDCARB;
+    opengl_funcs.p_wglCreatePbufferARB = wayland_wglCreatePbufferARB;
+    opengl_funcs.p_wglDestroyPbufferARB = wayland_wglDestroyPbufferARB;
+    opengl_funcs.p_wglGetPbufferDCARB = wayland_wglGetPbufferDCARB;
+    opengl_funcs.p_wglQueryPbufferARB = wayland_wglQueryPbufferARB;
+    opengl_funcs.p_wglReleasePbufferDCARB = wayland_wglReleasePbufferDCARB;
 
     register_extension("WGL_ARB_render_texture");
-    opengl_funcs.ext.p_wglBindTexImageARB = wayland_wglBindTexImageARB;
-    opengl_funcs.ext.p_wglReleaseTexImageARB = wayland_wglReleaseTexImageARB;
-    opengl_funcs.ext.p_wglSetPbufferAttribARB = wayland_wglSetPbufferAttribARB;
+    opengl_funcs.p_wglBindTexImageARB = wayland_wglBindTexImageARB;
+    opengl_funcs.p_wglReleaseTexImageARB = wayland_wglReleaseTexImageARB;
+    opengl_funcs.p_wglSetPbufferAttribARB = wayland_wglSetPbufferAttribARB;
 
     return TRUE;
 }
@@ -1320,15 +1310,25 @@ static BOOL init_egl_configs(void)
     return TRUE;
 }
 
-static void init_opengl(void)
+/**********************************************************************
+ *           WAYLAND_wine_get_wgl_driver
+ */
+struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version)
 {
     EGLint egl_version[2];
     const char *egl_client_exts, *egl_exts;
 
+    if (version != WINE_OPENGL_DRIVER_VERSION)
+    {
+        ERR("Version mismatch, opengl32 wants %u but driver has %u\n",
+            version, WINE_OPENGL_DRIVER_VERSION);
+        return NULL;
+    }
+
     if (!(egl_handle = dlopen(SONAME_LIBEGL, RTLD_NOW|RTLD_GLOBAL)))
     {
         ERR("Failed to load %s: %s\n", SONAME_LIBEGL, dlerror());
-        return;
+        return NULL;
     }
 
 #define LOAD_FUNCPTR_DLSYM(func) \
@@ -1397,57 +1397,33 @@ static void init_opengl(void)
     REQUIRE_EXT(EGL_KHR_create_context);
     REQUIRE_EXT(EGL_KHR_create_context_no_error);
     REQUIRE_EXT(EGL_KHR_no_config_context);
+    REQUIRE_EXT(EGL_EXT_present_opaque);
 #undef REQUIRE_EXT
 
     has_egl_ext_pixel_format_float = has_extension(egl_exts, "EGL_EXT_pixel_format_float");
 
     if (!init_opengl_funcs()) goto err;
     if (!init_egl_configs()) goto err;
-
-    return;
+    return &opengl_funcs;
 
 err:
     dlclose(egl_handle);
     egl_handle = NULL;
-}
-
-static BOOL has_opengl(void)
-{
-    static pthread_once_t init_once = PTHREAD_ONCE_INIT;
-
-    return !pthread_once(&init_once, init_opengl) && egl_handle;
+    return NULL;
 }
 
 static struct opengl_funcs opengl_funcs =
 {
-    .wgl =
-    {
-        .p_wglCopyContext = wayland_wglCopyContext,
-        .p_wglCreateContext = wayland_wglCreateContext,
-        .p_wglDeleteContext = wayland_wglDeleteContext,
-        .p_wglGetProcAddress = wayland_wglGetProcAddress,
-        .p_wglMakeCurrent = wayland_wglMakeCurrent,
-        .p_wglSetPixelFormat = wayland_wglSetPixelFormat,
-        .p_wglShareLists = wayland_wglShareLists,
-        .p_wglSwapBuffers = wayland_wglSwapBuffers,
-        .p_get_pixel_formats = wayland_get_pixel_formats,
-    }
+    .p_wglCopyContext = wayland_wglCopyContext,
+    .p_wglCreateContext = wayland_wglCreateContext,
+    .p_wglDeleteContext = wayland_wglDeleteContext,
+    .p_wglGetProcAddress = wayland_wglGetProcAddress,
+    .p_wglMakeCurrent = wayland_wglMakeCurrent,
+    .p_wglSetPixelFormat = wayland_wglSetPixelFormat,
+    .p_wglShareLists = wayland_wglShareLists,
+    .p_wglSwapBuffers = wayland_wglSwapBuffers,
+    .p_get_pixel_formats = wayland_get_pixel_formats,
 };
-
-/**********************************************************************
- *           WAYLAND_wine_get_wgl_driver
- */
-struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version)
-{
-    if (version != WINE_WGL_DRIVER_VERSION)
-    {
-        ERR("Version mismatch, opengl32 wants %u but driver has %u\n",
-            version, WINE_WGL_DRIVER_VERSION);
-        return NULL;
-    }
-    if (!has_opengl()) return NULL;
-    return &opengl_funcs;
-}
 
 /**********************************************************************
  *           wayland_destroy_gl_drawable

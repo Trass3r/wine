@@ -557,7 +557,7 @@ static struct mailslot *create_mailslot( struct object *root,
 {
     struct mailslot *mailslot;
 
-    if (!(mailslot = create_named_object( root, &mailslot_ops, name, attr, sd ))) return NULL;
+    if (!(mailslot = create_named_object( root, &mailslot_ops, name, attr & ~OBJ_OPENIF, sd ))) return NULL;
 
     mailslot->fd = NULL;
     mailslot->max_msgsize = max_msgsize;
@@ -652,6 +652,13 @@ DECL_HANDLER(create_mailslot)
             return;
         }
         if (!(root = get_directory_obj( current->process, objattr->rootdir ))) return;
+    }
+
+    if (!req->access)
+    {
+        set_error( STATUS_ACCESS_DENIED );
+        if (root) release_object( root );
+        return;
     }
 
     if ((mailslot = create_mailslot( root, &name, objattr->attributes, req->options, req->max_msgsize,

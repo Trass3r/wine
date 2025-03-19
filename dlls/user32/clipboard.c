@@ -29,7 +29,6 @@
 #include "winnls.h"
 #include "objidl.h"
 #include "shlobj.h"
-#include "wine/server.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(clipboard);
@@ -164,7 +163,7 @@ static HANDLE marshal_data( UINT format, HANDLE handle, size_t *ret_size )
         {
             char *ptr;
             if (!(size = GlobalSize( handle ))) return 0;
-            if ((data_size_t)size != size) return 0;
+            if ((UINT)size != size) return 0;
             if (size < sizeof(WCHAR)) return 0;
             if (!(ptr = GlobalLock( handle ))) return 0;
             /* enforce nul-termination the Windows way: ignoring alignment */
@@ -178,7 +177,7 @@ static HANDLE marshal_data( UINT format, HANDLE handle, size_t *ret_size )
         {
             char *ptr;
             if (!(size = GlobalSize( handle ))) return 0;
-            if ((data_size_t)size != size) return 0;
+            if ((UINT)size != size) return 0;
             if (!(ptr = GlobalLock( handle ))) return 0;
             ptr[size - 1] = 0;  /* enforce null-termination */
             GlobalUnlock( handle );
@@ -187,14 +186,14 @@ static HANDLE marshal_data( UINT format, HANDLE handle, size_t *ret_size )
         }
     default:
         if (!(size = GlobalSize( handle ))) return 0;
-        if ((data_size_t)size != size) return 0;
+        if ((UINT)size != size) return 0;
         *ret_size = size;
         return handle;
     }
 }
 
 /* rebuild the target handle from the data received in GetClipboardData */
-static HANDLE unmarshal_data( UINT format, void *data, data_size_t size )
+static HANDLE unmarshal_data( UINT format, void *data, UINT size )
 {
     HANDLE handle = GlobalReAlloc( data, size, GMEM_MOVEABLE );  /* release unused space */
 
@@ -590,15 +589,6 @@ HANDLE WINAPI SetClipboardData( UINT format, HANDLE data )
 
 
 /**************************************************************************
- *		EnumClipboardFormats (USER32.@)
- */
-UINT WINAPI EnumClipboardFormats( UINT format )
-{
-    return NtUserEnumClipboardFormats( format );
-}
-
-
-/**************************************************************************
  *		GetClipboardData (USER32.@)
  */
 HANDLE WINAPI GetClipboardData( UINT format )
@@ -767,9 +757,13 @@ static HRESULT format_iterator_create( IDataObject *object, IEnumFORMATETC **out
 
 static HRESULT WINAPI format_iterator_Clone( IEnumFORMATETC *iface, IEnumFORMATETC **out )
 {
+    HRESULT hr;
     struct format_iterator *iterator = format_iterator_from_IEnumFORMATETC( iface );
     TRACE( "iterator %p, out %p\n", iterator, out );
-    return format_iterator_create( iterator->object, out );
+    hr = format_iterator_create( iterator->object, out );
+    if (SUCCEEDED(hr))
+        format_iterator_from_IEnumFORMATETC( *out )->entry = iterator->entry;
+    return hr;
 }
 
 static const IEnumFORMATETCVtbl format_iterator_vtbl =

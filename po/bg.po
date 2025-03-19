@@ -174,15 +174,15 @@ msgid ""
 "install it for you.\n"
 "\n"
 "Note: it is recommended to use your distribution's packages instead. See <a "
-"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://gitlab."
-"winehq.org/wine/wine/-/wikis/Gecko</a> for details."
+"href=\"https://gitlab.winehq.org/wine/wine/-/wikis/Gecko\">https://"
+"gitlab.winehq.org/wine/wine/-/wikis/Gecko</a> for details."
 msgstr ""
 "Wine could not find a Gecko package which is needed for applications "
 "embedding HTML to work correctly. Wine can automatically download and "
 "install it for you.\n"
 "\n"
-"Note: it's recommended to use distro packages instead. See https://wiki."
-"winehq.org/Gecko for details."
+"Note: it's recommended to use distro packages instead. See https://"
+"wiki.winehq.org/Gecko for details."
 
 #: dlls/appwiz.cpl/appwiz.rc:110 dlls/appwiz.cpl/appwiz.rc:125
 msgid "&Install"
@@ -250,8 +250,8 @@ msgstr ""
 "embedding HTML to work correctly. Wine can automatically download and "
 "install it for you.\n"
 "\n"
-"Note: it's recommended to use distro packages instead. See https://wiki."
-"winehq.org/Gecko for details."
+"Note: it's recommended to use distro packages instead. See https://"
+"wiki.winehq.org/Gecko for details."
 
 #: dlls/appwiz.cpl/appwiz.rc:31
 msgid "Add/Remove Programs"
@@ -542,7 +542,7 @@ msgstr "Подробности"
 
 #: dlls/comctl32/comctl32.rc:31 dlls/cryptui/cryptui.rc:235
 #: programs/regedit/regedit.rc:291 programs/taskmgr/taskmgr.rc:434
-#: programs/winedbg/winedbg.rc:61 programs/winedbg/winedbg.rc:76
+#: programs/winedbg/winedbg.rc:62 programs/winedbg/winedbg.rc:77
 #: programs/wordpad/wordpad.rc:180
 msgid "Close"
 msgstr "Затвори"
@@ -593,7 +593,7 @@ msgstr "Съхрани като"
 
 #: dlls/comdlg32/comdlg32.rc:202 dlls/comdlg32/comdlg32.rc:211
 #: dlls/comdlg32/comdlg32.rc:358 dlls/comdlg32/comdlg32.rc:55
-#: dlls/hhctrl.ocx/hhctrl.rc:49 programs/wordpad/wordpad.rc:173
+#: dlls/hhctrl.ocx/hhctrl.rc:51 programs/wordpad/wordpad.rc:173
 msgid "Print"
 msgstr "Печат"
 
@@ -732,6 +732,7 @@ msgid "Scr&ipt:"
 msgstr "&Азбука:"
 
 #: dlls/comdlg32/comdlg32.rc:283 dlls/comdlg32/comdlg32.rc:288
+#: dlls/compstui/compstui.rc:33
 msgid "Color"
 msgstr "Цвят"
 
@@ -1363,7 +1364,7 @@ msgstr "мм"
 msgid "Properties"
 msgstr "Свойства"
 
-#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:50
+#: dlls/compstui/compstui.rc:30 dlls/hhctrl.ocx/hhctrl.rc:52
 #: programs/conhost/conhost.rc:51 programs/wordpad/wordpad.rc:166
 msgid "Options"
 msgstr ""
@@ -1372,6 +1373,41 @@ msgstr ""
 #, fuzzy
 msgid "Default"
 msgstr "Системен път"
+
+#: dlls/compstui/compstui.rc:35
+#, fuzzy
+#| msgid "&Copy Background"
+msgid "&Copy count"
+msgstr "&Копирай фона"
+
+#: dlls/compstui/compstui.rc:36
+#, fuzzy
+#| msgid "Print to File"
+msgid "Print on Both Sides"
+msgstr "Печат във файл"
+
+#: dlls/compstui/compstui.rc:32
+#, fuzzy
+#| msgid "Color"
+msgid "C&olor"
+msgstr "Цвят"
+
+#: dlls/compstui/compstui.rc:34
+msgid "Bla&ck && White"
+msgstr ""
+
+#: dlls/compstui/compstui.rc:37
+#, fuzzy
+msgid "&None"
+msgstr "Нищо"
+
+#: dlls/compstui/compstui.rc:38 dlls/compstui/compstui.rc:41
+msgid "Flip on Shor&t Edge"
+msgstr ""
+
+#: dlls/compstui/compstui.rc:39 dlls/compstui/compstui.rc:40
+msgid "Flip on Long E&dge"
+msgstr ""
 
 #: dlls/credui/credui.rc:45
 #, fuzzy
@@ -3162,6 +3198,10 @@ msgstr "Работен плот"
 msgid "&Reset"
 msgstr "&Възстанови"
 
+#: dlls/desk.cpl/desk.rc:42
+msgid "Emulate display mode changes (requires restart)"
+msgstr ""
+
 #: dlls/desk.cpl/desk.rc:29
 #, fuzzy
 msgid "Display Settings"
@@ -3337,11 +3377,11 @@ msgstr "LAN връзка"
 msgid "Connecting to camera... Please Wait"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:59
+#: dlls/hhctrl.ocx/hhctrl.rc:61
 msgid "S&ync"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:60 dlls/hhctrl.ocx/hhctrl.rc:73
+#: dlls/hhctrl.ocx/hhctrl.rc:62 dlls/hhctrl.ocx/hhctrl.rc:75
 #: dlls/shdoclc/shdoclc.rc:41 programs/winhlp32/winhlp32.rc:89
 #, fuzzy
 msgid "&Back"
@@ -3351,33 +3391,33 @@ msgstr ""
 "#-#-#-#-#  bg.po (Wine)  #-#-#-#-#\n"
 "&Назад"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:61 dlls/hhctrl.ocx/hhctrl.rc:74
+#: dlls/hhctrl.ocx/hhctrl.rc:63 dlls/hhctrl.ocx/hhctrl.rc:76
 #, fuzzy
 msgid "&Forward"
 msgstr "На&пред"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:62
+#: dlls/hhctrl.ocx/hhctrl.rc:64
 msgctxt "table of contents"
 msgid "&Home"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:63
+#: dlls/hhctrl.ocx/hhctrl.rc:65
 #, fuzzy
 msgid "&Stop"
 msgstr "Спри"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:64 dlls/hhctrl.ocx/hhctrl.rc:81
+#: dlls/hhctrl.ocx/hhctrl.rc:66 dlls/hhctrl.ocx/hhctrl.rc:83
 #: dlls/oledb32/version.rc:73 dlls/shdoclc/shdoclc.rc:59
 msgid "&Refresh"
 msgstr "Опр&есни"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:65 dlls/hhctrl.ocx/hhctrl.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:67 dlls/hhctrl.ocx/hhctrl.rc:82
 #: programs/winhlp32/winhlp32.rc:34
 #, fuzzy
 msgid "&Print..."
 msgstr "&Печат"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:76 dlls/hhctrl.ocx/hhctrl.rc:90
+#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/hhctrl.ocx/hhctrl.rc:92
 #: dlls/shdoclc/shdoclc.rc:49 dlls/shdoclc/shdoclc.rc:98
 #: dlls/shdoclc/shdoclc.rc:120 dlls/user32/user32.rc:65
 #, fuzzy
@@ -3388,24 +3428,24 @@ msgstr ""
 "#-#-#-#-#  bg.po (Wine)  #-#-#-#-#\n"
 "&Маркирай всичко"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:78 dlls/shdoclc/shdoclc.rc:54
+#: dlls/hhctrl.ocx/hhctrl.rc:80 dlls/shdoclc/shdoclc.rc:54
 msgid "&View Source"
 msgstr "Пре&гледай изходния код"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:83
+#: dlls/hhctrl.ocx/hhctrl.rc:85
 #, fuzzy
 #| msgid "Properties"
 msgid "Proper&ties"
 msgstr "Свойства"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:87 dlls/shdoclc/shdoclc.rc:79
+#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:79
 #: dlls/shdoclc/shdoclc.rc:93 dlls/shdoclc/shdoclc.rc:117
 #: dlls/shdoclc/shdoclc.rc:159 dlls/shdoclc/shdoclc.rc:183
 #: dlls/user32/user32.rc:60 programs/wordpad/wordpad.rc:112
 msgid "Cu&t"
 msgstr "&Изрежи"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:88 dlls/shdoclc/shdoclc.rc:80
+#: dlls/hhctrl.ocx/hhctrl.rc:90 dlls/shdoclc/shdoclc.rc:80
 #: dlls/shdoclc/shdoclc.rc:94 dlls/shdoclc/shdoclc.rc:118
 #: dlls/shdoclc/shdoclc.rc:133 dlls/shdoclc/shdoclc.rc:160
 #: dlls/shdoclc/shdoclc.rc:184 dlls/shell32/shell32.rc:98
@@ -3414,7 +3454,7 @@ msgstr "&Изрежи"
 msgid "&Copy"
 msgstr "&Копирай"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:89 dlls/shdoclc/shdoclc.rc:119
+#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:119
 #: dlls/shell32/shell32.rc:64
 #, fuzzy
 msgid "Paste"
@@ -3424,7 +3464,7 @@ msgstr ""
 "#-#-#-#-#  bg.po (Wine)  #-#-#-#-#\n"
 "Вмъкни"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:91 dlls/shdoclc/shdoclc.rc:121
+#: dlls/hhctrl.ocx/hhctrl.rc:93 dlls/shdoclc/shdoclc.rc:121
 #: dlls/shell32/shell32.rc:166
 msgid "&Print"
 msgstr "&Печат"
@@ -3453,38 +3493,47 @@ msgstr ""
 msgid "Show &Tabs"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:42
+#: dlls/hhctrl.ocx/hhctrl.rc:39
+#, fuzzy
+msgid "Select Topic"
+msgstr ""
+"#-#-#-#-#  bg.po (Wine)  #-#-#-#-#\n"
+"Маркирай &всичко\n"
+"#-#-#-#-#  bg.po (Wine)  #-#-#-#-#\n"
+"&Маркирай всичко"
+
+#: dlls/hhctrl.ocx/hhctrl.rc:44
 msgid "Show"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:43 dlls/winemac.drv/winemac.rc:34
+#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/winemac.drv/winemac.rc:34
 msgid "Hide"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:44 dlls/ieframe/ieframe.rc:68
+#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:68
 #: dlls/shdoclc/shdoclc.rc:167 dlls/shdoclc/shdoclc.rc:191
 msgid "Stop"
 msgstr "Спри"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:45 dlls/ieframe/ieframe.rc:69
+#: dlls/hhctrl.ocx/hhctrl.rc:47 dlls/ieframe/ieframe.rc:69
 #: dlls/shell32/shell32.rc:62
 msgid "Refresh"
 msgstr "Опресни"
 
-#: dlls/hhctrl.ocx/hhctrl.rc:46 dlls/ieframe/ieframe.rc:66
+#: dlls/hhctrl.ocx/hhctrl.rc:48 dlls/ieframe/ieframe.rc:66
 msgid "Back"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:47
+#: dlls/hhctrl.ocx/hhctrl.rc:49
 msgctxt "table of contents"
 msgid "Home"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:48
+#: dlls/hhctrl.ocx/hhctrl.rc:50
 msgid "Sync"
 msgstr ""
 
-#: dlls/hhctrl.ocx/hhctrl.rc:51 dlls/ieframe/ieframe.rc:67
+#: dlls/hhctrl.ocx/hhctrl.rc:53 dlls/ieframe/ieframe.rc:67
 msgid "Forward"
 msgstr ""
 
@@ -3960,7 +4009,7 @@ msgstr ""
 msgid "Object doesn't support this action"
 msgstr ""
 
-#: dlls/jscript/jscript.rc:36
+#: dlls/jscript/jscript.rc:36 dlls/vbscript/vbscript.rc:54
 msgid "Argument not optional"
 msgstr ""
 
@@ -8407,7 +8456,7 @@ msgstr "Цялата мрежа"
 msgid "Sound Selection"
 msgstr "Потвърдете изтриването на файла"
 
-#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:77
+#: dlls/msacm32/msacm32.rc:39 programs/winedbg/winedbg.rc:78
 #, fuzzy
 msgid "&Save As..."
 msgstr "Съхрани &като..."
@@ -10501,7 +10550,8 @@ msgctxt "display name"
 msgid "Desktop"
 msgstr "Работен плот"
 
-#: dlls/shell32/shell32.rc:152 programs/regedit/regedit.rc:243
+#: dlls/shell32/shell32.rc:152 dlls/urlmon/urlmon.rc:56
+#: programs/regedit/regedit.rc:243
 #, fuzzy
 msgid "My Computer"
 msgstr ""
@@ -12800,6 +12850,55 @@ msgstr "Инсталирай"
 msgid "Install"
 msgstr "Инсталирай"
 
+#: dlls/urlmon/urlmon.rc:58
+#, fuzzy
+#| msgid "Local Port"
+msgid "Local intranet"
+msgstr "Локален порт"
+
+#: dlls/urlmon/urlmon.rc:60
+msgid "Trusted sites"
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:62
+#, fuzzy
+msgid "Internet"
+msgstr "Файлът не е намерен"
+
+#: dlls/urlmon/urlmon.rc:64
+msgid "Restricted sites"
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:57
+#, fuzzy
+msgid "Your computer"
+msgstr ""
+"#-#-#-#-#  bg.po (Wine)  #-#-#-#-#\n"
+"Моят компютър\n"
+"#-#-#-#-#  bg.po (Wine)  #-#-#-#-#\n"
+"Моя компютър"
+
+#: dlls/urlmon/urlmon.rc:59
+msgid ""
+"This zone contains all Web sites that are on your organization's intranet."
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:61
+msgid ""
+"This zone contains Web sites that you trust not to damage your computer or "
+"data."
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:63
+msgid "This zone contains all Web sites you haven't placed in other zones"
+msgstr ""
+
+#: dlls/urlmon/urlmon.rc:65
+msgid ""
+"This zone contains Web sites that could potentially damage your computer or "
+"data."
+msgstr ""
+
 #: dlls/user32/user32.rc:30 dlls/user32/user32.rc:43
 #: programs/taskmgr/taskmgr.rc:138
 #, fuzzy
@@ -12948,7 +13047,7 @@ msgstr ""
 msgid "Object doesn't support current locale setting"
 msgstr ""
 
-#: dlls/vbscript/vbscript.rc:53 dlls/vbscript/vbscript.rc:54
+#: dlls/vbscript/vbscript.rc:53
 #, fuzzy
 msgid "Named argument not found"
 msgstr "Файлът не е намерен.\n"
@@ -18129,6 +18228,37 @@ msgstr ""
 msgid "Task"
 msgstr ""
 
+#: programs/timeout/timeout.rc:28
+msgid "Usage: timeout /T <timeout> [</NOBREAK>]\n"
+msgstr ""
+
+#: programs/timeout/timeout.rc:29
+#, fuzzy
+msgid "TIMEOUT: Bad command line\n"
+msgstr "Невалидни знаци в пътя.\n"
+
+#: programs/timeout/timeout.rc:30
+msgid "waiting since %d sec. "
+msgstr ""
+
+#: programs/timeout/timeout.rc:31
+msgid "press CTRL+C..."
+msgstr ""
+
+#: programs/timeout/timeout.rc:32
+msgid "press a key to continue..."
+msgstr ""
+
+#: programs/timeout/timeout.rc:33
+msgid "ERROR: not possible to redirect input\n"
+msgstr ""
+
+#: programs/timeout/timeout.rc:34
+msgid ""
+"ERROR: Timeout value out of range or invalid number. Valid range is -1 to "
+"99999.\n"
+msgstr ""
+
 #: programs/uninstaller/uninstaller.rc:29
 msgid "Wine Application Uninstaller"
 msgstr ""
@@ -18855,35 +18985,35 @@ msgid ""
 "The command is invalid.\n"
 msgstr ""
 
-#: programs/winedbg/winedbg.rc:50 programs/winedbg/winedbg.rc:38
+#: programs/winedbg/winedbg.rc:51 programs/winedbg/winedbg.rc:38
 #, fuzzy
 msgid "Program Error"
 msgstr "Program Files"
 
-#: programs/winedbg/winedbg.rc:55
+#: programs/winedbg/winedbg.rc:56
 msgid ""
 "The program %s has encountered a serious problem and needs to close. We are "
 "sorry for the inconvenience."
 msgstr ""
 
-#: programs/winedbg/winedbg.rc:59
+#: programs/winedbg/winedbg.rc:60
 msgid ""
 "This can be caused by a problem in the program or a deficiency in Wine. You "
 "may want to check the <a href=\"https://appdb.winehq.org\">Application "
 "Database</a> for tips about running this application."
 msgstr ""
 
-#: programs/winedbg/winedbg.rc:62
+#: programs/winedbg/winedbg.rc:63
 #, fuzzy
 msgid "Show &Details"
 msgstr "&Подробности"
 
-#: programs/winedbg/winedbg.rc:67
+#: programs/winedbg/winedbg.rc:68
 #, fuzzy
 msgid "Program Error Details"
 msgstr "Program Files"
 
-#: programs/winedbg/winedbg.rc:74
+#: programs/winedbg/winedbg.rc:75
 msgid ""
 "If this problem is not present under Windows and has not been reported yet, "
 "you can save the detailed information to a file using the \"Save As\" "

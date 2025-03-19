@@ -36,13 +36,6 @@
 
 #pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
 
-#if !defined(MAC_OS_X_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12
-/* Additional Mac virtual keycode, to complement those in Carbon's <HIToolbox/Events.h>. */
-enum {
-    kVK_RightCommand              = 0x36, /* Invented for Wine; was unused */
-};
-#endif
-
 
 @interface NSWindow (PrivatePreventsActivation)
 
@@ -2279,10 +2272,8 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
         NSScreen* screen = self.screen;
         if (![self isVisible] || ![self isOnActiveSpace] || [self isMiniaturized] || [self isEmptyShaped])
             screen = nil;
-#if defined(MAC_OS_X_VERSION_10_9) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_9
-        if ([self respondsToSelector:@selector(occlusionState)] && !(self.occlusionState & NSWindowOcclusionStateVisible))
+        if (!(self.occlusionState & NSWindowOcclusionStateVisible))
             screen = nil;
-#endif
 
         NSNumber* displayIDNumber = screen.deviceDescription[@"NSScreenNumber"];
         CGDirectDisplayID displayID = [displayIDNumber unsignedIntValue];
@@ -3618,7 +3609,9 @@ void macdrv_set_window_alpha(macdrv_window w, CGFloat alpha)
 {
     WineWindow* window = (WineWindow*)w;
 
-    [window setAlphaValue:alpha];
+    OnMainThread(^{
+        [window setAlphaValue:alpha];
+    });
 }
 }
 
@@ -3781,16 +3774,16 @@ void macdrv_set_view_superview(macdrv_view v, macdrv_view s, macdrv_window w, ma
 {
 @autoreleasepool
 {
-    WineContentView* view = (WineContentView*)v;
-    WineContentView* superview = (WineContentView*)s;
-    WineWindow* window = (WineWindow*)w;
-    WineContentView* prev = (WineContentView*)p;
-    WineContentView* next = (WineContentView*)n;
-
-    if (!superview)
-        superview = [window contentView];
-
     OnMainThreadAsync(^{
+        WineContentView* view = (WineContentView*)v;
+        WineContentView* superview = (WineContentView*)s;
+        WineWindow* window = (WineWindow*)w;
+        WineContentView* prev = (WineContentView*)p;
+        WineContentView* next = (WineContentView*)n;
+
+        if (!superview)
+            superview = [window contentView];
+
         if (superview == [view superview])
         {
             NSArray* subviews = [superview subviews];
@@ -3806,10 +3799,6 @@ void macdrv_set_view_superview(macdrv_view v, macdrv_view s, macdrv_window w, ma
         WineWindow* oldWindow = (WineWindow*)[view window];
         WineWindow* newWindow = (WineWindow*)[superview window];
 
-#if !defined(MAC_OS_X_VERSION_10_10) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_10
-        if (floor(NSAppKitVersionNumber) <= 1265 /*NSAppKitVersionNumber10_9*/)
-            [view removeFromSuperview];
-#endif
         if (prev)
             [superview addSubview:view positioned:NSWindowBelow relativeTo:prev];
         else
@@ -3880,15 +3869,7 @@ macdrv_metal_device macdrv_create_metal_device(void)
 {
 @autoreleasepool
 {
-    macdrv_metal_device ret;
-
-#if MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_11
-    if (MTLCreateSystemDefaultDevice == NULL)
-        return NULL;
-#endif
-
-    ret = (macdrv_metal_device)MTLCreateSystemDefaultDevice();
-    return ret;
+    return (macdrv_metal_device)MTLCreateSystemDefaultDevice();
 }
 }
 

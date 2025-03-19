@@ -283,8 +283,13 @@ obj_handle_t alloc_handle_no_access_check( struct process *process, void *ptr, u
 obj_handle_t alloc_handle( struct process *process, void *ptr, unsigned int access, unsigned int attr )
 {
     struct object *obj = ptr;
-    access = obj->ops->map_access( obj, access ) & ~RESERVED_ALL;
-    if (access && !check_object_access( NULL, obj, &access )) return 0;
+
+    if (!(access = obj->ops->map_access( obj, access ) & ~RESERVED_ALL))
+    {
+        set_error( STATUS_ACCESS_DENIED );
+        return 0;
+    }
+    if (!check_object_access( NULL, obj, &access )) return 0;
     return alloc_handle_entry( process, ptr, access, attr );
 }
 
@@ -836,7 +841,7 @@ static int enum_handles( struct process *process, void *user )
     struct handle_table *table = process->handles;
     struct handle_entry *entry;
     struct handle_info *handle;
-    unsigned int i;
+    int i;
 
     if (!table)
         return 0;
@@ -896,7 +901,7 @@ static int enum_process_handles_cb( struct process *process, void *user )
     struct enum_process_handles_info *info = user;
     struct handle_table *table = process->handles;
     struct handle_entry *entry;
-    unsigned int i;
+    int i;
 
     if (!table)
         return 0;

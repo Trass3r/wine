@@ -1094,6 +1094,7 @@ static void test_query_interrupt(void)
 
 static void test_time_adjustment(void)
 {
+    SYSTEM_LEAP_SECOND_INFORMATION leap;
     SYSTEM_TIME_ADJUSTMENT_QUERY query;
     SYSTEM_TIME_ADJUSTMENT adjust;
     NTSTATUS status;
@@ -1124,6 +1125,21 @@ static void test_time_adjustment(void)
     status = pNtSetSystemInformation( SystemTimeAdjustmentInformation, &adjust, sizeof(adjust)+1 );
     todo_wine
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "got %08lx\n", status );
+
+    len = 0;
+    memset( &leap, 0xcc, sizeof(leap) );
+    status = pNtQuerySystemInformation( SystemLeapSecondInformation, &leap, sizeof(leap), &len );
+    if (status == STATUS_INVALID_INFO_CLASS)
+    {
+        win_skip( "NtQuerySystemInformation(SystemLeapSecondInformation) is not implemented.\n" );
+    }
+    else
+    {
+        ok( status == STATUS_SUCCESS, "got %08lx\n", status );
+        ok( len == sizeof(leap), "wrong len %lu\n", len );
+        ok( leap.Enabled == 1, "got %u\n", leap.Enabled );
+        ok( !leap.Flags, "got %lx\n", leap.Flags );
+    }
 }
 
 static void test_query_kerndebug(void)
@@ -2359,8 +2375,11 @@ static void test_query_process_image_file_name(void)
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "Expected STATUS_INFO_LENGTH_MISMATCH, got %08lx\n", status);
 
     buffer = malloc(ReturnLength);
+    memset( buffer, 0xcc, ReturnLength );
     status = NtQueryInformationProcess( GetCurrentProcess(), ProcessImageFileName, buffer, ReturnLength, &ReturnLength);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
+    ok( buffer->MaximumLength == buffer->Length + sizeof(WCHAR), "got %u, %u.\n", buffer->Length, buffer->MaximumLength );
+    ok ( !buffer->Buffer[buffer->Length / sizeof(WCHAR)], "got %#x.\n", buffer->Buffer[buffer->Length / sizeof(WCHAR)] );
     todo_wine
     ok(!memcmp(buffer->Buffer, deviceW, sizeof(deviceW)),
         "Expected image name to begin with \\Device\\, got %s\n",
@@ -2382,8 +2401,11 @@ static void test_query_process_image_file_name(void)
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "Expected STATUS_INFO_LENGTH_MISMATCH, got %08lx\n", status);
 
     buffer = malloc(ReturnLength);
+    memset( buffer, 0xcc, ReturnLength );
     status = NtQueryInformationProcess( GetCurrentProcess(), ProcessImageFileNameWin32, buffer, ReturnLength, &ReturnLength);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
+    ok( buffer->MaximumLength == buffer->Length + sizeof(WCHAR), "got %u, %u.\n", buffer->Length, buffer->MaximumLength );
+    ok ( !buffer->Buffer[buffer->Length / sizeof(WCHAR)], "got %#x.\n", buffer->Buffer[buffer->Length / sizeof(WCHAR)] );
     ok(memcmp(buffer->Buffer, deviceW, sizeof(deviceW)),
         "Expected image name not to begin with \\Device\\, got %s\n",
         wine_dbgstr_wn(buffer->Buffer, buffer->Length / sizeof(WCHAR)));
@@ -3252,7 +3274,7 @@ static void test_HideFromDebugger(void)
 {
     NTSTATUS status;
     HANDLE thread, stop_event;
-    ULONG dummy;
+    ULONG dummy, ret_len;
 
     dummy = 0;
     status = pNtSetInformationThread( GetCurrentThread(), ThreadHideFromDebugger, &dummy, sizeof(ULONG) );
@@ -3298,6 +3320,27 @@ static void test_HideFromDebugger(void)
     status = NtQueryInformationThread( thread, ThreadHideFromDebugger, &dummy, 1, NULL );
     ok( status == STATUS_SUCCESS, "got %#lx\n", status );
     ok( dummy == 1, "Expected dummy == 1, got %08lx\n", dummy );
+
+    status = NtQueryInformationThread( thread, ThreadHideFromDebugger, &dummy, 1, (ULONG *)1 );
+    ok( status == STATUS_ACCESS_VIOLATION, "Expected STATUS_ACCESS_VIOLATION, got %08lx\n", status );
+
+    status = NtQueryInformationThread( thread, ThreadHideFromDebugger, &dummy, 0, (ULONG *)1 );
+    ok( status == STATUS_ACCESS_VIOLATION, "Expected STATUS_ACCESS_VIOLATION, got %08lx\n", status );
+
+    ret_len = 0xdeadbeef;
+    status = NtQueryInformationThread( thread, ThreadHideFromDebugger, &dummy, 0, &ret_len );
+    ok( status == STATUS_INFO_LENGTH_MISMATCH, "Expected STATUS_INFO_LENGTH_MISMATCH, got %#lx\n", status );
+    ok( ret_len == 0xdeadbeef, "Expected ret_len == deadbeef, got %08lx\n", ret_len );
+
+    ret_len = 0xdeadbeef;
+    status = NtQueryInformationThread( (HANDLE)0xdeadbeef, ThreadHideFromDebugger, &dummy, 1, &ret_len );
+    ok( status == STATUS_INVALID_HANDLE, "Expected STATUS_INVALID_HANDLE, got %#lx\n", status );
+    ok( ret_len == 0xdeadbeef, "Expected ret_len == deadbeef, got %08lx\n", ret_len );
+
+    ret_len = 0xdeadbeef;
+    status = NtQueryInformationThread( thread, ThreadHideFromDebugger, &dummy, 1, &ret_len );
+    ok( status == STATUS_SUCCESS, "got %#lx\n", status );
+    ok( ret_len == 1, "Expected ret_len == 1, got %08lx\n", ret_len );
 
     SetEvent( stop_event );
     WaitForSingleObject( thread, INFINITE );

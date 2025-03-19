@@ -436,6 +436,27 @@ NTSTATUS WINAPI wow64_NtFlushProcessWriteBuffers( UINT *args )
 
 
 /**********************************************************************
+ *           wow64_NtGetNextProcess
+ */
+NTSTATUS WINAPI wow64_NtGetNextProcess( UINT *args )
+{
+    HANDLE process = get_handle( &args );
+    ACCESS_MASK access = get_ulong( &args );
+    ULONG attributes = get_ulong( &args );
+    ULONG flags = get_ulong( &args );
+    ULONG *handle_ptr = get_ptr( &args );
+
+    HANDLE handle = 0;
+    NTSTATUS status;
+
+    *handle_ptr = 0;
+    status = NtGetNextProcess( process, access, attributes, flags, &handle );
+    put_handle( handle_ptr, handle );
+    return status;
+}
+
+
+/**********************************************************************
  *           wow64_NtGetNextThread
  */
 NTSTATUS WINAPI wow64_NtGetNextThread( UINT *args )
@@ -692,7 +713,7 @@ NTSTATUS WINAPI wow64_NtQueryInformationThread( UINT *args )
         if (!status)
         {
             info32.ExitStatus = info.ExitStatus;
-            info32.TebBaseAddress = is_process_id_wow64( &info.ClientId ) ?
+            info32.TebBaseAddress = is_process_id_wow64( &info.ClientId ) && info.TebBaseAddress ?
                                     PtrToUlong(info.TebBaseAddress) + 0x2000 : 0;
             info32.ClientId.UniqueProcess = HandleToULong( info.ClientId.UniqueProcess );
             info32.ClientId.UniqueThread = HandleToULong( info.ClientId.UniqueThread );
@@ -872,6 +893,7 @@ NTSTATUS WINAPI wow64_NtSetInformationProcess( UINT *args )
     case ProcessPagePriority:   /* MEMORY_PRIORITY_INFORMATION */
     case ProcessPowerThrottlingState:   /* PROCESS_POWER_THROTTLING_STATE */
     case ProcessLeapSecondInformation:   /* PROCESS_LEAP_SECOND_INFO */
+    case ProcessWineGrantAdminToken:   /* NULL */
         return NtSetInformationProcess( handle, class, ptr, len );
 
     case ProcessAccessToken: /* PROCESS_ACCESS_TOKEN */

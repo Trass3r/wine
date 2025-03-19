@@ -39,6 +39,7 @@
 #include "iads.h"
 #include "advapi32_misc.h"
 #include "lmcons.h"
+#include "userenv.h"
 
 #include "wine/debug.h"
 
@@ -1209,7 +1210,7 @@ static void split_domain_account( const LSA_UNICODE_STRING *str, LSA_UNICODE_STR
 
     while (p > str->Buffer && *p != '\\') p--;
 
-    if (*p == '\\')
+    if (p >= str->Buffer && *p == '\\')
     {
         domain->Buffer = str->Buffer;
         domain->Length = (p - str->Buffer) * sizeof(WCHAR);
@@ -2671,19 +2672,47 @@ BOOL WINAPI ConvertSidToStringSidA(PSID pSid, LPSTR *pstr)
 }
 
 /******************************************************************************
- * CreateProcessWithLogonW
+ * CreateProcessWithLogonW [ADVAPI32.@]
  */
-BOOL WINAPI CreateProcessWithLogonW( LPCWSTR lpUsername, LPCWSTR lpDomain, LPCWSTR lpPassword, DWORD dwLogonFlags,
-    LPCWSTR lpApplicationName, LPWSTR lpCommandLine, DWORD dwCreationFlags, LPVOID lpEnvironment,
-    LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation )
+BOOL WINAPI CreateProcessWithLogonW( LPCWSTR user_name, LPCWSTR domain, LPCWSTR password,
+                                     DWORD logon_flags, LPCWSTR application_name, LPWSTR command_line,
+                                     DWORD creation_flags, void *environment, LPCWSTR current_directory,
+                                     STARTUPINFOW *startup_info, PROCESS_INFORMATION *process_information )
 {
-    FIXME("%s %s %p 0x%08lx %s %s 0x%08lx %p %s %p %p stub\n", debugstr_w(lpUsername), debugstr_w(lpDomain),
-          lpPassword, dwLogonFlags, debugstr_w(lpApplicationName), debugstr_w(lpCommandLine), dwCreationFlags,
-          lpEnvironment, debugstr_w(lpCurrentDirectory), lpStartupInfo, lpProcessInformation);
+    HANDLE token;
+
+    FIXME("%s %s %p 0x%08lx %s %s 0x%08lx %p %s %p %p: semi-stub\n", debugstr_w(user_name), debugstr_w(domain),
+          password, logon_flags, debugstr_w(application_name), debugstr_w(command_line), creation_flags,
+          environment, debugstr_w(current_directory), startup_info, process_information);
+
+    if (LogonUserW(user_name, domain, password, 0, 0, &token))
+    {
+        void *env = environment;
+        BOOL ret = TRUE;
+
+        if (!environment)
+        {
+            ret = CreateEnvironmentBlock(&env, token, FALSE);
+            creation_flags |= CREATE_UNICODE_ENVIRONMENT;
+        }
+
+        if (ret)
+        {
+            ret = CreateProcessAsUserW( token, application_name, command_line, NULL, NULL, FALSE,
+                    creation_flags, env, current_directory, startup_info, process_information );
+        }
+        if (env != environment)
+            DestroyEnvironmentBlock(env);
+        CloseHandle(token);
+        return ret;
+    }
 
     return FALSE;
 }
 
+/******************************************************************************
+ * CreateProcessWithTokenW [ADVAPI32.@]
+ */
 BOOL WINAPI CreateProcessWithTokenW(HANDLE token, DWORD logon_flags, LPCWSTR application_name, LPWSTR command_line,
         DWORD creation_flags, void *environment, LPCWSTR current_directory, STARTUPINFOW *startup_info,
         PROCESS_INFORMATION *process_information )

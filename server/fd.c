@@ -338,7 +338,7 @@ timeout_t current_time;
 timeout_t monotonic_time;
 
 struct _KUSER_SHARED_DATA *user_shared_data = NULL;
-static const int user_shared_data_timeout = 16;
+static const timeout_t user_shared_data_timeout = 16 * 10000;
 
 static void atomic_store_ulong(volatile ULONG *ptr, ULONG value)
 {
@@ -496,7 +496,7 @@ static int active_users;                    /* current number of active users */
 static int allocated_users;                 /* count of allocated entries in the array */
 static struct fd **freelist;                /* list of free entries in the array */
 
-static int get_next_timeout(void);
+static int get_next_timeout( struct timespec *ts );
 
 static inline void fd_poll_event( struct fd *fd, int event )
 {
@@ -564,6 +564,7 @@ static inline void remove_epoll_user( struct fd *fd, int user )
 static inline void main_loop_epoll(void)
 {
     int i, ret, timeout;
+    struct timespec ts;
     struct epoll_event events[128];
 
     assert( POLLIN == EPOLLIN );
@@ -575,12 +576,17 @@ static inline void main_loop_epoll(void)
 
     while (active_users)
     {
-        timeout = get_next_timeout();
+        timeout = get_next_timeout( &ts );
 
         if (!active_users) break;  /* last user removed by a timeout */
         if (epoll_fd == -1) break;  /* an error occurred with epoll */
 
+#ifdef HAVE_EPOLL_PWAIT2
+        ret = epoll_pwait2( epoll_fd, events, ARRAY_SIZE( events ), timeout == -1 ? NULL : &ts, NULL );
+#else
         ret = epoll_wait( epoll_fd, events, ARRAY_SIZE( events ), timeout );
+#endif
+
         set_current_time();
 
         /* put the events into the pollfd array first, like poll does */
@@ -663,26 +669,19 @@ static inline void remove_epoll_user( struct fd *fd, int user )
 static inline void main_loop_epoll(void)
 {
     int i, ret, timeout;
+    struct timespec ts;
     struct kevent events[128];
 
     if (kqueue_fd == -1) return;
 
     while (active_users)
     {
-        timeout = get_next_timeout();
+        timeout = get_next_timeout( &ts );
 
         if (!active_users) break;  /* last user removed by a timeout */
         if (kqueue_fd == -1) break;  /* an error occurred with kqueue */
 
-        if (timeout != -1)
-        {
-            struct timespec ts;
-
-            ts.tv_sec = timeout / 1000;
-            ts.tv_nsec = (timeout % 1000) * 1000000;
-            ret = kevent( kqueue_fd, NULL, 0, events, ARRAY_SIZE( events ), &ts );
-        }
-        else ret = kevent( kqueue_fd, NULL, 0, events, ARRAY_SIZE( events ), NULL );
+        ret = kevent( kqueue_fd, NULL, 0, events, ARRAY_SIZE( events ), timeout == -1 ? NULL : &ts );
 
         set_current_time();
 
@@ -765,27 +764,20 @@ static inline void remove_epoll_user( struct fd *fd, int user )
 static inline void main_loop_epoll(void)
 {
     int i, nget, ret, timeout;
+    struct timespec ts;
     port_event_t events[128];
 
     if (port_fd == -1) return;
 
     while (active_users)
     {
-        timeout = get_next_timeout();
+        timeout = get_next_timeout( &ts );
         nget = 1;
 
         if (!active_users) break;  /* last user removed by a timeout */
         if (port_fd == -1) break;  /* an error occurred with event completion */
 
-        if (timeout != -1)
-        {
-            struct timespec ts;
-
-            ts.tv_sec = timeout / 1000;
-            ts.tv_nsec = (timeout % 1000) * 1000000;
-            ret = port_getn( port_fd, events, ARRAY_SIZE( events ), &nget, &ts );
-        }
-        else ret = port_getn( port_fd, events, ARRAY_SIZE( events ), &nget, NULL );
+        ret = port_getn( port_fd, events, ARRAY_SIZE( events ), &nget, timeout == -1 ? NULL : &ts );
 
 	if (ret == -1) break;  /* an error occurred with event completion */
 
@@ -876,10 +868,11 @@ static void remove_poll_user( struct fd *fd, int user )
     active_users--;
 }
 
-/* process pending timeouts and return the time until the next timeout, in milliseconds */
-static int get_next_timeout(void)
+/* process pending timeouts and return the time until the next timeout in milliseconds,
+ * and full nanosecond precision in the timespec parameter if given */
+static int get_next_timeout( struct timespec *ts )
 {
-    int ret = user_shared_data ? user_shared_data_timeout : -1;
+    timeout_t ret = user_shared_data ? user_shared_data_timeout : -1;
 
     if (!list_empty( &abs_timeout_list ) || !list_empty( &rel_timeout_list ))
     {
@@ -924,21 +917,32 @@ static int get_next_timeout(void)
         if ((ptr = list_head( &abs_timeout_list )) != NULL)
         {
             struct timeout_user *timeout = LIST_ENTRY( ptr, struct timeout_user, entry );
-            timeout_t diff = (timeout->when - current_time + 9999) / 10000;
-            if (diff > INT_MAX) diff = INT_MAX;
-            else if (diff < 0) diff = 0;
+            timeout_t diff = timeout->when - current_time;
+            if (diff < 0) diff = 0;
             if (ret == -1 || diff < ret) ret = diff;
         }
 
         if ((ptr = list_head( &rel_timeout_list )) != NULL)
         {
             struct timeout_user *timeout = LIST_ENTRY( ptr, struct timeout_user, entry );
-            timeout_t diff = (-timeout->when - monotonic_time + 9999) / 10000;
-            if (diff > INT_MAX) diff = INT_MAX;
-            else if (diff < 0) diff = 0;
+            timeout_t diff = -timeout->when - monotonic_time;
+            if (diff < 0) diff = 0;
             if (ret == -1 || diff < ret) ret = diff;
         }
     }
+
+    /* infinite */
+    if (ret == -1) return -1;
+
+    if (ts)
+    {
+        ts->tv_sec = ret / TICKS_PER_SEC;
+        ts->tv_nsec = (ret % TICKS_PER_SEC) * 100;
+    }
+
+    /* convert to milliseconds, ceil to avoid spinning with 0 timeout */
+    ret = (ret + 9999) / 10000;
+    if (ret > INT_MAX) ret = INT_MAX;
     return ret;
 }
 
@@ -955,7 +959,7 @@ void main_loop(void)
 
     while (active_users)
     {
-        timeout = get_next_timeout();
+        timeout = get_next_timeout( NULL );
 
         if (!active_users) break;  /* last user removed by a timeout */
 
@@ -1169,6 +1173,15 @@ static struct inode *get_inode( dev_t dev, ino_t ino, int unix_fd )
     return inode;
 }
 
+static int inode_has_pending_close( struct inode *inode, const char *path )
+{
+    struct closed_fd *fd;
+
+    LIST_FOR_EACH_ENTRY( fd, &inode->closed, struct closed_fd, entry )
+        if (!strcmp( fd->unix_name, path )) return 1;
+    return 0;
+}
+
 /* add fd to the inode list of file descriptors to close */
 static void inode_add_closed_fd( struct inode *inode, struct closed_fd *fd )
 {
@@ -1185,7 +1198,7 @@ static void inode_add_closed_fd( struct inode *inode, struct closed_fd *fd )
         free( fd->unix_name );
         free( fd );
     }
-    else if (fd->disp_flags & FILE_DISPOSITION_DELETE)
+    else if ((fd->disp_flags & FILE_DISPOSITION_DELETE) && !inode_has_pending_close( inode, fd->unix_name ))
     {
         /* close the fd but keep the structure around for unlink */
         if (fd->unix_fd != -1) close( fd->unix_fd );
@@ -1943,15 +1956,6 @@ struct fd *open_fd( struct fd *root, const char *name, struct unicode_str nt_nam
 
     fd->nt_name = dup_nt_name( root, nt_name, &fd->nt_namelen );
     fd->unix_name = NULL;
-    if ((path = dup_fd_name( root, name )))
-    {
-        fd->unix_name = realpath( path, NULL );
-        free( path );
-    }
-
-    closed_fd->unix_fd = fd->unix_fd;
-    closed_fd->disp_flags = 0;
-    closed_fd->unix_name = fd->unix_name;
     fstat( fd->unix_fd, &st );
     *mode = st.st_mode;
 
@@ -1968,6 +1972,16 @@ struct fd *open_fd( struct fd *root, const char *name, struct unicode_str nt_nam
              */
             goto error;
         }
+
+        if ((path = dup_fd_name( root, name )))
+        {
+            fd->unix_name = realpath( path, NULL );
+            free( path );
+        }
+
+        closed_fd->unix_fd = fd->unix_fd;
+        closed_fd->unix_name = fd->unix_name;
+        closed_fd->disp_flags = 0;
         fd->inode = inode;
         fd->closed = closed_fd;
         fd->cacheable = !inode->device->removable;
@@ -2911,6 +2925,7 @@ DECL_HANDLER(set_completion_info)
         {
             fd->completion = get_completion_obj( current->process, req->chandle, IO_COMPLETION_MODIFY_STATE );
             fd->comp_key = req->ckey;
+            set_fd_signaled( fd, 1 );
         }
         else set_error( STATUS_INVALID_PARAMETER );
         release_object( fd );

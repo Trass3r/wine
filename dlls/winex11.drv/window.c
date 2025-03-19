@@ -208,6 +208,9 @@ static void host_window_reparent( struct host_window **win, Window parent, Windo
         old->children_count--;
     }
 
+    TRACE( "parent %lx, window %lx, rect %s, old %p/%lx -> new %p/%lx\n", parent, window,
+           wine_dbgstr_rect(&rect), old, old ? old->window : 0, new, new ? new->window : 0 );
+
     if (new && (index = find_host_window_child( new, window )) == new->children_count)
     {
         if (!(tmp = realloc( new->children, (index + 1) * sizeof(*new->children) ))) return;
@@ -226,6 +229,9 @@ static void host_window_reparent( struct host_window **win, Window parent, Windo
 RECT host_window_configure_child( struct host_window *win, Window window, RECT rect, BOOL root_coords )
 {
     unsigned int index;
+
+    TRACE( "host win %p/%lx, window %lx, rect %s, root_coords %u\n", win, win->window,
+           window, wine_dbgstr_rect(&rect), root_coords );
 
     if (root_coords)
     {
@@ -370,7 +376,7 @@ static struct x11drv_win_data *alloc_win_data( Display *display, HWND hwnd )
  *
  * Check if a given window should be managed
  */
-static BOOL is_window_managed( HWND hwnd, UINT swp_flags, const RECT *window_rect )
+static BOOL is_window_managed( HWND hwnd, UINT swp_flags, BOOL fullscreen )
 {
     DWORD style, ex_style;
 
@@ -388,18 +394,10 @@ static BOOL is_window_managed( HWND hwnd, UINT swp_flags, const RECT *window_rec
     if (style & WS_THICKFRAME) return TRUE;
     if (style & WS_POPUP)
     {
-        HMONITOR hmon;
-        MONITORINFO mi;
-
         /* popup with sysmenu == caption are managed */
         if (style & WS_SYSMENU) return TRUE;
         /* full-screen popup windows are managed */
-        hmon = NtUserMonitorFromWindow( hwnd, MONITOR_DEFAULTTOPRIMARY );
-        mi.cbSize = sizeof( mi );
-        NtUserGetMonitorInfo( hmon, &mi );
-        if (window_rect->left <= mi.rcWork.left && window_rect->right >= mi.rcWork.right &&
-            window_rect->top <= mi.rcWork.top && window_rect->bottom >= mi.rcWork.bottom)
-            return TRUE;
+        if (fullscreen) return TRUE;
     }
     /* application windows are managed */
     ex_style = NtUserGetWindowLongW( hwnd, GWL_EXSTYLE );
@@ -440,9 +438,6 @@ static unsigned long get_mwm_decorations_for_style( DWORD style, DWORD ex_style 
         if (style & WS_MINIMIZEBOX) ret |= MWM_DECOR_MINIMIZE;
         if (style & WS_MAXIMIZEBOX) ret |= MWM_DECOR_MAXIMIZE;
     }
-    if (ex_style & WS_EX_DLGMODALFRAME) ret |= MWM_DECOR_BORDER;
-    else if (style & WS_THICKFRAME) ret |= MWM_DECOR_BORDER | MWM_DECOR_RESIZEH;
-    else if ((style & (WS_DLGFRAME|WS_BORDER)) == WS_DLGFRAME) ret |= MWM_DECOR_BORDER;
     return ret;
 }
 
@@ -464,18 +459,18 @@ static unsigned long get_mwm_decorations( struct x11drv_win_data *data, DWORD st
  */
 static int get_window_attributes( struct x11drv_win_data *data, XSetWindowAttributes *attr )
 {
-    attr->override_redirect = !data->managed;
     attr->colormap          = data->whole_colormap ? data->whole_colormap : default_colormap;
     attr->save_under        = ((NtUserGetClassLongW( data->hwnd, GCL_STYLE ) & CS_SAVEBITS) != 0);
     attr->bit_gravity       = NorthWestGravity;
     attr->backing_store     = NotUseful;
     attr->border_pixel      = 0;
+    attr->background_pixel  = 0;
     attr->event_mask        = (ExposureMask | PointerMotionMask |
                                ButtonPressMask | ButtonReleaseMask | EnterWindowMask |
                                KeyPressMask | KeyReleaseMask | FocusChangeMask |
                                KeymapStateMask | StructureNotifyMask | PropertyChangeMask);
 
-    return (CWOverrideRedirect | CWSaveUnder | CWColormap | CWBorderPixel |
+    return (CWSaveUnder | CWColormap | CWBorderPixel | CWBackPixel |
             CWEventMask | CWBitGravity | CWBackingStore);
 }
 
@@ -915,6 +910,9 @@ static void set_mwm_hints( struct x11drv_win_data *data, UINT style, UINT ex_sty
             /* The window can be programmatically minimized even without
                a minimize box button. Allow the WM to restore it. */
             if (style & WS_MINIMIZE)    mwm_hints.functions |= MWM_FUNC_MINIMIZE | MWM_FUNC_MAXIMIZE;
+            /* The window can be programmatically maximized even without
+               a maximize box button. Allow the WM to maximize it. */
+            if (style & WS_MAXIMIZE)    mwm_hints.functions |= MWM_FUNC_MAXIMIZE;
         }
     }
 
@@ -1160,7 +1158,7 @@ static void update_net_wm_fullscreen_monitors( struct x11drv_win_data *data )
     long monitors[4];
     XEvent xev;
 
-    if (!(data->net_wm_state & (1 << NET_WM_STATE_FULLSCREEN)) || is_virtual_desktop()
+    if (!(data->pending_state.net_wm_state & (1 << NET_WM_STATE_FULLSCREEN)) || is_virtual_desktop()
         || NtUserGetWindowLongW( data->hwnd, GWL_STYLE ) & WS_MINIMIZE)
         return;
 
@@ -1187,7 +1185,7 @@ static void update_net_wm_fullscreen_monitors( struct x11drv_win_data *data )
         && !data->net_wm_fullscreen_monitors_set)
         return;
 
-    if (!data->mapped)
+    if (data->pending_state.wm_state == WithdrawnState)
     {
         XChangeProperty( data->display, data->whole_window, x11drv_atom(_NET_WM_FULLSCREEN_MONITORS),
                          XA_CARDINAL, 32, PropModeReplace, (unsigned char *)monitors, 4 );
@@ -1211,11 +1209,17 @@ static void update_net_wm_fullscreen_monitors( struct x11drv_win_data *data )
 
 static void window_set_net_wm_state( struct x11drv_win_data *data, UINT new_state )
 {
-    UINT i, count;
+    UINT i, count, old_state = data->pending_state.net_wm_state;
 
+    new_state &= x11drv_thread_data()->net_wm_state_mask;
+    data->desired_state.net_wm_state = new_state;
     if (!data->whole_window) return; /* no window, nothing to update */
+    if (data->wm_state_serial) return; /* another WM_STATE update is pending, wait for it to complete */
+    /* we ignore and override previous _NET_WM_STATE update requests */
+    if (old_state == new_state) return; /* states are the same, nothing to update */
 
-    if (!data->mapped)  /* set the _NET_WM_STATE atom directly */
+    if (data->pending_state.wm_state == IconicState) return; /* window is iconic, don't update its state now */
+    if (data->pending_state.wm_state == WithdrawnState)  /* set the _NET_WM_STATE atom directly */
     {
         Atom atoms[NB_NET_WM_STATES + 1];
 
@@ -1250,6 +1254,8 @@ static void window_set_net_wm_state( struct x11drv_win_data *data, UINT new_stat
 
         for (i = 0; i < NB_NET_WM_STATES; i++)
         {
+            if (!((old_state ^ new_state) & (1 << i))) continue;
+
             xev.xclient.data.l[0] = (new_state & (1 << i)) ? _NET_WM_STATE_ADD : _NET_WM_STATE_REMOVE;
             xev.xclient.data.l[1] = X11DRV_Atoms[net_wm_state_atoms[i] - FIRST_XATOM];
             xev.xclient.data.l[2] = ((net_wm_state_atoms[i] == XATOM__NET_WM_STATE_MAXIMIZED_VERT) ?
@@ -1263,17 +1269,37 @@ static void window_set_net_wm_state( struct x11drv_win_data *data, UINT new_stat
                         SubstructureRedirectMask | SubstructureNotifyMask, &xev );
         }
     }
+
+    XFlush( data->display );
 }
 
 static void window_set_config( struct x11drv_win_data *data, const RECT *new_rect, BOOL above )
 {
+    static const UINT fullscreen_mask = (1 << NET_WM_STATE_MAXIMIZED) | (1 << NET_WM_STATE_FULLSCREEN);
     UINT style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE ), mask = 0;
+    const RECT *old_rect = &data->pending_state.rect;
     XWindowChanges changes;
 
+    data->desired_state.rect = *new_rect;
     if (!data->whole_window) return; /* no window, nothing to update */
+    if (EqualRect( old_rect, new_rect ) && !above) return; /* rects are the same, no need to be raised, nothing to update */
+
+    if (data->pending_state.wm_state == NormalState && data->net_wm_state_serial &&
+        !(data->pending_state.net_wm_state & fullscreen_mask) &&
+        (data->current_state.net_wm_state & fullscreen_mask))
+    {
+        /* Some window managers are sending a ConfigureNotify event with the fullscreen size when
+         * exiting a fullscreen window, with a serial that we cannot predict. Handling that event
+         * will override the Win32 window size and make the window fullscreen again.
+         */
+        WARN( "window %p/%lx is exiting maximize/fullscreen, delaying request\n", data->hwnd, data->whole_window );
+        return;
+    }
 
     /* resizing a managed maximized window is not allowed */
-    if (!(style & WS_MAXIMIZE) || !data->managed)
+    if ((old_rect->right - old_rect->left != new_rect->right - new_rect->left ||
+         old_rect->bottom - old_rect->top != new_rect->bottom - new_rect->top) &&
+        (!(style & WS_MAXIMIZE) || !data->managed))
     {
         changes.width = new_rect->right - new_rect->left;
         changes.height = new_rect->bottom - new_rect->top;
@@ -1285,7 +1311,8 @@ static void window_set_config( struct x11drv_win_data *data, const RECT *new_rec
     }
 
     /* only the size is allowed to change for the desktop window or systray docked windows */
-    if (data->whole_window != root_window && !data->embedded)
+    if ((old_rect->left != new_rect->left || old_rect->top != new_rect->top) &&
+        (data->whole_window != root_window && !data->embedded))
     {
         POINT pt = virtual_screen_to_root( new_rect->left, new_rect->top );
         changes.x = pt.x;
@@ -1322,7 +1349,7 @@ static void update_net_wm_states( struct x11drv_win_data *data )
 
     style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE );
     if (style & WS_MINIMIZE)
-        new_state |= data->net_wm_state & ((1 << NET_WM_STATE_FULLSCREEN)|(1 << NET_WM_STATE_MAXIMIZED));
+        new_state |= data->desired_state.net_wm_state & ((1 << NET_WM_STATE_FULLSCREEN)|(1 << NET_WM_STATE_MAXIMIZED));
     if (data->is_fullscreen)
     {
         if ((style & WS_MAXIMIZE) && (style & WS_CAPTION) == WS_CAPTION)
@@ -1346,7 +1373,6 @@ static void update_net_wm_states( struct x11drv_win_data *data )
     }
 
     window_set_net_wm_state( data, new_state );
-    data->net_wm_state = new_state;
     update_net_wm_fullscreen_monitors( data );
 }
 
@@ -1407,13 +1433,46 @@ static void window_set_wm_state( struct x11drv_win_data *data, UINT new_state )
 {
     UINT old_state = data->pending_state.wm_state;
 
+    data->desired_state.wm_state = new_state;
     if (!data->whole_window) return; /* no window, nothing to update */
+    if (data->wm_state_serial && !data->current_state.wm_state != !data->pending_state.wm_state)
+        return; /* another map/unmap WM_STATE update is pending, wait for it to complete */
     if (old_state == new_state) return; /* states are the same, nothing to update */
+
+    /* When transitioning a window from IconicState to NormalState and the window is managed, go
+     * through WithdrawnState. This is needed because Mutter doesn't unmap windows when making
+     * windows iconic/minimized as Mutter needs to support live preview for minimized windows. So on
+     * Mutter, a window can be both iconic and mapped. If the window is mapped, then XMapWindow()
+     * will have no effect according to the  XMapWindow() documentation. Thus we have to transition
+     * to WithdrawnState first, then to NormalState */
+    if (data->managed && MAKELONG(old_state, new_state) == MAKELONG(IconicState, NormalState))
+    {
+        WARN( "window %p/%lx is iconic, remapping to workaround Mutter issues.\n", data->hwnd, data->whole_window );
+        window_set_wm_state( data, WithdrawnState );
+        window_set_wm_state( data, NormalState );
+        return;
+    }
+
+    switch (MAKELONG(old_state, new_state))
+    {
+    case MAKELONG(WithdrawnState, IconicState):
+    case MAKELONG(WithdrawnState, NormalState):
+        remove_startup_notification( data->display, data->whole_window );
+        set_wm_hints( data );
+        update_net_wm_states( data );
+        sync_window_style( data );
+        update_net_wm_fullscreen_monitors( data );
+        break;
+    case MAKELONG(IconicState, NormalState):
+    case MAKELONG(NormalState, IconicState):
+        set_wm_hints( data );
+        break;
+    }
 
     data->pending_state.wm_state = new_state;
     data->wm_state_serial = NextRequest( data->display );
-    TRACE( "window %p/%lx, requesting WM_STATE %#x -> %#x serial %lu\n", data->hwnd, data->whole_window,
-           old_state, new_state, data->wm_state_serial );
+    TRACE( "window %p/%lx, requesting WM_STATE %#x -> %#x serial %lu, foreground %p\n", data->hwnd, data->whole_window,
+           old_state, new_state, data->wm_state_serial, NtUserGetForegroundWindow() );
 
     switch (MAKELONG(old_state, new_state))
     {
@@ -1433,6 +1492,35 @@ static void window_set_wm_state( struct x11drv_win_data *data, UINT new_state )
         if (!data->embedded) XIconifyWindow( data->display, data->whole_window, data->vis.screen );
         break;
     }
+
+    /* override redirect windows won't receive WM_STATE property changes */
+    if (!data->managed) data->wm_state_serial = 0;
+
+    XFlush( data->display );
+}
+
+static void window_set_managed( struct x11drv_win_data *data, BOOL new_managed )
+{
+    XSetWindowAttributes attr = {.override_redirect = !new_managed};
+    UINT wm_state = data->desired_state.wm_state;
+    BOOL old_managed = data->managed;
+
+    if (!data->whole_window) return; /* no window, nothing to update */
+    if (old_managed == new_managed) return; /* states are the same, nothing to update */
+    if (!new_managed)
+    {
+        ERR( "Changing window to unmanaged is not supported\n" );
+        return;
+    }
+
+    window_set_wm_state( data, WithdrawnState ); /* no WM_STATE is pending, requested immediately */
+
+    data->managed = new_managed;
+    TRACE( "window %p/%lx, requesting override-redirect %u -> %u serial %lu\n", data->hwnd, data->whole_window,
+           !old_managed, !new_managed, NextRequest( data->display ) );
+    XChangeWindowAttributes( data->display, data->whole_window, CWOverrideRedirect, &attr );
+
+    window_set_wm_state( data, wm_state ); /* queue another WM_STATE request with the desired state */
 }
 
 
@@ -1444,26 +1532,10 @@ static void map_window( HWND hwnd, DWORD new_style )
     struct x11drv_win_data *data;
 
     make_owner_managed( hwnd );
-    wait_for_withdrawn_state( hwnd, TRUE );
 
     if (!(data = get_win_data( hwnd ))) return;
-
-    if (data->whole_window && !data->mapped)
-    {
-        TRACE( "win %p/%lx\n", data->hwnd, data->whole_window );
-
-        remove_startup_notification( data->display, data->whole_window );
-        set_wm_hints( data );
-        update_net_wm_states( data );
-        sync_window_style( data );
-
-        window_set_wm_state( data, (new_style & WS_MINIMIZE) ? IconicState : NormalState );
-        XFlush( data->display );
-
-        data->mapped = TRUE;
-        data->iconic = (new_style & WS_MINIMIZE) != 0;
-        update_net_wm_fullscreen_monitors( data );
-    }
+    TRACE( "win %p/%lx\n", data->hwnd, data->whole_window );
+    window_set_wm_state( data, (new_style & WS_MINIMIZE) ? IconicState : NormalState );
     release_win_data( data );
 }
 
@@ -1475,23 +1547,126 @@ static void unmap_window( HWND hwnd )
 {
     struct x11drv_win_data *data;
 
-    wait_for_withdrawn_state( hwnd, FALSE );
-
     if (!(data = get_win_data( hwnd ))) return;
-
-    if (data->mapped)
-    {
-        TRACE( "win %p/%lx\n", data->hwnd, data->whole_window );
-        window_set_wm_state( data, WithdrawnState );
-        data->mapped = FALSE;
-        data->net_wm_state = 0;
-    }
+    TRACE( "win %p/%lx\n", data->hwnd, data->whole_window );
+    window_set_wm_state( data, WithdrawnState );
     release_win_data( data );
+}
+
+static UINT window_update_client_state( struct x11drv_win_data *data )
+{
+    UINT old_style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE ), new_style;
+
+    if (!data->managed) return 0; /* unmanaged windows are managed by the Win32 side */
+    if (data->desired_state.wm_state == WithdrawnState) return 0; /* ignore state changes on invisible windows */
+
+    if (data->wm_state_serial) return 0; /* another WM_STATE update is pending, wait for it to complete */
+    if (data->net_wm_state_serial) return 0; /* another _NET_WM_STATE update is pending, wait for it to complete */
+    if (data->configure_serial) return 0; /* another config update is pending, wait for it to complete */
+
+    new_style = old_style & ~(WS_VISIBLE | WS_MINIMIZE | WS_MAXIMIZE);
+    if (data->current_state.wm_state != WithdrawnState) new_style |= WS_VISIBLE;
+    if (data->current_state.wm_state == IconicState) new_style |= WS_MINIMIZE;
+    if (data->current_state.net_wm_state & (1 << NET_WM_STATE_MAXIMIZED)) new_style |= WS_MAXIMIZE;
+
+    if ((old_style & WS_MINIMIZE) && !(new_style & WS_MINIMIZE))
+    {
+        if ((old_style & WS_CAPTION) == WS_CAPTION && (data->current_state.net_wm_state & (1 << NET_WM_STATE_MAXIMIZED)))
+        {
+            if ((old_style & WS_MAXIMIZEBOX) && !(old_style & WS_DISABLED))
+            {
+                TRACE( "restoring to max %p/%lx\n", data->hwnd, data->whole_window );
+                return SC_MAXIMIZE;
+            }
+        }
+        else if (old_style & (WS_MINIMIZE | WS_MAXIMIZE))
+        {
+            BOOL activate = (old_style & (WS_MINIMIZE | WS_VISIBLE)) == (WS_MINIMIZE | WS_VISIBLE);
+            TRACE( "restoring win %p/%lx\n", data->hwnd, data->whole_window );
+            return MAKELONG(SC_RESTORE, activate);
+        }
+    }
+    if (!(old_style & WS_MINIMIZE) && (new_style & WS_MINIMIZE))
+    {
+        if ((old_style & WS_MINIMIZEBOX) && !(old_style & WS_DISABLED))
+        {
+            TRACE( "minimizing win %p/%lx\n", data->hwnd, data->whole_window );
+            return SC_MINIMIZE;
+        }
+    }
+
+    return 0;
+}
+
+static UINT window_update_client_config( struct x11drv_win_data *data )
+{
+    static const UINT fullscreen_mask = (1 << NET_WM_STATE_MAXIMIZED) | (1 << NET_WM_STATE_FULLSCREEN);
+    UINT old_style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE ), flags;
+    RECT rect, old_rect = data->rects.window, new_rect;
+
+    if (!data->managed) return 0; /* unmanaged windows are managed by the Win32 side */
+    if (data->desired_state.wm_state != NormalState) return 0; /* ignore config changes on invisible/minimized windows */
+
+    if (data->wm_state_serial) return 0; /* another WM_STATE update is pending, wait for it to complete */
+    if (data->net_wm_state_serial) return 0; /* another _NET_WM_STATE update is pending, wait for it to complete */
+    if (data->configure_serial) return 0; /* another config update is pending, wait for it to complete */
+
+    if ((old_style & WS_CAPTION) == WS_CAPTION || !data->is_fullscreen)
+    {
+        if ((data->current_state.net_wm_state & (1 << NET_WM_STATE_MAXIMIZED)) && !(old_style & WS_MAXIMIZE))
+        {
+            TRACE( "window %p/%lx is maximized\n", data->hwnd, data->whole_window );
+            return SC_MAXIMIZE;
+        }
+        if (!(data->current_state.net_wm_state & (1 << NET_WM_STATE_MAXIMIZED)) && (old_style & WS_MAXIMIZE))
+        {
+            TRACE( "window %p/%lx is no longer maximized\n", data->hwnd, data->whole_window );
+            return SC_RESTORE;
+        }
+    }
+
+    flags = SWP_NOACTIVATE | SWP_NOZORDER;
+    rect = new_rect = window_rect_from_visible( &data->rects, data->current_state.rect );
+    if (new_rect.left == old_rect.left && new_rect.top == old_rect.top) flags |= SWP_NOMOVE;
+    else OffsetRect( &rect, old_rect.left - new_rect.left, old_rect.top - new_rect.top );
+    if (rect.right == old_rect.right && rect.bottom == old_rect.bottom) flags |= SWP_NOSIZE;
+    else if (IsRectEmpty( &rect )) flags |= SWP_NOSIZE;
+
+    /* don't sync win32 position for offscreen windows */
+    if ((data->is_offscreen = !is_window_rect_mapped( &new_rect ))) flags |= SWP_NOMOVE;
+
+    if ((flags & (SWP_NOSIZE | SWP_NOMOVE)) == (SWP_NOSIZE | SWP_NOMOVE)) return 0;
+
+    /* avoid event feedback loops from window rect adjustments of maximized / fullscreen windows */
+    if (data->current_state.net_wm_state & fullscreen_mask) flags |= SWP_NOSENDCHANGING;
+
+    TRACE( "window %p/%lx config changed %s -> %s, flags %#x\n", data->hwnd, data->whole_window,
+           wine_dbgstr_rect(&old_rect), wine_dbgstr_rect(&new_rect), flags );
+    return MAKELONG(SC_MOVE, flags);
+}
+
+/***********************************************************************
+ *      GetWindowStateUpdates   (X11DRV.@)
+ */
+BOOL X11DRV_GetWindowStateUpdates( HWND hwnd, UINT *state_cmd, UINT *config_cmd, RECT *rect )
+{
+    struct x11drv_win_data *data;
+
+    if (!(data = get_win_data( hwnd ))) return FALSE;
+
+    *state_cmd = window_update_client_state( data );
+    *config_cmd = window_update_client_config( data );
+    *rect = window_rect_from_visible( &data->rects, data->current_state.rect );
+
+    release_win_data( data );
+
+    TRACE( "hwnd %p, returning state_cmd %#x, config_cmd %#x, rect %s\n", hwnd, *state_cmd, *config_cmd, wine_dbgstr_rect(rect) );
+    return *state_cmd || *config_cmd;
 }
 
 void window_wm_state_notify( struct x11drv_win_data *data, unsigned long serial, UINT value )
 {
-    UINT *pending = &data->pending_state.wm_state, *current = &data->current_state.wm_state;
+    UINT *desired = &data->desired_state.wm_state, *pending = &data->pending_state.wm_state, *current = &data->current_state.wm_state;
     unsigned long *expect_serial = &data->wm_state_serial;
     const char *reason = NULL, *expected, *received;
 
@@ -1516,16 +1691,21 @@ void window_wm_state_notify( struct x11drv_win_data *data, unsigned long serial,
     else
     {
         WARN( "window %p/%lx, %s%s%s\n", data->hwnd, data->whole_window, reason, received, expected );
-        *pending = value; /* avoid requesting the same state again */
+        *desired = *pending = value; /* avoid requesting the same state again */
     }
 
     *current = value;
     *expect_serial = 0;
+
+    /* send any pending changes from the desired state */
+    window_set_wm_state( data, data->desired_state.wm_state );
+    window_set_net_wm_state( data, data->desired_state.net_wm_state );
+    window_set_config( data, &data->desired_state.rect, FALSE );
 }
 
 void window_net_wm_state_notify( struct x11drv_win_data *data, unsigned long serial, UINT value )
 {
-    UINT *pending = &data->pending_state.net_wm_state, *current = &data->current_state.net_wm_state;
+    UINT *desired = &data->desired_state.net_wm_state, *pending = &data->pending_state.net_wm_state, *current = &data->current_state.net_wm_state;
     unsigned long *expect_serial = &data->net_wm_state_serial;
     const char *reason = NULL, *expected, *received;
 
@@ -1548,16 +1728,21 @@ void window_net_wm_state_notify( struct x11drv_win_data *data, unsigned long ser
     else
     {
         WARN( "window %p/%lx, %s%s%s\n", data->hwnd, data->whole_window, reason, received, expected );
-        *pending = value; /* avoid requesting the same state again */
+        *desired = *pending = value; /* avoid requesting the same state again */
     }
 
     *current = value;
     *expect_serial = 0;
+
+    /* send any pending changes from the desired state */
+    window_set_wm_state( data, data->desired_state.wm_state );
+    window_set_net_wm_state( data, data->desired_state.net_wm_state );
+    window_set_config( data, &data->desired_state.rect, FALSE );
 }
 
 void window_configure_notify( struct x11drv_win_data *data, unsigned long serial, const RECT *value )
 {
-    RECT *pending = &data->pending_state.rect, *current = &data->current_state.rect;
+    RECT *desired = &data->desired_state.rect, *pending = &data->pending_state.rect, *current = &data->current_state.rect;
     unsigned long *expect_serial = &data->configure_serial;
     const char *reason = NULL, *expected, *received;
 
@@ -1580,11 +1765,24 @@ void window_configure_notify( struct x11drv_win_data *data, unsigned long serial
     else
     {
         WARN( "window %p/%lx, %s%s%s\n", data->hwnd, data->whole_window, reason, received, expected );
-        *pending = *value; /* avoid requesting the same state again */
+        *desired = *pending = *value; /* avoid requesting the same state again */
     }
 
     *current = *value;
     *expect_serial = 0;
+}
+
+BOOL window_has_pending_wm_state( HWND hwnd, UINT state )
+{
+    struct x11drv_win_data *data;
+    BOOL pending;
+
+    if (!(data = get_win_data( hwnd ))) return FALSE;
+    if (state != -1 && data->desired_state.wm_state != state) pending = FALSE;
+    else pending = !!data->wm_state_serial;
+    release_win_data( data );
+
+    return pending;
 }
 
 /***********************************************************************
@@ -1594,10 +1792,9 @@ void make_window_embedded( struct x11drv_win_data *data )
 {
     /* the window cannot be mapped before being embedded */
     window_set_wm_state( data, WithdrawnState );
-    data->net_wm_state = 0;
+    if (data->managed) WARN( "Window is already managed, should wait for WithdrawnState\n" );
+    else window_set_managed( data, TRUE );
     data->embedded = TRUE;
-    data->managed = TRUE;
-    sync_window_style( data );
     window_set_wm_state( data, NormalState );
 }
 
@@ -1607,13 +1804,14 @@ void make_window_embedded( struct x11drv_win_data *data )
  *
  * Synchronize the X window position with the Windows one
  */
-static void sync_window_position( struct x11drv_win_data *data, UINT swp_flags )
+static void sync_window_position( struct x11drv_win_data *data, UINT swp_flags, const struct window_rects *old_rects )
 {
     DWORD style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE );
     DWORD ex_style = NtUserGetWindowLongW( data->hwnd, GWL_EXSTYLE );
+    RECT new_rect, window_rect;
     BOOL above = FALSE;
 
-    if (data->managed && data->iconic) return;
+    if (data->managed && ((style & WS_MINIMIZE) || data->desired_state.wm_state == IconicState)) return;
 
     if (!(swp_flags & SWP_NOZORDER) || (swp_flags & SWP_SHOWWINDOW))
     {
@@ -1629,7 +1827,15 @@ static void sync_window_position( struct x11drv_win_data *data, UINT swp_flags )
     set_size_hints( data, style );
     set_mwm_hints( data, style, ex_style );
     update_net_wm_states( data );
-    window_set_config( data, &data->rects.visible, above );
+
+    new_rect = data->rects.visible;
+
+    /* if the window has been moved offscreen by the window manager, we didn't tell the Win32 side about it */
+    window_rect = window_rect_from_visible( old_rects, data->desired_state.rect );
+    if (data->is_offscreen) OffsetRect( &new_rect, window_rect.left - old_rects->window.left,
+                                        window_rect.top - old_rects->window.top );
+
+    window_set_config( data, &new_rect, above );
 }
 
 
@@ -1920,12 +2126,6 @@ static void create_whole_window( struct x11drv_win_data *data )
     HRGN win_rgn;
     POINT pos;
 
-    if (!data->managed && is_window_managed( data->hwnd, SWP_NOACTIVATE, &data->rects.window ))
-    {
-        TRACE( "making win %p/%lx managed\n", data->hwnd, data->whole_window );
-        data->managed = TRUE;
-    }
-
     if ((win_rgn = NtGdiCreateRectRgn( 0, 0, 0, 0 )) &&
         NtUserGetWindowRgnEx( data->hwnd, win_rgn, 0 ) == ERROR)
     {
@@ -1937,7 +2137,9 @@ static void create_whole_window( struct x11drv_win_data *data )
     if (data->vis.visualid != default_visual.visualid)
         data->whole_colormap = XCreateColormap( data->display, root_window, data->vis.visual, AllocNone );
 
-    mask = get_window_attributes( data, &attr );
+    data->managed = is_window_managed( data->hwnd, SWP_NOACTIVATE, FALSE );
+    mask = get_window_attributes( data, &attr ) | CWOverrideRedirect;
+    attr.override_redirect = !data->managed;
 
     if (!(cx = data->rects.visible.right - data->rects.visible.left)) cx = 1;
     else if (cx > 65535) cx = 65535;
@@ -1951,6 +2153,7 @@ static void create_whole_window( struct x11drv_win_data *data )
     if (!data->whole_window) goto done;
     SetRect( &data->current_state.rect, pos.x, pos.y, pos.x + cx, pos.y + cy );
     data->pending_state.rect = data->current_state.rect;
+    data->desired_state.rect = data->current_state.rect;
 
     x11drv_xinput2_enable( data->display, data->whole_window );
     set_initial_wm_hints( data->display, data->whole_window );
@@ -2005,10 +2208,9 @@ static void destroy_whole_window( struct x11drv_win_data *data, BOOL already_des
     if (data->whole_colormap) XFreeColormap( data->display, data->whole_colormap );
     data->whole_window = data->client_window = 0;
     data->whole_colormap = 0;
-    data->wm_state = WithdrawnState;
-    data->net_wm_state = 0;
-    data->mapped = FALSE;
+    data->managed = FALSE;
 
+    memset( &data->desired_state, 0, sizeof(data->desired_state) );
     memset( &data->pending_state, 0, sizeof(data->pending_state) );
     memset( &data->current_state, 0, sizeof(data->current_state) );
     data->wm_state_serial = 0;
@@ -2158,7 +2360,7 @@ static BOOL create_desktop_win_data( Window win, HWND hwnd )
 
     if (!(data = alloc_win_data( display, hwnd ))) return FALSE;
     data->whole_window = win;
-    data->managed = TRUE;
+    window_set_managed( data, TRUE );
     NtUserSetProp( data->hwnd, whole_window_prop, (HANDLE)win );
     set_initial_wm_hints( display, win );
     release_win_data( data );
@@ -2314,7 +2516,12 @@ void set_window_parent( struct x11drv_win_data *data, Window parent )
     if (!data->whole_window) return; /* only keep track of parent if we have a toplevel */
     TRACE( "window %p/%lx, parent %lx\n", data->hwnd, data->whole_window, parent );
     host_window_reparent( &data->parent, parent, data->whole_window );
-    if (data->parent) host_window_configure_child( data->parent, data->whole_window, data->rects.visible, TRUE );
+    if (data->parent)
+    {
+        RECT rect = data->rects.visible;
+        OffsetRect( &rect, -rect.left, -rect.top );
+        host_window_configure_child( data->parent, data->whole_window, rect, FALSE );
+    }
     data->parent_invalid = 0;
 }
 
@@ -2378,7 +2585,7 @@ void X11DRV_SystrayDockInit( HWND hwnd )
         sprintf( systray_buffer, "_NET_SYSTEM_TRAY_S%u", DefaultScreen( display ) );
         systray_atom = XInternAtom( display, systray_buffer, False );
     }
-    XSelectInput( display, root_window, StructureNotifyMask );
+    XSelectInput( display, root_window, StructureNotifyMask | PropertyChangeMask );
 }
 
 
@@ -2398,17 +2605,15 @@ void X11DRV_SystrayDockClear( HWND hwnd )
 BOOL X11DRV_SystrayDockRemove( HWND hwnd )
 {
     struct x11drv_win_data *data;
-    BOOL ret;
+    BOOL ret = FALSE;
 
-    /* make sure we don't try to unmap it, it confuses some systray docks */
     if ((data = get_win_data( hwnd )))
     {
-        if ((ret = data->embedded)) data->mapped = FALSE;
+        if ((ret = data->embedded)) window_set_wm_state( data, WithdrawnState );
         release_win_data( data );
-        return ret;
     }
 
-    return FALSE;
+    return ret;
 }
 
 
@@ -2468,6 +2673,7 @@ BOOL X11DRV_SystrayDockInsert( HWND hwnd, UINT cx, UINT cy, void *icon )
     window = data->whole_window;
     release_win_data( data );
 
+    NtUserSetWindowPos( hwnd, NULL, 0, 0, 0, 0, SWP_NOSIZE|SWP_NOZORDER );
     NtUserShowWindow( hwnd, SW_SHOWNA );
 
     TRACE_(systray)( "icon window %p/%lx\n", hwnd, window );
@@ -2516,6 +2722,7 @@ void X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
                    const RECT *top_rect, DWORD flags )
 {
     struct x11drv_escape_set_drawable escape;
+    struct x11drv_win_data *data;
 
     escape.code = X11DRV_SET_DRAWABLE;
     escape.mode = IncludeInferiors;
@@ -2526,19 +2733,18 @@ void X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
     escape.dc_rect.right        = win_rect->right - top_rect->left;
     escape.dc_rect.bottom       = win_rect->bottom - top_rect->top;
 
-    if (top == hwnd)
+    if ((data = get_win_data( top )))
     {
-        struct x11drv_win_data *data = get_win_data( hwnd );
-
-        escape.drawable = data ? data->whole_window : X11DRV_get_whole_window( hwnd );
-
+        escape.drawable = data->whole_window;
+        escape.visual = data->vis;
         /* special case: when repainting the root window, clip out top-level windows */
-        if (data && data->whole_window == root_window) escape.mode = ClipByChildren;
+        if (top == hwnd && data->whole_window == root_window) escape.mode = ClipByChildren;
         release_win_data( data );
     }
     else
     {
         escape.drawable = X11DRV_get_whole_window( top );
+        escape.visual = default_visual; /* FIXME: use the right visual for other process window */
     }
 
     if (!escape.drawable) return; /* don't create a GC for foreign windows */
@@ -2649,7 +2855,6 @@ void X11DRV_SetParent( HWND hwnd, HWND parent, HWND old_parent )
         {
             /* destroy the old X windows */
             destroy_whole_window( data, FALSE );
-            data->managed = FALSE;
         }
     }
     else  /* new top level window */
@@ -2681,16 +2886,6 @@ BOOL X11DRV_WindowPosChanging( HWND hwnd, UINT swp_flags, BOOL shaped, const str
 
     if (!data && !(data = X11DRV_create_win_data( hwnd, rects ))) return FALSE; /* use default surface */
     data->shaped = shaped;
-
-    /* check if we need to switch the window to managed */
-    if (!data->managed && data->whole_window && is_window_managed( hwnd, swp_flags, &rects->window ))
-    {
-        TRACE( "making win %p/%lx managed\n", hwnd, data->whole_window );
-        release_win_data( data );
-        unmap_window( hwnd );
-        if (!(data = get_win_data( hwnd ))) return FALSE; /* use default surface */
-        data->managed = TRUE;
-    }
 
     ret = !!data->whole_window; /* use default surface if we don't have a window */
     release_win_data( data );
@@ -2756,16 +2951,20 @@ BOOL X11DRV_GetWindowStyleMasks( HWND hwnd, UINT style, UINT ex_style, UINT *sty
 void X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner_hint, UINT swp_flags, BOOL fullscreen,
                               const struct window_rects *new_rects, struct window_surface *surface )
 {
-    struct x11drv_thread_data *thread_data;
     struct x11drv_win_data *data;
-    UINT new_style = NtUserGetWindowLongW( hwnd, GWL_STYLE );
+    UINT new_style = NtUserGetWindowLongW( hwnd, GWL_STYLE ), old_style;
     struct window_rects old_rects;
     BOOL was_fullscreen;
-    int event_type;
+
+    sync_gl_drawable( hwnd, FALSE );
 
     if (!(data = get_win_data( hwnd ))) return;
+    if (is_window_managed( hwnd, swp_flags, fullscreen )) window_set_managed( data, TRUE );
 
-    thread_data = x11drv_thread_data();
+    old_style = new_style & ~(WS_VISIBLE | WS_MINIMIZE | WS_MAXIMIZE);
+    if (data->desired_state.wm_state != WithdrawnState) old_style |= WS_VISIBLE;
+    if (data->desired_state.wm_state == IconicState) old_style |= WS_MINIMIZE;
+    if (data->desired_state.net_wm_state & (1 << NET_WM_STATE_MAXIMIZED)) old_style |= WS_MAXIMIZE;
 
     old_rects = data->rects;
     was_fullscreen = data->is_fullscreen;
@@ -2779,33 +2978,16 @@ void X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner_hint, UIN
 
     sync_client_position( data, &old_rects );
 
-    if (data->rects.client.right - data->rects.client.left != old_rects.client.right - old_rects.client.left ||
-        data->rects.client.bottom - data->rects.client.top != old_rects.client.bottom - old_rects.client.top)
-        sync_gl_drawable( hwnd, FALSE );
-
     if (!data->whole_window)
     {
         release_win_data( data );
         return;
     }
 
-    /* check if we are currently processing an event relevant to this window */
-    event_type = 0;
-    if (thread_data &&
-        thread_data->current_event &&
-        thread_data->current_event->xany.window == data->whole_window)
-    {
-        event_type = thread_data->current_event->type;
-        if (event_type != ConfigureNotify && event_type != PropertyNotify &&
-            event_type != GravityNotify && event_type != ReparentNotify)
-            event_type = 0;  /* ignore other events */
-    }
-
-    if (data->mapped && event_type != ReparentNotify)
+    if (old_style & WS_VISIBLE)
     {
         if (((swp_flags & SWP_HIDEWINDOW) && !(new_style & WS_VISIBLE)) ||
-            (!event_type && !(new_style & WS_MINIMIZE) &&
-             !is_window_rect_mapped( &new_rects->window ) && is_window_rect_mapped( &old_rects.window )))
+            (!(new_style & WS_MINIMIZE) && !is_window_rect_mapped( &new_rects->window ) && is_window_rect_mapped( &old_rects.window )))
         {
             release_win_data( data );
             unmap_window( hwnd );
@@ -2815,10 +2997,9 @@ void X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner_hint, UIN
     }
 
     /* don't change position if we are about to minimize or maximize a managed window */
-    if (!event_type &&
-        !(data->managed && (swp_flags & SWP_STATECHANGED) && (new_style & (WS_MINIMIZE|WS_MAXIMIZE))))
+    if (!(data->managed && (swp_flags & SWP_STATECHANGED) && (new_style & (WS_MINIMIZE|WS_MAXIMIZE))))
     {
-        sync_window_position( data, swp_flags );
+        sync_window_position( data, swp_flags, &old_rects );
 #ifdef HAVE_LIBXSHAPE
         if (IsRectEmpty( &old_rects.window ) != IsRectEmpty( &new_rects->window ))
             sync_empty_window_shape( data, surface );
@@ -2838,7 +3019,7 @@ void X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner_hint, UIN
     if ((new_style & WS_VISIBLE) &&
         ((new_style & WS_MINIMIZE) || is_window_rect_mapped( &new_rects->window )))
     {
-        if (!data->mapped)
+        if (!(old_style & WS_VISIBLE))
         {
             BOOL needs_icon = !data->icon_pixmap;
             BOOL needs_map = TRUE;
@@ -2851,17 +3032,15 @@ void X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner_hint, UIN
             if (needs_map) map_window( hwnd, new_style );
             return;
         }
-        else if ((swp_flags & SWP_STATECHANGED) && (!data->iconic != !(new_style & WS_MINIMIZE)))
+        else if ((swp_flags & SWP_STATECHANGED) && ((old_style ^ new_style) & WS_MINIMIZE))
         {
-            set_wm_hints( data );
-            data->iconic = (new_style & WS_MINIMIZE) != 0;
             window_set_wm_state( data, (new_style & WS_MINIMIZE) ? IconicState : NormalState );
             update_net_wm_states( data );
         }
         else
         {
             if (swp_flags & (SWP_FRAMECHANGED|SWP_STATECHANGED)) set_wm_hints( data );
-            if (!event_type) update_net_wm_states( data );
+            update_net_wm_states( data );
         }
     }
 
@@ -2904,7 +3083,7 @@ UINT X11DRV_ShowWindow( HWND hwnd, INT cmd, RECT *rect, UINT swp )
         }
         goto done;
     }
-    if (!data->managed || !data->mapped || data->iconic) goto done;
+    if (!data->managed || data->desired_state.wm_state != NormalState) goto done;
 
     /* only fetch the new rectangle if the ShowWindow was a result of a window manager event */
 
@@ -2995,7 +3174,7 @@ void X11DRV_SetLayeredWindowAttributes( HWND hwnd, COLORREF key, BYTE alpha, DWO
             sync_window_opacity( data->display, data->whole_window, alpha, flags );
 
         data->layered = TRUE;
-        if (!data->mapped)  /* mapping is delayed until attributes are set */
+        if (data->desired_state.wm_state == WithdrawnState)  /* mapping is delayed until attributes are set */
         {
             DWORD style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE );
 
@@ -3025,13 +3204,17 @@ void X11DRV_SetLayeredWindowAttributes( HWND hwnd, COLORREF key, BYTE alpha, DWO
 /***********************************************************************
  *              UpdateLayeredWindow   (X11DRV.@)
  */
-void X11DRV_UpdateLayeredWindow( HWND hwnd, UINT flags )
+void X11DRV_UpdateLayeredWindow( HWND hwnd, BYTE alpha, UINT flags )
 {
     struct x11drv_win_data *data;
     BOOL mapped;
 
     if (!(data = get_win_data( hwnd ))) return;
-    mapped = data->mapped;
+
+    if (data->whole_window)
+        sync_window_opacity( data->display, data->whole_window, alpha, flags );
+
+    mapped = data->desired_state.wm_state != WithdrawnState;
     release_win_data( data );
 
     /* layered windows are mapped only once their attributes are set */
@@ -3097,15 +3280,6 @@ LRESULT X11DRV_WindowMessage( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp )
             release_win_data( data );
         }
         return 0;
-    case WM_WINE_DESKTOP_RESIZED:
-        if ((data = get_win_data( hwnd )))
-        {
-            /* update the full screen state */
-            update_net_wm_states( data );
-            window_set_config( data, &data->rects.visible, FALSE );
-            release_win_data( data );
-        }
-        return 0;
     case WM_X11DRV_DELETE_TAB:
         taskbar_delete_tab( hwnd );
         return 0;
@@ -3122,29 +3296,17 @@ LRESULT X11DRV_WindowMessage( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp )
 /***********************************************************************
  *              is_netwm_supported
  */
-static BOOL is_netwm_supported( Display *display, Atom atom )
+static BOOL is_netwm_supported( Atom atom )
 {
-    static Atom *net_supported;
-    static int net_supported_count = -1;
+    struct x11drv_thread_data *data = x11drv_thread_data();
+    BOOL supported;
     int i;
 
-    if (net_supported_count == -1)
-    {
-        Atom type;
-        int format;
-        unsigned long count, remaining;
+    for (i = 0; i < data->net_supported_count; i++)
+        if (data->net_supported[i] == atom) break;
+    supported = i < data->net_supported_count;
 
-        if (!XGetWindowProperty( display, DefaultRootWindow(display), x11drv_atom(_NET_SUPPORTED), 0,
-                                 ~0UL, False, XA_ATOM, &type, &format, &count,
-                                 &remaining, (unsigned char **)&net_supported ))
-            net_supported_count = get_property_size( format, count ) / sizeof(Atom);
-        else
-            net_supported_count = 0;
-    }
-
-    for (i = 0; i < net_supported_count; i++)
-        if (net_supported[i] == atom) return TRUE;
-    return FALSE;
+    return supported;
 }
 
 
@@ -3172,7 +3334,7 @@ static LRESULT start_screensaver(void)
  *
  * Perform WM_SYSCOMMAND handling.
  */
-LRESULT X11DRV_SysCommand( HWND hwnd, WPARAM wparam, LPARAM lparam )
+LRESULT X11DRV_SysCommand( HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos )
 {
     WPARAM hittest = wparam & 0x0f;
     int dir;
@@ -3183,7 +3345,7 @@ LRESULT X11DRV_SysCommand( HWND hwnd, WPARAM wparam, LPARAM lparam )
         if (wparam == SC_SCREENSAVE && hwnd == NtUserGetDesktopWindow()) return start_screensaver();
         return -1;
     }
-    if (!data->whole_window || !data->managed || !data->mapped) goto failed;
+    if (!data->whole_window || !data->managed || data->desired_state.wm_state == WithdrawnState) goto failed;
 
     switch (wparam & 0xfff0)
     {
@@ -3226,14 +3388,14 @@ LRESULT X11DRV_SysCommand( HWND hwnd, WPARAM wparam, LPARAM lparam )
 
     if (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_MAXIMIZE) goto failed;
 
-    if (!is_netwm_supported( data->display, x11drv_atom(_NET_WM_MOVERESIZE) ))
+    if (!is_netwm_supported( x11drv_atom(_NET_WM_MOVERESIZE) ))
     {
         TRACE( "_NET_WM_MOVERESIZE not supported\n" );
         goto failed;
     }
 
     release_win_data( data );
-    move_resize_window( hwnd, dir );
+    move_resize_window( hwnd, dir, *pos );
     return 0;
 
 failed:
@@ -3249,7 +3411,7 @@ void X11DRV_FlashWindowEx( FLASHWINFO *pfinfo )
     if (!data)
         return;
 
-    if (data->mapped)
+    if (data->pending_state.wm_state != WithdrawnState)
     {
         xev.type = ClientMessage;
         xev.xclient.window = data->whole_window;
@@ -3268,6 +3430,23 @@ void X11DRV_FlashWindowEx( FLASHWINFO *pfinfo )
                     SubstructureNotifyMask, &xev );
     }
     release_win_data( data );
+}
+
+void net_supported_init( struct x11drv_thread_data *data )
+{
+    unsigned long count, remaining;
+    int format, i;
+    Atom type;
+
+    if (!XGetWindowProperty( data->display, DefaultRootWindow( data->display ), x11drv_atom(_NET_SUPPORTED), 0, 65536 / sizeof(CARD32),
+                             False, XA_ATOM, &type, &format, &count, &remaining, (unsigned char **)&data->net_supported ))
+        data->net_supported_count = get_property_size( format, count ) / sizeof(Atom);
+
+    for (i = 0; i < NB_NET_WM_STATES; i++)
+    {
+        Atom atom = X11DRV_Atoms[net_wm_state_atoms[i] - FIRST_XATOM];
+        if (is_netwm_supported( atom )) data->net_wm_state_mask |= (1 << i);
+    }
 }
 
 void init_win_context(void)

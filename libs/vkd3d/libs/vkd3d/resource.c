@@ -951,7 +951,7 @@ HRESULT vkd3d_get_image_allocation_info(struct d3d12_device *device,
     HRESULT hr;
 
     VKD3D_ASSERT(desc->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER);
-    VKD3D_ASSERT(d3d12_resource_validate_desc(desc, device) == S_OK);
+    VKD3D_ASSERT(d3d12_resource_validate_desc(desc, device, 0) == S_OK);
 
     if (!desc->MipLevels)
     {
@@ -1847,7 +1847,7 @@ static bool d3d12_resource_validate_texture_alignment(const D3D12_RESOURCE_DESC1
     return true;
 }
 
-HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc, struct d3d12_device *device)
+HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc, struct d3d12_device *device, uint32_t flags)
 {
     const D3D12_MIP_REGION *mip_region = &desc->SamplerFeedbackMipRegion;
     const struct vkd3d_format *format;
@@ -1893,7 +1893,8 @@ HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc, struct d3
                 return E_INVALIDARG;
             }
 
-            if (!(format = vkd3d_format_from_d3d12_resource_desc(device, desc, 0)))
+            if (!(format = vkd3d_get_format(device, desc->Format,
+                    desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL || flags & VKD3D_VALIDATE_FORCE_ALLOW_DS)))
             {
                 WARN("Invalid format %#x.\n", desc->Format);
                 return E_INVALIDARG;
@@ -2013,7 +2014,7 @@ static HRESULT d3d12_resource_init(struct d3d12_resource *resource, struct d3d12
     resource->gpu_address = 0;
     resource->flags = 0;
 
-    if (FAILED(hr = d3d12_resource_validate_desc(&resource->desc, device)))
+    if (FAILED(hr = d3d12_resource_validate_desc(&resource->desc, device, 0)))
         return hr;
 
     resource->format = vkd3d_format_from_d3d12_resource_desc(device, desc, 0);
@@ -2498,7 +2499,7 @@ static void d3d12_desc_write_vk_heap_null_descriptor(struct d3d12_descriptor_hea
     enum vkd3d_vk_descriptor_set_index set, end;
     unsigned int i = writes->count;
 
-    end = device->vk_info.EXT_mutable_descriptor_type ? VKD3D_SET_INDEX_UNIFORM_BUFFER
+    end = device->vk_info.EXT_mutable_descriptor_type ? VKD3D_SET_INDEX_MUTABLE
             : VKD3D_SET_INDEX_STORAGE_IMAGE;
     /* Binding a shader with the wrong null descriptor type works in Windows.
      * To support that here we must write one to all applicable Vulkan sets. */
@@ -4250,7 +4251,8 @@ static HRESULT d3d12_descriptor_heap_create_descriptor_pool(struct d3d12_descrip
         if (device->vk_descriptor_heap_layouts[set].applicable_heap_type == desc->Type
                 && device->vk_descriptor_heap_layouts[set].vk_set_layout)
         {
-            pool_sizes[pool_desc.poolSizeCount].type = (device->vk_info.EXT_mutable_descriptor_type && !set)
+            pool_sizes[pool_desc.poolSizeCount].type =
+                    (device->vk_info.EXT_mutable_descriptor_type && set == VKD3D_SET_INDEX_MUTABLE)
                     ? VK_DESCRIPTOR_TYPE_MUTABLE_EXT : device->vk_descriptor_heap_layouts[set].type;
             pool_sizes[pool_desc.poolSizeCount++].descriptorCount = desc->NumDescriptors;
         }
@@ -4280,11 +4282,12 @@ static HRESULT d3d12_descriptor_heap_create_descriptor_set(struct d3d12_descript
 
     if (!device->vk_descriptor_heap_layouts[set].vk_set_layout)
     {
-        /* Set 0 uses mutable descriptors, and this set is unused. */
-        if (!descriptor_heap->vk_descriptor_sets[0].vk_set
-                && FAILED(hr = d3d12_descriptor_heap_create_descriptor_set(descriptor_heap, device, 0)))
+        /* Mutable descriptors are in use, and this set is unused. */
+        if (!descriptor_heap->vk_descriptor_sets[VKD3D_SET_INDEX_MUTABLE].vk_set
+                && FAILED(hr = d3d12_descriptor_heap_create_descriptor_set(descriptor_heap,
+                device, VKD3D_SET_INDEX_MUTABLE)))
             return hr;
-        descriptor_set->vk_set = descriptor_heap->vk_descriptor_sets[0].vk_set;
+        descriptor_set->vk_set = descriptor_heap->vk_descriptor_sets[VKD3D_SET_INDEX_MUTABLE].vk_set;
         descriptor_set->vk_type = device->vk_descriptor_heap_layouts[set].type;
         return S_OK;
     }

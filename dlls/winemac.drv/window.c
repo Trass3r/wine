@@ -1591,7 +1591,7 @@ done:
  *
  * Perform WM_SYSCOMMAND handling.
  */
-LRESULT macdrv_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam)
+LRESULT macdrv_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos)
 {
     struct macdrv_win_data *data;
     LRESULT ret = -1;
@@ -1627,7 +1627,7 @@ done:
 /***********************************************************************
  *              UpdateLayeredWindow   (MACDRV.@)
  */
-void macdrv_UpdateLayeredWindow(HWND hwnd, UINT flags)
+void macdrv_UpdateLayeredWindow(HWND hwnd, BYTE alpha, UINT flags)
 {
     struct macdrv_win_data *data;
 
@@ -1638,7 +1638,7 @@ void macdrv_UpdateLayeredWindow(HWND hwnd, UINT flags)
             show_window(data);
 
         /* The ULW flags are a superset of the LWA flags. */
-        sync_window_opacity(data, 255, TRUE, flags);
+        sync_window_opacity(data, alpha, TRUE, flags);
         release_win_data(data);
     }
 }
@@ -1661,10 +1661,6 @@ LRESULT macdrv_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             sync_window_region(data, (HRGN)1);
             release_win_data(data);
         }
-        return 0;
-    case WM_WINE_DESKTOP_RESIZED:
-        macdrv_reset_device_metrics();
-        macdrv_reassert_window_position(hwnd);
         return 0;
     case WM_MACDRV_ACTIVATE_ON_FOLLOWING_FOCUS:
         activate_on_following_focus();

@@ -3028,6 +3028,9 @@ static LRESULT EDIT_WM_Char(EDITSTATE *es, WCHAR c)
 {
         BOOL control;
 
+	if (es->bCaptureState)
+		return 1;
+
 	control = GetKeyState(VK_CONTROL) & 0x8000;
 
 	switch (c) {
@@ -3284,6 +3287,9 @@ static LRESULT EDIT_WM_KeyDown(EDITSTATE *es, INT key)
 	BOOL shift;
 	BOOL control;
 
+	if (es->bCaptureState)
+		return 1;
+
 	if (GetKeyState(VK_MENU) & 0x8000)
 		return 0;
 
@@ -3400,6 +3406,7 @@ static LRESULT EDIT_WM_KeyDown(EDITSTATE *es, INT key)
                 {
                     if (!notify_parent(es, EN_UPDATE)) break;
                     notify_parent(es, EN_CHANGE);
+                    EDIT_EM_ScrollCaret(es);
                 }
             }
             break;

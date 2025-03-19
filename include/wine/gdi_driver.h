@@ -59,7 +59,7 @@ static inline const char *debugstr_window_rects( const struct window_rects *rect
 }
 
 /* convert a visible rect to the corresponding window rect, using the window_rects offsets */
-static inline RECT window_rect_from_visible( struct window_rects *rects, RECT visible_rect )
+static inline RECT window_rect_from_visible( const struct window_rects *rects, RECT visible_rect )
 {
     RECT rect = visible_rect;
 
@@ -219,7 +219,7 @@ struct gdi_dc_funcs
 };
 
 /* increment this when you change the DC function table */
-#define WINE_GDI_DRIVER_VERSION 101
+#define WINE_GDI_DRIVER_VERSION 103
 
 #define GDI_PRIORITY_NULL_DRV        0  /* null driver */
 #define GDI_PRIORITY_FONT_DRV      100  /* any font driver */
@@ -380,11 +380,12 @@ struct user_driver_funcs
     void    (*pSetWindowStyle)(HWND,INT,STYLESTRUCT*);
     void    (*pSetWindowText)(HWND,LPCWSTR);
     UINT    (*pShowWindow)(HWND,INT,RECT*,UINT);
-    LRESULT (*pSysCommand)(HWND,WPARAM,LPARAM);
-    void    (*pUpdateLayeredWindow)(HWND,UINT);
+    LRESULT (*pSysCommand)(HWND,WPARAM,LPARAM,const POINT*);
+    void    (*pUpdateLayeredWindow)(HWND,BYTE,UINT);
     LRESULT (*pWindowMessage)(HWND,UINT,WPARAM,LPARAM);
     BOOL    (*pWindowPosChanging)(HWND,UINT,BOOL,const struct window_rects *);
     BOOL    (*pGetWindowStyleMasks)(HWND,UINT,UINT,UINT*,UINT*);
+    BOOL    (*pGetWindowStateUpdates)(HWND,UINT*,UINT*,RECT*);
     BOOL    (*pCreateWindowSurface)(HWND,BOOL,const RECT *,struct window_surface**);
     void    (*pMoveWindowBits)(HWND,const struct window_rects *,const struct window_rects *,const RECT *);
     void    (*pWindowPosChanged)(HWND,HWND,HWND,UINT,BOOL,const struct window_rects*,struct window_surface*);
