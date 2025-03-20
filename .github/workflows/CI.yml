@@ -6,14 +6,22 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     #container: ubuntu:rolling
+    strategy:
+      matrix:
+        include:
+        - name: 'LTO'
+          flags: 'CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2"'
+        - name: 'Standard'
+          flags: ''
     steps:
     - uses: actions/checkout@v4
     - name: prereqs
       run: |
         set -eux
         export DEBIAN_FRONTEND=noninteractive
+        sudo sed -i s/noble/oracular/ /etc/apt/sources.list
         sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
         sudo apt-get build-dep wine -y
@@ -31,7 +39,7 @@ jobs:
         export CCACHE_NOCOMPRESS=1
         export CCACHE_STATSLOG=/tmp/stats.log
         ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
-            CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2" \
+            ${{ matrix.flags }} \
             --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
         time make -j$(($(nproc) + 1)) -k
         make -k install DESTDIR=../install
