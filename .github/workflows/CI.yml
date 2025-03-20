@@ -15,6 +15,11 @@ jobs:
           flags: 'CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2"'
         - name: 'Standard'
           flags: ''
+        - name: 'Debug'
+          cflags: '-g -Og -DDEBUG'
+          crossflags: '-g -Og -DDEBUG'
+          ldflags: ''
+    name: ${{ matrix.name }}
     steps:
     - uses: actions/checkout@v4
     - name: prereqs
@@ -48,10 +53,10 @@ jobs:
         tar cvapf "$GITHUB_WORKSPACE/wine.tar.xz" *
     - uses: actions/upload-artifact@v4
       with:
-        name: debug
+        name: ccache-debug-${{ matrix.name }}
         path: /tmp/stats.log
     - uses: actions/upload-artifact@v4
       with:
-        name: binaries
+        name: binaries-${{ matrix.name }}
         path: |
           wine.tar.xz
