@@ -11,14 +11,12 @@ jobs:
     strategy:
       matrix:
         include:
+        - name: 'Standard'
+          flags: '' # default: -gdwarf-4 -g -O2
         - name: 'LTO'
           flags: 'CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2"'
-        - name: 'Standard'
-          flags: ''
         - name: 'Debug'
-          cflags: '-g -Og -DDEBUG'
-          crossflags: '-g -Og -DDEBUG'
-          ldflags: ''
+          flags: 'CFLAGS="-g -Og" CROSSCFLAGS="-g -Og"'
     name: ${{ matrix.name }}
     steps:
     - uses: actions/checkout@v4
@@ -34,6 +32,7 @@ jobs:
     - uses: Trass3r/setup-cpp@master
     - uses: hendrikmuhs/ccache-action@v1
       with:
+        key: ${{ matrix.name }}
         verbose: 2
         max-size: 5G
     - name: build
