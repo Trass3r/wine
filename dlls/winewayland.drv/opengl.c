@@ -29,6 +29,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
 #include "waylanddrv.h"
 #include "wine/debug.h"
 
@@ -590,18 +592,6 @@ static BOOL wayland_wglDeleteContext(struct wgl_context *ctx)
     if (ctx->read) wayland_gl_drawable_release(ctx->read);
     free(ctx);
     return TRUE;
-}
-
-static const char *wayland_wglGetExtensionsStringARB(HDC hdc)
-{
-    TRACE("() returning \"%s\"\n", wgl_extensions);
-    return wgl_extensions;
-}
-
-static const char *wayland_wglGetExtensionsStringEXT(void)
-{
-    TRACE("() returning \"%s\"\n", wgl_extensions);
-    return wgl_extensions;
 }
 
 static PROC wayland_wglGetProcAddress(LPCSTR name)
@@ -1208,12 +1198,11 @@ static BOOL init_opengl_funcs(void)
     p_glClear = opengl_funcs.p_glClear;
     opengl_funcs.p_glClear = wayland_glClear;
 
-    register_extension("WGL_ARB_extensions_string");
-    opengl_funcs.p_wglGetExtensionsStringARB = wayland_wglGetExtensionsStringARB;
+    return TRUE;
+}
 
-    register_extension("WGL_EXT_extensions_string");
-    opengl_funcs.p_wglGetExtensionsStringEXT = wayland_wglGetExtensionsStringEXT;
-
+static const char *wayland_init_wgl_extensions(void)
+{
     register_extension("WGL_WINE_pixel_format_passthrough");
     opengl_funcs.p_wglSetPixelFormatWINE = wayland_wglSetPixelFormatWINE;
 
@@ -1253,7 +1242,7 @@ static BOOL init_opengl_funcs(void)
     opengl_funcs.p_wglReleaseTexImageARB = wayland_wglReleaseTexImageARB;
     opengl_funcs.p_wglSetPbufferAttribARB = wayland_wglSetPbufferAttribARB;
 
-    return TRUE;
+    return wgl_extensions;
 }
 
 static BOOL init_egl_configs(void)
@@ -1310,10 +1299,15 @@ static BOOL init_egl_configs(void)
     return TRUE;
 }
 
+static const struct opengl_driver_funcs wayland_driver_funcs =
+{
+    .p_init_wgl_extensions = wayland_init_wgl_extensions,
+};
+
 /**********************************************************************
- *           WAYLAND_wine_get_wgl_driver
+ *           WAYLAND_OpenGLInit
  */
-struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version)
+UINT WAYLAND_OpenGLInit(UINT version, struct opengl_funcs **funcs, const struct opengl_driver_funcs **driver_funcs)
 {
     EGLint egl_version[2];
     const char *egl_client_exts, *egl_exts;
@@ -1322,13 +1316,13 @@ struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version)
     {
         ERR("Version mismatch, opengl32 wants %u but driver has %u\n",
             version, WINE_OPENGL_DRIVER_VERSION);
-        return NULL;
+        return STATUS_INVALID_PARAMETER;
     }
 
     if (!(egl_handle = dlopen(SONAME_LIBEGL, RTLD_NOW|RTLD_GLOBAL)))
     {
         ERR("Failed to load %s: %s\n", SONAME_LIBEGL, dlerror());
-        return NULL;
+        return STATUS_NOT_SUPPORTED;
     }
 
 #define LOAD_FUNCPTR_DLSYM(func) \
@@ -1404,12 +1398,14 @@ struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version)
 
     if (!init_opengl_funcs()) goto err;
     if (!init_egl_configs()) goto err;
-    return &opengl_funcs;
+    *funcs = &opengl_funcs;
+    *driver_funcs = &wayland_driver_funcs;
+    return STATUS_SUCCESS;
 
 err:
     dlclose(egl_handle);
     egl_handle = NULL;
-    return NULL;
+    return STATUS_NOT_SUPPORTED;
 }
 
 static struct opengl_funcs opengl_funcs =
@@ -1449,9 +1445,9 @@ void wayland_resize_gl_drawable(HWND hwnd)
 
 #else /* No GL */
 
-struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version)
+UINT WAYLAND_OpenGLInit(UINT version, struct opengl_funcs **funcs, const struct opengl_driver_funcs **driver_funcs)
 {
-    return NULL;
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 void wayland_destroy_gl_drawable(HWND hwnd)

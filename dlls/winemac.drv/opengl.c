@@ -98,6 +98,7 @@ static pthread_mutex_t dc_pbuffers_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 static struct opengl_funcs opengl_funcs;
+static const struct opengl_driver_funcs macdrv_driver_funcs;
 
 static void (*pglCopyColorTable)(GLenum target, GLenum internalformat, GLint x, GLint y,
                                  GLsizei width);
@@ -3033,32 +3034,6 @@ static BOOL macdrv_wglDestroyPbufferARB(struct wgl_pbuffer *pbuffer)
 
 
 /**********************************************************************
- *              macdrv_wglGetExtensionsStringARB
- *
- * WGL_ARB_extensions_string: wglGetExtensionsStringARB
- */
-static const char *macdrv_wglGetExtensionsStringARB(HDC hdc)
-{
-    /* FIXME: Since we're given an HDC, this should be device-specific.  I.e.
-              this can be specific to the CGL renderer like we're supposed to do. */
-    TRACE("returning \"%s\"\n", gl_info.wglExtensions);
-    return gl_info.wglExtensions;
-}
-
-
-/**********************************************************************
- *              macdrv_wglGetExtensionsStringEXT
- *
- * WGL_EXT_extensions_string: wglGetExtensionsStringEXT
- */
-static const char *macdrv_wglGetExtensionsStringEXT(void)
-{
-    TRACE("returning \"%s\"\n", gl_info.wglExtensions);
-    return gl_info.wglExtensions;
-}
-
-
-/**********************************************************************
  *              macdrv_wglGetPbufferDCARB
  *
  * WGL_ARB_pbuffer: wglGetPbufferDCARB
@@ -4073,14 +4048,11 @@ static void register_extension(const char *ext)
     TRACE("'%s'\n", ext);
 }
 
-static void load_extensions(void)
+static const char *macdrv_init_wgl_extensions(void)
 {
     /*
      * ARB Extensions
      */
-    register_extension("WGL_ARB_extensions_string");
-    opengl_funcs.p_wglGetExtensionsStringARB = macdrv_wglGetExtensionsStringARB;
-
     register_extension("WGL_ARB_make_current_read");
     opengl_funcs.p_wglGetCurrentReadDCARB   = (void *)1;  /* never called */
     opengl_funcs.p_wglMakeContextCurrentARB = macdrv_wglMakeContextCurrentARB;
@@ -4128,9 +4100,6 @@ static void load_extensions(void)
     /*
      * EXT Extensions
      */
-    register_extension("WGL_EXT_extensions_string");
-    opengl_funcs.p_wglGetExtensionsStringEXT = macdrv_wglGetExtensionsStringEXT;
-
     if (allow_vsync)
     {
         register_extension("WGL_EXT_swap_control");
@@ -4161,27 +4130,28 @@ static void load_extensions(void)
     opengl_funcs.p_wglQueryCurrentRendererStringWINE = macdrv_wglQueryCurrentRendererStringWINE;
     opengl_funcs.p_wglQueryRendererIntegerWINE = macdrv_wglQueryRendererIntegerWINE;
     opengl_funcs.p_wglQueryRendererStringWINE = macdrv_wglQueryRendererStringWINE;
+
+    return gl_info.wglExtensions;
 }
 
-
 /**********************************************************************
- *              macdrv_wine_get_wgl_driver
+ *              macdrv_OpenGLInit
  */
-struct opengl_funcs *macdrv_wine_get_wgl_driver(UINT version)
+UINT macdrv_OpenGLInit(UINT version, struct opengl_funcs **funcs, const struct opengl_driver_funcs **driver_funcs)
 {
     TRACE("()\n");
 
     if (version != WINE_OPENGL_DRIVER_VERSION)
     {
         ERR("version mismatch, opengl32 wants %u but macdrv has %u\n", version, WINE_OPENGL_DRIVER_VERSION);
-        return NULL;
+        return STATUS_INVALID_PARAMETER;
     }
 
     dc_pbuffers = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
     if (!dc_pbuffers)
     {
         WARN("CFDictionaryCreateMutable failed\n");
-        return NULL;
+        return STATUS_NOT_SUPPORTED;
     }
 
     opengl_handle = dlopen("/System/Library/Frameworks/OpenGL.framework/OpenGL", RTLD_LAZY|RTLD_LOCAL|RTLD_NOLOAD);
@@ -4189,7 +4159,7 @@ struct opengl_funcs *macdrv_wine_get_wgl_driver(UINT version)
     {
         ERR("Failed to load OpenGL: %s\n", dlerror());
         ERR("OpenGL support is disabled.\n");
-        return NULL;
+        return STATUS_NOT_SUPPORTED;
     }
 
 #define USE_GL_FUNC(func) \
@@ -4226,16 +4196,17 @@ struct opengl_funcs *macdrv_wine_get_wgl_driver(UINT version)
     if (gluCheckExtension((GLubyte*)"GL_APPLE_flush_render", (GLubyte*)gl_info.glExtensions))
         pglFlushRenderAPPLE = dlsym(opengl_handle, "glFlushRenderAPPLE");
 
-    load_extensions();
     if (!init_pixel_formats())
         goto failed;
 
-    return &opengl_funcs;
+    *funcs = &opengl_funcs;
+    *driver_funcs = &macdrv_driver_funcs;
+    return STATUS_SUCCESS;
 
 failed:
     dlclose(opengl_handle);
     opengl_handle = NULL;
-    return NULL;
+    return STATUS_NOT_SUPPORTED;
 }
 
 
@@ -4566,6 +4537,11 @@ static void macdrv_get_pixel_formats(struct wgl_pixel_format *formats,
     *num_formats = nb_formats;
     *num_onscreen_formats = nb_displayable_formats;
 }
+
+static const struct opengl_driver_funcs macdrv_driver_funcs =
+{
+    .p_init_wgl_extensions = macdrv_init_wgl_extensions,
+};
 
 static struct opengl_funcs opengl_funcs =
 {

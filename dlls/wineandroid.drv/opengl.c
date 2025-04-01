@@ -39,6 +39,8 @@
 #include <EGL/egl.h>
 #endif
 
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
 #include "android.h"
 #include "winternl.h"
 
@@ -301,24 +303,6 @@ static void describe_pixel_format( struct egl_pixel_format *fmt, PIXELFORMATDESC
     pfd->cBlueShift = pfd->cAlphaShift + pfd->cAlphaBits;
     pfd->cGreenShift = pfd->cBlueShift + pfd->cBlueBits;
     pfd->cRedShift = pfd->cGreenShift + pfd->cGreenBits;
-}
-
-/***********************************************************************
- *		android_wglGetExtensionsStringARB
- */
-static const char *android_wglGetExtensionsStringARB( HDC hdc )
-{
-    TRACE( "() returning \"%s\"\n", wgl_extensions );
-    return wgl_extensions;
-}
-
-/***********************************************************************
- *		android_wglGetExtensionsStringEXT
- */
-static const char *android_wglGetExtensionsStringEXT(void)
-{
-    TRACE( "() returning \"%s\"\n", wgl_extensions );
-    return wgl_extensions;
 }
 
 /***********************************************************************
@@ -634,23 +618,15 @@ static void register_extension( const char *ext )
     TRACE( "%s\n", ext );
 }
 
-static void init_extensions(void)
+static const char *android_init_wgl_extensions(void)
 {
-    void *ptr;
-
     register_extension("WGL_ARB_create_context");
     register_extension("WGL_ARB_create_context_profile");
     egl_funcs.p_wglCreateContextAttribsARB = android_wglCreateContextAttribsARB;
 
-    register_extension("WGL_ARB_extensions_string");
-    egl_funcs.p_wglGetExtensionsStringARB = android_wglGetExtensionsStringARB;
-
     register_extension("WGL_ARB_make_current_read");
     egl_funcs.p_wglGetCurrentReadDCARB   = (void *)1;  /* never called */
     egl_funcs.p_wglMakeContextCurrentARB = android_wglMakeContextCurrentARB;
-
-    register_extension("WGL_EXT_extensions_string");
-    egl_funcs.p_wglGetExtensionsStringEXT = android_wglGetExtensionsStringEXT;
 
     register_extension("WGL_EXT_swap_control");
     egl_funcs.p_wglSwapIntervalEXT = android_wglSwapIntervalEXT;
@@ -663,6 +639,13 @@ static void init_extensions(void)
      */
     register_extension("WGL_WINE_pixel_format_passthrough");
     egl_funcs.p_wglSetPixelFormatWINE = android_wglSetPixelFormatWINE;
+
+    return wgl_extensions;
+}
+
+static void init_opengl_funcs(void)
+{
+    void *ptr;
 
     /* load standard functions and extensions exported from the OpenGL library */
 
@@ -955,10 +938,15 @@ static void init_extensions(void)
 #undef REDIRECT
 }
 
+static const struct opengl_driver_funcs android_driver_funcs =
+{
+    .p_init_wgl_extensions = android_init_wgl_extensions,
+};
+
 /**********************************************************************
- *           ANDROID_wine_get_wgl_driver
+ *           ANDROID_OpenGLInit
  */
-struct opengl_funcs *ANDROID_wine_get_wgl_driver( UINT version )
+UINT ANDROID_OpenGLInit( UINT version, struct opengl_funcs **funcs, const struct opengl_driver_funcs **driver_funcs )
 {
     EGLConfig *configs;
     EGLint major, minor, count, i, pass;
@@ -966,17 +954,17 @@ struct opengl_funcs *ANDROID_wine_get_wgl_driver( UINT version )
     if (version != WINE_OPENGL_DRIVER_VERSION)
     {
         ERR( "version mismatch, opengl32 wants %u but driver has %u\n", version, WINE_OPENGL_DRIVER_VERSION );
-        return NULL;
+        return STATUS_INVALID_PARAMETER;
     }
     if (!(egl_handle = dlopen( SONAME_LIBEGL, RTLD_NOW|RTLD_GLOBAL )))
     {
         ERR( "failed to load %s: %s\n", SONAME_LIBEGL, dlerror() );
-        return NULL;
+        return STATUS_NOT_SUPPORTED;
     }
     if (!(opengl_handle = dlopen( SONAME_LIBGLESV2, RTLD_NOW|RTLD_GLOBAL )))
     {
         ERR( "failed to load %s: %s\n", SONAME_LIBGLESV2, dlerror() );
-        return NULL;
+        return STATUS_NOT_SUPPORTED;
     }
 
 #define LOAD_FUNCPTR(func) do { \
@@ -1042,8 +1030,10 @@ struct opengl_funcs *ANDROID_wine_get_wgl_driver( UINT version )
         if (!pass) nb_onscreen_formats = nb_pixel_formats;
     }
 
-    init_extensions();
-    return &egl_funcs;
+    init_opengl_funcs();
+    *funcs = &egl_funcs;
+    *driver_funcs = &android_driver_funcs;
+    return STATUS_SUCCESS;
 }
 
 

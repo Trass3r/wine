@@ -23,6 +23,7 @@
 
 #include "config.h"
 
+#include <assert.h>
 #include <pthread.h>
 #include <dlfcn.h>
 
@@ -37,6 +38,50 @@
 #include "dibdrv/dibdrv.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wgl);
+
+static struct opengl_funcs *get_dc_funcs( HDC hdc, void *null_funcs );
+
+static BOOL has_extension( const char *list, const char *ext )
+{
+    size_t len = strlen( ext );
+    const char *cur = list;
+
+    while (cur && (cur = strstr( cur, ext )))
+    {
+        if ((!cur[len] || cur[len] == ' ') && (cur == list || cur[-1] == ' ')) return TRUE;
+        cur = strchr( cur, ' ' );
+    }
+
+    return FALSE;
+}
+
+static void dump_extensions( const char *list )
+{
+    const char *start, *end, *ptr;
+
+    for (start = end = ptr = list; ptr; ptr = strchr( ptr + 1, ' ' ))
+    {
+        if (ptr - start <= 128) end = ptr;
+        else
+        {
+            TRACE( "%.*s\n", (int)(end - start), start );
+            start = end + 1;
+        }
+    }
+
+    TRACE( "%s\n", start );
+}
+
+static void register_extension( char *list, size_t size, const char *name )
+{
+    if (!has_extension( list, name ))
+    {
+        size_t len = strlen( list );
+        assert( size - len >= strlen( name ) + 1 );
+        if (*list) strcat( list + len, " " );
+        strcat( list + len, name );
+    }
+}
 
 #ifdef SONAME_LIBOSMESA
 
@@ -352,6 +397,31 @@ static struct opengl_funcs *osmesa_get_wgl_driver(void)
 
 #endif  /* SONAME_LIBOSMESA */
 
+static const char *nulldrv_init_wgl_extensions(void)
+{
+    return "";
+}
+
+static const struct opengl_driver_funcs nulldrv_funcs =
+{
+    .p_init_wgl_extensions = nulldrv_init_wgl_extensions,
+};
+static const struct opengl_driver_funcs *driver_funcs = &nulldrv_funcs;
+
+static char wgl_extensions[4096];
+
+static const char *win32u_wglGetExtensionsStringARB( HDC hdc )
+{
+    if (TRACE_ON(wgl)) dump_extensions( wgl_extensions );
+    return wgl_extensions;
+}
+
+static const char *win32u_wglGetExtensionsStringEXT(void)
+{
+    if (TRACE_ON(wgl)) dump_extensions( wgl_extensions );
+    return wgl_extensions;
+}
+
 static struct opengl_funcs *display_funcs;
 static struct opengl_funcs *memory_funcs;
 
@@ -362,7 +432,23 @@ static void memory_funcs_init(void)
 
 static void display_funcs_init(void)
 {
-    display_funcs = user_driver->pwine_get_wgl_driver( WINE_OPENGL_DRIVER_VERSION );
+    UINT status;
+
+    if ((status = user_driver->pOpenGLInit( WINE_OPENGL_DRIVER_VERSION, &display_funcs, &driver_funcs )) &&
+        status != STATUS_NOT_IMPLEMENTED)
+    {
+        ERR( "Failed to initialize the driver opengl functions, status %#x\n", status );
+        return;
+    }
+    if (!display_funcs) return;
+
+    strcpy( wgl_extensions, driver_funcs->p_init_wgl_extensions() );
+
+    register_extension( wgl_extensions, ARRAY_SIZE(wgl_extensions), "WGL_ARB_extensions_string" );
+    display_funcs->p_wglGetExtensionsStringARB = win32u_wglGetExtensionsStringARB;
+
+    register_extension( wgl_extensions, ARRAY_SIZE(wgl_extensions), "WGL_EXT_extensions_string" );
+    display_funcs->p_wglGetExtensionsStringEXT = win32u_wglGetExtensionsStringEXT;
 }
 
 static struct opengl_funcs *get_dc_funcs( HDC hdc, void *null_funcs )

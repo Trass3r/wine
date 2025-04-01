@@ -167,6 +167,21 @@ static const WSAPROTOCOL_INFOW supported_protocols[] =
         .dwMessageSize = UINT_MAX,
         .szProtocol = L"SPX II",
     },
+    {
+        .dwServiceFlags1 = XP1_IFS_HANDLES | XP1_GRACEFUL_CLOSE | XP1_GUARANTEED_ORDER |
+                           XP1_GUARANTEED_DELIVERY,
+        .dwProviderFlags = PFL_MATCHES_PROTOCOL_ZERO,
+        .ProviderId = {0x9fc48064, 0x7298, 0x43e4, {0xb7, 0xbd, 0x18, 0x1f, 0x20, 0x89, 0x79, 0x2a}},
+        .dwCatalogEntryId = 1040,
+        .ProtocolChain.ChainLen = 1,
+        .iVersion = 2,
+        .iAddressFamily = AF_BTH,
+        .iMinSockAddr = sizeof(SOCKADDR_BTH),
+        .iMaxSockAddr = sizeof(SOCKADDR_BTH),
+        .iSocketType = SOCK_STREAM,
+        .iProtocol = BTHPROTO_RFCOMM,
+        .szProtocol = L"MSAFD RfComm [Bluetooth]",
+    },
 };
 
 DECLARE_CRITICAL_SECTION(cs_socket_list);
@@ -1158,7 +1173,13 @@ int WINAPI bind( SOCKET s, const struct sockaddr *addr, int len )
                 return -1;
             }
             break;
-
+        case AF_BTH:
+            if (len < sizeof(SOCKADDR_BTH))
+            {
+                SetLastError( WSAEFAULT );
+                return -1;
+            }
+            break;
         default:
             FIXME( "unknown protocol %u\n", addr->sa_family );
             SetLastError( WSAEAFNOSUPPORT );

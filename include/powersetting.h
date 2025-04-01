@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Vibhav Pant
+ * Copyright (C) 2025 Louis Lenders
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,27 +16,30 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#ifndef __WS2BTH_H__
-#define __WS2BTH_H__
+#ifndef _POWERSETTING_H_
+#define _POWERSETTING_H_
 
-#include <pshpack1.h>
-
-#ifndef USE_WS_PREFIX
-#define BTHPROTO_RFCOMM    0x03
-#else
-#define WS_BTHPROTO_RFCOMM 0x03
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#define BT_PORT_ANY -1
-
-typedef struct _SOCKADDR_BTH
+typedef enum EFFECTIVE_POWER_MODE
 {
-    USHORT addressFamily;
-    BTH_ADDR btAddr;
-    GUID serviceClassId;
-    ULONG port;
-} SOCKADDR_BTH, *PSOCKADDR_BTH;
+    EffectivePowerModeBatterySaver,
+    EffectivePowerModeBetterBattery,
+    EffectivePowerModeBalanced,
+    EffectivePowerModeHighPerformance,
+    EffectivePowerModeMaxPerformance,
+    EffectivePowerModeGameMode,
+    EffectivePowerModeMixedReality,
+} EFFECTIVE_POWER_MODE;
 
-#include <poppack.h>
+typedef void WINAPI EFFECTIVE_POWER_MODE_CALLBACK(EFFECTIVE_POWER_MODE mode, void *context);
 
-#endif /* __WS2BTH_H__ */
+HRESULT WINAPI PowerRegisterForEffectivePowerModeNotifications(ULONG, EFFECTIVE_POWER_MODE_CALLBACK*, void*, void**);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _POWERSETTING_H_ */

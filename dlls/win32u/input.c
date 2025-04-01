@@ -1269,7 +1269,7 @@ INT WINAPI NtUserGetKeyNameText( LONG lparam, WCHAR *buffer, INT size )
         HKL hkl = NtUserGetKeyboardLayout( 0 );
         vkey = NtUserMapVirtualKeyEx( code & 0xff, MAPVK_VSC_TO_VK, hkl );
         buffer[0] = NtUserMapVirtualKeyEx( vkey, MAPVK_VK_TO_CHAR, hkl );
-        len = 1;
+        len = buffer[0] ? 1 : 0;
     }
     buffer[len] = 0;
 
@@ -2082,7 +2082,7 @@ HWND WINAPI NtUserSetActiveWindow( HWND hwnd )
 
     if (hwnd)
     {
-        LONG style;
+        DWORD style;
 
         hwnd = get_full_window_handle( hwnd );
         if (!is_window( hwnd ))
@@ -2123,7 +2123,7 @@ HWND WINAPI NtUserSetFocus( HWND hwnd )
         for (;;)
         {
             HWND parent;
-            LONG style = get_window_long( hwndTop, GWL_STYLE );
+            DWORD style = get_window_long( hwndTop, GWL_STYLE );
             if (style & (WS_MINIMIZE | WS_DISABLED)) return 0;
             if (!(style & WS_CHILD)) break;
             parent = NtUserGetAncestor( hwndTop, GA_PARENT );
