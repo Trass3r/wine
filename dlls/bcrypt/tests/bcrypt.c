@@ -2111,32 +2111,23 @@ static void test_key_import_export(void)
 
     size = 0;
     ret = BCryptExportKey(key, key2, BCRYPT_AES_WRAP_KEY_BLOB, NULL, 0, &size, 0);
-    todo_wine
     ok(ret == STATUS_SUCCESS, "got %#lx\n", ret);
-    todo_wine
     ok(size == sizeof(buffer3), "got %lu\n", size);
 
     ret = BCryptExportKey(key, key2, BCRYPT_AES_WRAP_KEY_BLOB, buffer3, size, &size, 0);
-    todo_wine
     ok(ret == STATUS_SUCCESS, "got %#lx\n", ret);
-    todo_wine
     ok(!memcmp(buffer3, encrypted_blob, sizeof(encrypted_blob)), "blobs didn't match\n");
 
     key3 = NULL;
     ret = BCryptImportKey(aes, key2, BCRYPT_AES_WRAP_KEY_BLOB, &key3, NULL, 0, buffer3, sizeof(buffer3), 0);
-    todo_wine
     ok(ret == STATUS_SUCCESS, "got %#lx\n", ret);
-    todo_wine
     ok(key3 != NULL, "key not set\n");
 
     size = 0;
     memset(buffer2, 0xff, sizeof(buffer2));
     ret = BCryptExportKey(key3, NULL, BCRYPT_KEY_DATA_BLOB, buffer2, sizeof(buffer2), &size, 0);
-    todo_wine
     ok(ret == STATUS_SUCCESS, "got %#lx\n", ret);
-    todo_wine
     ok(size == sizeof(buffer2), "Got %lu\n", size);
-    todo_wine
     ok(!memcmp(buffer1, buffer2, sizeof(buffer1)), "Expected exported key to match imported key\n");
 
     BCryptDestroyKey(key3);
