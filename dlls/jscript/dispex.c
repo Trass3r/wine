@@ -659,6 +659,8 @@ static HRESULT prop_put(jsdisp_t *This, dispex_prop_t *prop, jsval_t val)
             TRACE("no prop_put\n");
             return S_OK;
         }
+        if(!(prop->flags & PROPF_WRITABLE))
+            return S_OK;
         hres = This->builtin_info->prop_put(This, prop->u.id, val);
         if(hres != S_FALSE)
             return hres;
@@ -748,6 +750,13 @@ static HRESULT fill_props(jsdisp_t *obj)
 {
     dispex_prop_t *prop;
     HRESULT hres;
+    DWORD i;
+
+    for(i = 0; i < obj->builtin_info->props_cnt; i++) {
+        hres = find_prop_name(obj, string_hash(obj->builtin_info->props[i].name), obj->builtin_info->props[i].name, FALSE, NULL, &prop);
+        if(FAILED(hres))
+            return hres;
+    }
 
     if(obj->builtin_info->next_prop) {
         struct property_info desc;
@@ -2402,6 +2411,21 @@ static HRESULT WINAPI WineJSDispatch_GetPropertyFlags(IWineJSDispatch *iface, DI
     return S_OK;
 }
 
+static HRESULT WINAPI WineJSDispatch_DefineProperty(IWineJSDispatch *iface, const WCHAR *name, unsigned flags, VARIANT *v)
+{
+    jsdisp_t *This = impl_from_IWineJSDispatch(iface);
+    HRESULT hres;
+    jsval_t val;
+
+    hres = variant_to_jsval(This->ctx, v, &val);
+    if(FAILED(hres))
+        return hres;
+
+    hres = jsdisp_define_data_property(This, name, flags, val);
+    jsval_release(val);
+    return hres;
+}
+
 static HRESULT WINAPI WineJSDispatch_GetScriptGlobal(IWineJSDispatch *iface, IWineJSDispatchHost **ret)
 {
    jsdisp_t *This = impl_from_IWineJSDispatch(iface);
@@ -2435,6 +2459,7 @@ static IWineJSDispatchVtbl DispatchExVtbl = {
     DispatchEx_GetNameSpaceParent,
     WineJSDispatch_Free,
     WineJSDispatch_GetPropertyFlags,
+    WineJSDispatch_DefineProperty,
     WineJSDispatch_GetScriptGlobal,
 };
 

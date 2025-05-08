@@ -481,6 +481,15 @@ HRESULT WINAPI GetRestrictedErrorInfo(IRestrictedErrorInfo **info)
 }
 
 /***********************************************************************
+ *      SetRestrictedErrorInfo (combase.@)
+ */
+HRESULT WINAPI SetRestrictedErrorInfo(IRestrictedErrorInfo *info)
+{
+    FIXME( "(%p)\n", info );
+    return E_NOTIMPL;
+}
+
+/***********************************************************************
  *      RoOriginateLanguageException (combase.@)
  */
 BOOL WINAPI RoOriginateLanguageException(HRESULT error, HSTRING message, IUnknown *language_exception)
@@ -495,6 +504,15 @@ BOOL WINAPI RoOriginateLanguageException(HRESULT error, HSTRING message, IUnknow
 BOOL WINAPI RoOriginateError(HRESULT error, HSTRING message)
 {
     FIXME("%#lx, %s: stub\n", error, debugstr_hstring(message));
+    return FALSE;
+}
+
+/***********************************************************************
+ *      RoOriginateErrorW (combase.@)
+ */
+BOOL WINAPI RoOriginateErrorW(HRESULT error, UINT max_len, const WCHAR *message)
+{
+    FIXME("%#lx, %u, %p: stub\n", error, max_len, message);
     return FALSE;
 }
 

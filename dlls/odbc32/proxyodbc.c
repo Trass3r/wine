@@ -1025,6 +1025,7 @@ static SQLRETURN col_attribute_win32_a( struct statement *stmt, SQLUSMALLINT col
             field_id = SQL_COLUMN_NAME;
             break;
 
+        case SQL_COLUMN_NAME:
         case SQL_COLUMN_TYPE:
         case SQL_COLUMN_DISPLAY_SIZE:
         case SQL_MAX_COLUMNS_IN_TABLE:
@@ -2456,9 +2457,9 @@ static SQLRETURN get_data_unix( struct statement *stmt, SQLUSMALLINT column, SQL
 {
     INT64 len;
     SQLRETURN ret;
-    struct SQLGetData_params params = { stmt->hdr.unix_handle, column, type, value, buflen, &len };
+    struct SQLGetData_params params = { stmt->hdr.unix_handle, column, type, value, buflen, retlen ? &len : NULL};
 
-    if (SUCCESS((ret = ODBC_CALL( SQLGetData, &params )))) *retlen = len;
+    if (SUCCESS((ret = ODBC_CALL( SQLGetData, &params ))) && retlen) *retlen = len;
     return ret;
 }
 
@@ -2982,7 +2983,7 @@ static SQLRETURN get_info_win32_a( struct connection *con, SQLUSMALLINT type, SQ
         default: break;
         }
 
-        ret = SQLGetInfoW( con->hdr.win32_handle, type, buf, buflen, retlen );
+        ret = con->hdr.win32_funcs->SQLGetInfoW( con->hdr.win32_handle, type, buf, buflen, retlen );
         if (SUCCESS( ret ) && strW)
         {
             int len = WideCharToMultiByte( CP_ACP, 0, strW, -1, (char *)value, buflen, NULL, NULL );
@@ -5814,7 +5815,7 @@ SQLRETURN WINAPI SQLColAttributesW(SQLHSTMT StatementHandle, SQLUSMALLINT Column
 
 static const char *debugstr_sqlwstr( const SQLWCHAR *str, SQLSMALLINT len )
 {
-    if (len == SQL_NTS) len = wcslen( str );
+    if (len == SQL_NTS) return wine_dbgstr_w( str );
     return wine_dbgstr_wn( str, len );
 }
 
@@ -6252,6 +6253,7 @@ static SQLRETURN col_attribute_win32_w( struct statement *stmt, SQLUSMALLINT col
             field_id = SQL_COLUMN_NAME;
             break;
 
+        case SQL_COLUMN_NAME:
         case SQL_COLUMN_TYPE:
         case SQL_COLUMN_DISPLAY_SIZE:
         case SQL_MAX_COLUMNS_IN_TABLE:

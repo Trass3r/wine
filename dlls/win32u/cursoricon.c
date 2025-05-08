@@ -212,6 +212,7 @@ static BOOL free_icon_handle( HICON handle )
             free( obj->ani.frames );
         }
         if (!IS_INTRESOURCE( obj->resname )) free( obj->resname );
+        if (obj->module.Length) free(obj->module.Buffer);
         free( obj );
         KeUserDispatchCallback( &params.dispatch, sizeof(params), &ret_ptr, &ret_len );
         user_driver->pDestroyCursorIcon( handle );
@@ -397,7 +398,7 @@ HCURSOR WINAPI NtUserGetCursorFrameInfo( HCURSOR cursor, DWORD istep, DWORD *rat
 
     if (!(obj = get_icon_ptr( cursor ))) return 0;
 
-    TRACE( "%p => %d %p %p\n", cursor, (int)istep, rate_jiffies, num_steps );
+    TRACE( "%p => %d %p %p\n", cursor, istep, rate_jiffies, num_steps );
 
     icon_steps = obj->is_ani ? obj->ani.num_steps : 1;
     if (istep < icon_steps || !obj->is_ani)

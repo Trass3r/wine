@@ -1476,7 +1476,7 @@ BOOL set_window_pixel_format( HWND hwnd, int format, BOOL internal )
     return TRUE;
 }
 
-int get_window_pixel_format( HWND hwnd )
+int get_window_pixel_format( HWND hwnd, BOOL internal )
 {
     WND *win = get_win_ptr( hwnd );
     int ret;
@@ -1487,7 +1487,7 @@ int get_window_pixel_format( HWND hwnd )
         return 0;
     }
 
-    ret = win->pixel_format;
+    ret = internal && win->internal_pixel_format ? win->internal_pixel_format : win->pixel_format;
     release_win_ptr( win );
 
     return ret;
@@ -2202,36 +2202,11 @@ static BOOL apply_window_pos( HWND hwnd, HWND insert_after, UINT swp_flags, stru
     return ret;
 }
 
-static HRGN expose_window_surface_rect( struct window_surface *surface, UINT flags, RECT dirty )
-{
-    HRGN region, clipped;
-
-    intersect_rect( &dirty, &dirty, &surface->rect );
-    add_bounds_rect( &surface->bounds, &dirty );
-
-    if (!surface->clip_region || !flags) return 0;
-
-    clipped = NtGdiCreateRectRgn( surface->rect.left, surface->rect.top,
-                                  surface->rect.right, surface->rect.bottom );
-    NtGdiCombineRgn( clipped, clipped, surface->clip_region, RGN_DIFF );
-
-    region = NtGdiCreateRectRgn( dirty.left, dirty.top, dirty.right, dirty.bottom );
-    if (NtGdiCombineRgn( region, region, clipped, RGN_DIFF ) <= NULLREGION)
-    {
-        NtGdiDeleteObjectApp( region );
-        region = 0;
-    }
-
-    NtGdiDeleteObjectApp( clipped );
-    return region;
-}
-
 static BOOL expose_window_surface( HWND hwnd, UINT flags, const RECT *rect, UINT dpi )
 {
     struct window_surface *surface;
     struct window_rects rects;
-    RECT window_rect;
-    HRGN region = 0;
+    RECT exposed_rect;
     WND *win;
 
     if (!(win = get_win_ptr( hwnd )) || win == WND_DESKTOP || win == WND_OTHER_PROCESS) return FALSE;
@@ -2239,33 +2214,26 @@ static BOOL expose_window_surface( HWND hwnd, UINT flags, const RECT *rect, UINT
     rects = win->rects;
     release_win_ptr( win );
 
-    if (rect)
+    if (rect) exposed_rect = map_dpi_rect( *rect, dpi, get_dpi_for_window( hwnd ) );
+
+    if (!surface || surface == &dummy_surface)
     {
-        window_rect = map_dpi_rect( *rect, dpi, get_dpi_for_window( hwnd ) );
-        InflateRect( &window_rect, 1, 1 ); /* compensate rounding errors */
+        NtUserRedrawWindow( hwnd, rect ? &exposed_rect : NULL, NULL, flags );
+        if (surface) window_surface_release( surface );
+        return TRUE;
     }
 
-    if (surface)
+    window_surface_lock( surface );
+    if (!rect) add_bounds_rect( &surface->bounds, &surface->rect );
+    else
     {
-        window_surface_lock( surface );
-
-        if (!rect) add_bounds_rect( &surface->bounds, &surface->rect );
-        else
-        {
-            RECT dirty = window_rect;
-            OffsetRect( &dirty, rects.client.left - rects.visible.left, rects.client.top - rects.visible.top );
-            if (!(region = expose_window_surface_rect( surface, flags, dirty ))) flags = 0;
-            else NtGdiOffsetRgn( region, rects.client.left - rects.visible.left, rects.client.top - rects.visible.top );
-        }
-
-        window_surface_unlock( surface );
-        if (surface->alpha_mask) window_surface_flush( surface );
-
-        window_surface_release( surface );
+        OffsetRect( &exposed_rect, rects.client.left - rects.visible.left, rects.client.top - rects.visible.top );
+        intersect_rect( &exposed_rect, &exposed_rect, &surface->rect );
+        add_bounds_rect( &surface->bounds, &exposed_rect );
     }
-
-    if (flags) NtUserRedrawWindow( hwnd, rect ? &window_rect : NULL, region, flags );
-    if (region) NtGdiDeleteObjectApp( region );
+    window_surface_unlock( surface );
+    if (surface->alpha_mask) window_surface_flush( surface );
+    window_surface_release( surface );
     return TRUE;
 }
 
@@ -2398,7 +2366,7 @@ BOOL WINAPI NtUserSetLayeredWindowAttributes( HWND hwnd, COLORREF key, BYTE alph
 {
     BOOL ret;
 
-    TRACE( "(%p,%s,%d,%x)\n", hwnd, debugstr_color(key), alpha, (int)flags );
+    TRACE( "(%p,%s,%d,%x)\n", hwnd, debugstr_color(key), alpha, flags );
 
     SERVER_START_REQ( set_window_layered_info )
     {
@@ -2617,7 +2585,7 @@ HWND window_from_point( HWND hwnd, POINT pt, INT *hittest )
     }
     ret = list[i];
     free( list );
-    TRACE( "scope %p (%d,%d) returning %p\n", hwnd, (int)pt.x, (int)pt.y, ret );
+    TRACE( "scope %p (%d,%d) returning %p\n", hwnd, pt.x, pt.y, ret );
     return ret;
 }
 
@@ -2677,11 +2645,11 @@ HWND WINAPI NtUserRealChildWindowFromPoint( HWND parent, LONG x, LONG y )
 }
 
 /*******************************************************************
- *           get_work_rect
+ *           get_maximized_rect
  *
- * Get the work area that a maximized window can cover, depending on style.
+ * Get the area that a maximized window can cover, depending on style.
  */
-static BOOL get_work_rect( HWND hwnd, RECT *rect )
+static BOOL get_maximized_rect( HWND hwnd, RECT *rect )
 {
     MONITORINFO mon_info;
     DWORD style;
@@ -2690,24 +2658,9 @@ static BOOL get_work_rect( HWND hwnd, RECT *rect )
     *rect = mon_info.rcMonitor;
 
     style = get_window_long( hwnd, GWL_STYLE );
-    if (style & WS_MAXIMIZEBOX)
-    {
-        if ((style & WS_CAPTION) == WS_CAPTION || !(style & (WS_CHILD | WS_POPUP)))
-            *rect = mon_info.rcWork;
-    }
+    if (style & WS_MAXIMIZEBOX && (style & WS_CAPTION) == WS_CAPTION && !(style & WS_CHILD))
+        *rect = mon_info.rcWork;
     return TRUE;
-}
-
-static RECT get_maximized_work_rect( HWND hwnd )
-{
-    RECT work_rect = { 0 };
-
-    if ((get_window_long( hwnd, GWL_STYLE ) & (WS_MINIMIZE | WS_MAXIMIZE)) == WS_MAXIMIZE)
-    {
-        if (!get_work_rect( hwnd, &work_rect ))
-            work_rect = get_primary_monitor_rect( get_thread_dpi() );
-    }
-    return work_rect;
 }
 
 /*******************************************************************
@@ -2722,15 +2675,24 @@ static RECT get_maximized_work_rect( HWND hwnd )
  *
  * Some applications (e.g. Imperiums: Greek Wars) depend on this.
  */
-static void update_maximized_pos( WND *wnd, RECT *work_rect )
+static void update_maximized_pos( WND *wnd )
 {
+    RECT work_rect = { 0 };
+    MONITORINFO mon_info;
+
     if (wnd->parent && wnd->parent != get_desktop_window())
         return;
 
     if (wnd->dwStyle & WS_MAXIMIZE)
     {
-        if (wnd->rects.window.left  <= work_rect->left  && wnd->rects.window.top    <= work_rect->top &&
-            wnd->rects.window.right >= work_rect->right && wnd->rects.window.bottom >= work_rect->bottom)
+        if (!(wnd->dwStyle & WS_MINIMIZE))
+        {
+            mon_info = monitor_info_from_window( wnd->obj.handle, MONITOR_DEFAULTTOPRIMARY );
+            work_rect = mon_info.rcWork;
+        }
+
+        if (wnd->rects.window.left  <= work_rect.left  && wnd->rects.window.top    <= work_rect.top &&
+            wnd->rects.window.right >= work_rect.right && wnd->rects.window.bottom >= work_rect.bottom)
             wnd->max_pos.x = wnd->max_pos.y = -1;
     }
     else
@@ -2747,7 +2709,6 @@ static BOOL empty_point( POINT pt )
  */
 BOOL WINAPI NtUserGetWindowPlacement( HWND hwnd, WINDOWPLACEMENT *placement )
 {
-    RECT work_rect = get_maximized_work_rect( hwnd );
     WND *win = get_win_ptr( hwnd );
     UINT win_dpi;
 
@@ -2806,7 +2767,7 @@ BOOL WINAPI NtUserGetWindowPlacement( HWND hwnd, WINDOWPLACEMENT *placement )
     {
         win->normal_rect = win->rects.window;
     }
-    update_maximized_pos( win, &work_rect );
+    update_maximized_pos( win );
 
     placement->length  = sizeof(*placement);
     if (win->dwStyle & WS_MINIMIZE)
@@ -2826,8 +2787,8 @@ BOOL WINAPI NtUserGetWindowPlacement( HWND hwnd, WINDOWPLACEMENT *placement )
     release_win_ptr( win );
 
     TRACE( "%p: returning min %d,%d max %d,%d normal %s\n",
-           hwnd, (int)placement->ptMinPosition.x, (int)placement->ptMinPosition.y,
-           (int)placement->ptMaxPosition.x, (int)placement->ptMaxPosition.y,
+           hwnd, placement->ptMinPosition.x, placement->ptMinPosition.y,
+           placement->ptMaxPosition.x, placement->ptMaxPosition.y,
            wine_dbgstr_rect(&placement->rcNormalPosition) );
     return TRUE;
 }
@@ -2887,7 +2848,6 @@ static void make_point_onscreen( POINT *pt )
 
 static BOOL set_window_placement( HWND hwnd, const WINDOWPLACEMENT *wndpl, UINT flags )
 {
-    RECT work_rect = get_maximized_work_rect( hwnd );
     WND *win = get_win_ptr( hwnd );
     WINDOWPLACEMENT wp = *wndpl;
     DWORD style;
@@ -2897,11 +2857,11 @@ static BOOL set_window_placement( HWND hwnd, const WINDOWPLACEMENT *wndpl, UINT 
     if (flags & PLACE_RECT) make_rect_onscreen( &wp.rcNormalPosition );
 
     TRACE( "%p: setting min %d,%d max %d,%d normal %s flags %x adjusted to min %d,%d max %d,%d normal %s\n",
-           hwnd, (int)wndpl->ptMinPosition.x, (int)wndpl->ptMinPosition.y,
-           (int)wndpl->ptMaxPosition.x, (int)wndpl->ptMaxPosition.y,
+           hwnd, wndpl->ptMinPosition.x, wndpl->ptMinPosition.y,
+           wndpl->ptMaxPosition.x, wndpl->ptMaxPosition.y,
            wine_dbgstr_rect(&wndpl->rcNormalPosition), flags,
-           (int)wp.ptMinPosition.x, (int)wp.ptMinPosition.y,
-           (int)wp.ptMaxPosition.x, (int)wp.ptMaxPosition.y,
+           wp.ptMinPosition.x, wp.ptMinPosition.y,
+           wp.ptMaxPosition.x, wp.ptMaxPosition.y,
            wine_dbgstr_rect(&wp.rcNormalPosition) );
 
     if (!win || win == WND_OTHER_PROCESS || win == WND_DESKTOP) return FALSE;
@@ -2910,7 +2870,7 @@ static BOOL set_window_placement( HWND hwnd, const WINDOWPLACEMENT *wndpl, UINT 
     if (flags & PLACE_MAX)
     {
         win->max_pos = point_thread_to_win_dpi( hwnd, wp.ptMaxPosition );
-        update_maximized_pos( win, &work_rect );
+        update_maximized_pos( win );
     }
     if (flags & PLACE_RECT) win->normal_rect = rect_thread_to_win_dpi( hwnd, wp.rcNormalPosition );
 
@@ -3928,8 +3888,10 @@ typedef struct
     WINDOWPOS *winpos;
 } DWP;
 
-/* see BeginDeferWindowPos */
-HDWP begin_defer_window_pos( INT count )
+/***********************************************************************
+ *           NtUserBeginDeferWindowPos (win32u.@)
+ */
+HDWP WINAPI NtUserBeginDeferWindowPos( INT count )
 {
     HDWP handle = 0;
     DWP *dwp;
@@ -4208,7 +4170,7 @@ MINMAXINFO get_min_max_info( HWND hwnd )
     DWORD style = get_window_long( hwnd, GWL_STYLE );
     DWORD exstyle = get_window_long( hwnd, GWL_EXSTYLE );
     UINT context;
-    RECT rc_work, rc_primary;
+    RECT rc_max, rc_primary;
     DWORD adjusted_style;
     MINMAXINFO minmax;
     INT xinc, yinc;
@@ -4261,27 +4223,27 @@ MINMAXINFO get_min_max_info( HWND hwnd )
 
     /* if the app didn't change the values, adapt them for the current monitor */
 
-    if (get_work_rect( hwnd, &rc_work ))
+    if (get_maximized_rect( hwnd, &rc_max ))
     {
         rc_primary = get_primary_monitor_rect( get_thread_dpi() );
         if (minmax.ptMaxSize.x == (rc_primary.right - rc_primary.left) + 2 * xinc &&
             minmax.ptMaxSize.y == (rc_primary.bottom - rc_primary.top) + 2 * yinc)
         {
-            minmax.ptMaxSize.x = (rc_work.right - rc_work.left) + 2 * xinc;
-            minmax.ptMaxSize.y = (rc_work.bottom - rc_work.top) + 2 * yinc;
+            minmax.ptMaxSize.x = (rc_max.right - rc_max.left) + 2 * xinc;
+            minmax.ptMaxSize.y = (rc_max.bottom - rc_max.top) + 2 * yinc;
         }
         if (minmax.ptMaxPosition.x == -xinc && minmax.ptMaxPosition.y == -yinc)
         {
-            minmax.ptMaxPosition.x = rc_work.left - xinc;
-            minmax.ptMaxPosition.y = rc_work.top - yinc;
+            minmax.ptMaxPosition.x = rc_max.left - xinc;
+            minmax.ptMaxPosition.y = rc_max.top - yinc;
         }
     }
 
     TRACE( "%d %d / %d %d / %d %d / %d %d\n",
-           (int)minmax.ptMaxSize.x, (int)minmax.ptMaxSize.y,
-           (int)minmax.ptMaxPosition.x, (int)minmax.ptMaxPosition.y,
-           (int)minmax.ptMaxTrackSize.x, (int)minmax.ptMaxTrackSize.y,
-           (int)minmax.ptMinTrackSize.x, (int)minmax.ptMinTrackSize.y );
+           minmax.ptMaxSize.x, minmax.ptMaxSize.y,
+           minmax.ptMaxPosition.x, minmax.ptMaxPosition.y,
+           minmax.ptMaxTrackSize.x, minmax.ptMaxTrackSize.y,
+           minmax.ptMinTrackSize.x, minmax.ptMinTrackSize.y );
 
     minmax.ptMaxTrackSize.x = max( minmax.ptMaxTrackSize.x, minmax.ptMinTrackSize.x );
     minmax.ptMaxTrackSize.y = max( minmax.ptMaxTrackSize.y, minmax.ptMinTrackSize.y );
@@ -5336,7 +5298,7 @@ static WND *create_window_handle( HWND parent, HWND owner, UNICODE_STRING *name,
 
     if (!handle)
     {
-        WARN( "error %d creating window\n", (int)RtlGetLastWin32Error() );
+        WARN( "error %d creating window\n", RtlGetLastWin32Error() );
         return NULL;
     }
 
@@ -5566,6 +5528,7 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     win->hIconSmall  = 0;
     win->hIconSmall2 = 0;
     win->hSysMenu    = 0;
+    win->swap_interval = 1;
 
     win->min_pos.x = win->min_pos.y = -1;
     win->max_pos.x = win->max_pos.y = -1;
@@ -5875,9 +5838,6 @@ ULONG_PTR WINAPI NtUserCallHwnd( HWND hwnd, DWORD code )
     case NtUserCallHwnd_IsWindowVisible:
         return is_window_visible( hwnd );
 
-    case NtUserCallHwnd_SetForegroundWindow:
-        return set_foreground_window( hwnd, FALSE );
-
     /* temporary exports */
     case NtUserGetFullWindowHandle:
         return HandleToUlong( get_full_window_handle( hwnd ));
@@ -5889,7 +5849,7 @@ ULONG_PTR WINAPI NtUserCallHwnd( HWND hwnd, DWORD code )
         return HandleToUlong( is_current_thread_window( hwnd ));
 
     default:
-        FIXME( "invalid code %u\n", (int)code );
+        FIXME( "invalid code %u\n", code );
         return 0;
     }
 }
@@ -5962,9 +5922,6 @@ ULONG_PTR WINAPI NtUserCallHwndParam( HWND hwnd, DWORD_PTR param, DWORD code )
     case NtUserCallHwndParam_IsChild:
         return is_child( hwnd, UlongToHandle(param) );
 
-    case NtUserCallHwndParam_KillSystemTimer:
-        return kill_system_timer( hwnd, param );
-
     case NtUserCallHwndParam_MapWindowPoints:
         {
             struct map_window_points_params *params = (void *)param;
@@ -6019,7 +5976,7 @@ ULONG_PTR WINAPI NtUserCallHwndParam( HWND hwnd, DWORD_PTR param, DWORD code )
         }
 
     default:
-        FIXME( "invalid code %u\n", (int)code );
+        FIXME( "invalid code %u\n", code );
         return 0;
     }
 }

@@ -3285,14 +3285,18 @@ static void output_source_one_arch( struct makefile *make, struct incl_file *sou
         {
             strarray_addall( &cflags, dll_flags );
             if (source->use_msvcrt) strarray_addall( &cflags, msvcrt_flags );
-            if (!unix_lib_supported && make->module && is_crt_module( make->module ))
+            if (!unix_lib_supported &&
+                ((make->module && is_crt_module( make->module )) ||
+                 (make->testdll && is_crt_module( make->testdll ))))
                 strarray_add( &cflags, "-fno-builtin" );
         }
         strarray_addall( &cflags, cpp_flags );
     }
     else
     {
-        if (make->module && is_crt_module( make->module )) strarray_add( &cflags, "-fno-builtin" );
+        if ((make->module && is_crt_module( make->module )) ||
+            (make->testdll && is_crt_module( make->testdll )))
+            strarray_add( &cflags, "-fno-builtin" );
     }
 
     output( "%s: %s\n", obj_dir_path( make, obj_name ), source->filename );
@@ -3474,7 +3478,8 @@ static void output_module( struct makefile *make, unsigned int arch )
 
     if (!make->is_exe)
     {
-        if (make->data_only || strarray_exists( make->extradllflags, "-Wl,--subsystem,native" ))
+        if (make->data_only || strendswith( make->module, ".drv" ) ||
+            strarray_exists( make->extradllflags, "-Wl,--subsystem,native" ))
         {
             /* spec file is optional */
             struct incl_file *spec = find_src_file( make, replace_extension( make->module, ".dll", ".spec" ));

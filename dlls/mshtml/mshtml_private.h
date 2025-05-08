@@ -92,6 +92,7 @@ typedef struct ConnectionPoint ConnectionPoint;
 typedef struct BSCallback BSCallback;
 typedef struct EventTarget EventTarget;
 typedef struct ScriptHost ScriptHost;
+struct constructor;
 
 #define TID_LIST \
     XIID(NULL) \
@@ -413,7 +414,7 @@ typedef struct {
     const char *(*get_name)(DispatchEx*);
 } dispex_static_data_vtbl_t;
 
-#define ALL_PROTOTYPES                     \
+#define ALL_OBJECTS                     \
     X(Attr)                                \
     X(CSSRule)                             \
     X(CSSStyleDeclaration)                 \
@@ -463,6 +464,7 @@ typedef struct {
     X(HTMLTitleElement)                    \
     X(HTMLUnknownElement)                  \
     X(History)                             \
+    X(Image)                               \
     X(KeyboardEvent)                       \
     X(MSCSSProperties)                     \
     X(MSCSSRuleList)                       \
@@ -480,6 +482,7 @@ typedef struct {
     X(Navigator)                           \
     X(Node)                                \
     X(NodeList)                            \
+    X(Option)                              \
     X(PageTransitionEvent)                 \
     X(Performance)                         \
     X(PerformanceNavigation)               \
@@ -505,12 +508,12 @@ typedef struct {
     X(XMLHttpRequest)
 
 typedef enum {
-    PROT_NONE,
-#define X(name) PROT_##name,
-    ALL_PROTOTYPES
+    OBJID_NONE,
+#define X(name) OBJID_##name,
+    ALL_OBJECTS
 #undef X
-    PROT_LAST,
-} prototype_id_t;
+    OBJID_LAST,
+} object_id_t;
 
 struct dispex_static_data_t {
     const char *name;
@@ -518,13 +521,13 @@ struct dispex_static_data_t {
     const tid_t disp_tid;
     const tid_t* const iface_tids;
     void (*init_info)(dispex_data_t*,compat_mode_t);
-    HRESULT (*init_constructor)(HTMLInnerWindow*,DispatchEx**);
+    HRESULT (*init_constructor)(struct constructor*);
     dispex_data_t *info_cache[COMPAT_MODE_CNT];
     dispex_data_t *prototype_info[COMPAT_MODE_CNT - COMPAT_MODE_IE9];
     dispex_data_t *delayed_init_info;
-    prototype_id_t id;
-    prototype_id_t prototype_id;
-    prototype_id_t constructor_id;
+    object_id_t id;
+    object_id_t prototype_id;
+    object_id_t constructor_id;
     UINT32 js_flags;
     compat_mode_t min_compat_mode;
     compat_mode_t max_compat_mode;
@@ -532,10 +535,10 @@ struct dispex_static_data_t {
 };
 
 #define X(name) extern dispex_static_data_t name ## _dispex;
-ALL_PROTOTYPES
+ALL_OBJECTS
 #undef X
 
-extern dispex_static_data_t *object_descriptors[PROT_LAST];
+extern dispex_static_data_t *object_descriptors[OBJID_LAST];
 
 typedef HRESULT (*dispex_hook_invoke_t)(DispatchEx*,WORD,DISPPARAMS*,VARIANT*,
                                         EXCEPINFO*,IServiceProvider*);
@@ -616,6 +619,7 @@ extern void (__cdecl *describe_cc_node)(nsCycleCollectingAutoRefCnt*,const char*
 extern void (__cdecl *note_cc_edge)(nsISupports*,const char*,nsCycleCollectionTraversalCallback*);
 
 void init_dispatch(DispatchEx*,dispex_static_data_t*,HTMLInnerWindow*,compat_mode_t);
+void init_dispatch_from_desc(DispatchEx*,dispex_data_t*,HTMLInnerWindow*,DispatchEx*);
 void init_dispatch_with_owner(DispatchEx*,dispex_static_data_t*,DispatchEx*);
 HTMLInnerWindow *get_script_global(DispatchEx*);
 void dispex_props_unlink(DispatchEx*);
@@ -644,8 +648,8 @@ HRESULT dispex_prop_name(DispatchEx *dispex, DISPID id, BSTR *ret);
 HRESULT dispex_define_property(DispatchEx *dispex, const WCHAR *name, DWORD flags, VARIANT *v, DISPID *id);
 HRESULT dispex_index_prop_desc(DispatchEx*,DISPID,struct property_info*);
 IWineJSDispatchHost *dispex_outer_iface(DispatchEx *dispex);
-HRESULT get_constructor(HTMLInnerWindow *script_global, prototype_id_t id, DispatchEx **ret);
-HRESULT get_prototype(HTMLInnerWindow *script_global, prototype_id_t id, DispatchEx **ret);
+HRESULT get_constructor(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret);
+HRESULT get_prototype(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret);
 
 typedef enum {
     DISPEXPROP_CUSTOM,
@@ -654,6 +658,20 @@ typedef enum {
 } dispex_prop_type_t;
 
 dispex_prop_type_t get_dispid_type(DISPID);
+
+struct constructor {
+    DispatchEx dispex;
+    IUnknown iface;
+    HTMLInnerWindow *window;
+};
+
+static inline struct constructor *constructor_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, struct constructor, dispex);
+}
+void constructor_traverse(DispatchEx*,nsCycleCollectionTraversalCallback*);
+void constructor_unlink(DispatchEx*);
+void constructor_destructor(DispatchEx*);
 
 typedef enum {
     GLOBAL_SCRIPTVAR,
@@ -674,20 +692,6 @@ struct EventTarget {
     IEventTarget IEventTarget_iface;
     struct wine_rb_tree handler_map;
 };
-
-typedef struct {
-    DispatchEx dispex;
-    IHTMLOptionElementFactory IHTMLOptionElementFactory_iface;
-
-    HTMLInnerWindow *window;
-} HTMLOptionElementFactory;
-
-typedef struct {
-    DispatchEx dispex;
-    IHTMLImageElementFactory IHTMLImageElementFactory_iface;
-
-    HTMLInnerWindow *window;
-} HTMLImageElementFactory;
 
 struct HTMLLocation {
     DispatchEx dispex;
@@ -771,8 +775,6 @@ struct HTMLInnerWindow {
 
     IHTMLEventObj *event;
 
-    HTMLImageElementFactory *image_factory;
-    HTMLOptionElementFactory *option_factory;
     IHTMLScreen *screen;
     OmHistory *history;
     IOmNavigator *navigator;
@@ -800,8 +802,8 @@ struct HTMLInnerWindow {
     ULONG navigation_type;
     ULONG redirect_count;
 
-    DispatchEx *prototypes[PROT_LAST];
-    DispatchEx *constructors[PROT_LAST];
+    DispatchEx *prototypes[OBJID_LAST];
+    DispatchEx *constructors[OBJID_LAST];
 
     ULONGLONG navigation_start_time;
     ULONGLONG unload_event_start_time;
@@ -1169,9 +1171,6 @@ HRESULT create_outer_window(GeckoBrowser*,mozIDOMWindowProxy*,HTMLOuterWindow*,H
 HRESULT update_window_doc(HTMLInnerWindow*);
 HTMLOuterWindow *mozwindow_to_window(const mozIDOMWindowProxy*);
 void get_top_window(HTMLOuterWindow*,HTMLOuterWindow**);
-HRESULT HTMLOptionElementFactory_Create(HTMLInnerWindow*,HTMLOptionElementFactory**);
-HRESULT HTMLImageElementFactory_Create(HTMLInnerWindow*,HTMLImageElementFactory**);
-HRESULT HTMLXMLHttpRequestFactory_Create(HTMLInnerWindow*,DispatchEx**);
 HRESULT create_location(HTMLOuterWindow*,HTMLLocation**);
 HRESULT create_navigator(HTMLInnerWindow*,IOmNavigator**);
 HRESULT create_html_screen(HTMLInnerWindow*,IHTMLScreen**);

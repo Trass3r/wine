@@ -20,6 +20,7 @@
 
 #include "initguid.h"
 #include "private.h"
+#include "setupapi.h"
 
 #include "wine/debug.h"
 
@@ -333,11 +334,84 @@ static HRESULT WINAPI device_statics_CreateFromIdAsyncAdditionalProperties( IDev
     return E_NOTIMPL;
 }
 
+static HRESULT WINAPI find_all_async( IUnknown *invoker, IUnknown *param, PROPVARIANT *result )
+{
+    static const struct vector_iids iids =
+    {
+        .vector = &IID_IVector_IInspectable,
+        .view = &IID_IVectorView_DeviceInformation,
+        .iterable = &IID_IIterable_DeviceInformation,
+        .iterator = &IID_IIterator_DeviceInformation,
+    };
+    IVectorView_DeviceInformation *view;
+    IVector_IInspectable *vector;
+    HKEY iface_key;
+    HRESULT hr;
+    DWORD i;
+
+    TRACE( "invoker %p, param %p, result %p\n", invoker, param, result );
+
+    if (FAILED(hr = vector_create( &iids, (void *)&vector ))) return hr;
+
+    if (!(iface_key = SetupDiOpenClassRegKeyExW( NULL, KEY_ENUMERATE_SUB_KEYS, DIOCR_INTERFACE, NULL, NULL )))
+    {
+        IVector_IInspectable_Release( vector );
+        return HRESULT_FROM_WIN32( GetLastError() );
+    }
+
+    for (i = 0; SUCCEEDED(hr); i++)
+    {
+        char buffer[sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) + MAX_PATH * sizeof(WCHAR)];
+        SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail = (void *)buffer;
+        SP_DEVICE_INTERFACE_DATA iface = {.cbSize = sizeof(iface)};
+        HDEVINFO set = INVALID_HANDLE_VALUE;
+        GUID iface_class;
+        WCHAR name[40];
+        DWORD j, len;
+        LSTATUS ret;
+
+        len = ARRAY_SIZE(name);
+        ret = RegEnumKeyExW( iface_key, i, name, &len, NULL, NULL, NULL, NULL );
+        if (ret == ERROR_NO_MORE_ITEMS) break;
+        if (ret) hr = HRESULT_FROM_WIN32( ret );
+
+        if (SUCCEEDED(hr) && SUCCEEDED(hr = CLSIDFromString( name, &iface_class )))
+        {
+            set = SetupDiGetClassDevsW( &iface_class, NULL, NULL, DIGCF_DEVICEINTERFACE );
+            if (set == INVALID_HANDLE_VALUE) hr = HRESULT_FROM_WIN32( GetLastError() );
+        }
+
+        for (j = 0; SUCCEEDED(hr) && SetupDiEnumDeviceInterfaces( set, NULL, &iface_class, j, &iface ); j++)
+        {
+            IDeviceInformation *info;
+
+            detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
+            if (!SetupDiGetDeviceInterfaceDetailW( set, &iface, detail, sizeof(buffer), NULL, NULL )) continue;
+
+            if (SUCCEEDED(hr = device_information_create( detail->DevicePath, &info )))
+            {
+                hr = IVector_IInspectable_Append( vector, (IInspectable *)info );
+                IDeviceInformation_Release( info );
+            }
+        }
+    }
+
+    RegCloseKey( iface_key );
+
+    if (SUCCEEDED(hr)) hr = IVector_IInspectable_GetView( vector, (void *)&view );
+    IVector_IInspectable_Release( vector );
+    if (FAILED(hr)) return hr;
+
+    result->vt = VT_UNKNOWN;
+    result->punkVal = (IUnknown *)view;
+    return hr;
+}
+
 static HRESULT WINAPI device_statics_FindAllAsync( IDeviceInformationStatics *iface,
                                                    IAsyncOperation_DeviceInformationCollection **op )
 {
-    FIXME( "iface %p, op %p stub!\n", iface, op );
-    return E_NOTIMPL;
+    TRACE( "iface %p, op %p\n", iface, op );
+    return async_operation_device_info_collection_result_create( (IUnknown *)iface, NULL, find_all_async, op );
 }
 
 static HRESULT WINAPI device_statics_FindAllAsyncDeviceClass( IDeviceInformationStatics *iface, DeviceClass class,
@@ -377,6 +451,7 @@ static HRESULT WINAPI device_statics_CreateWatcherDeviceClass( IDeviceInformatio
 static HRESULT WINAPI device_statics_CreateWatcherAqsFilter( IDeviceInformationStatics *iface, HSTRING filter, IDeviceWatcher **watcher )
 {
     struct device_watcher *this;
+    HRESULT hr;
 
     TRACE( "iface %p, filter %s, watcher %p\n", iface, debugstr_hstring(filter), watcher );
 
@@ -384,7 +459,11 @@ static HRESULT WINAPI device_statics_CreateWatcherAqsFilter( IDeviceInformationS
 
     this->IDeviceWatcher_iface.lpVtbl = &device_watcher_vtbl;
     this->ref = 1;
-    WindowsDuplicateString( filter, &this->filter );
+    if (FAILED(hr = WindowsDuplicateString( filter, &this->filter )))
+    {
+        free( this );
+        return hr;
+    }
 
     list_init( &this->stopped_handlers );
 
@@ -453,6 +532,7 @@ static HRESULT WINAPI device_statics2_CreateWatcher( IDeviceInformationStatics2 
                                                      IDeviceWatcher **watcher )
 {
     struct device_watcher *this;
+    HRESULT hr;
 
     FIXME( "iface %p, filter %s, additional_properties %p, kind %u, watcher %p semi-stub!\n",
             iface, debugstr_hstring( filter ), additional_properties, kind, watcher );
@@ -462,7 +542,11 @@ static HRESULT WINAPI device_statics2_CreateWatcher( IDeviceInformationStatics2 
 
     this->IDeviceWatcher_iface.lpVtbl = &device_watcher_vtbl;
     this->ref = 1;
-    WindowsDuplicateString( filter, &this->filter );
+    if (FAILED(hr = WindowsDuplicateString( filter, &this->filter )))
+    {
+        free( this );
+        return hr;
+    }
 
     list_init( &this->stopped_handlers );
 

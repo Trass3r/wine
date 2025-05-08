@@ -420,11 +420,14 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
     LRESULT result = 0;
     void *ret_ptr;
     ULONG ret_len;
+    NTSTATUS status;
 
     if (thread_info->recursion_count > MAX_WINPROC_RECURSION) return 0;
     thread_info->recursion_count++;
-    KeUserModeCallback( NtUserCallWinProc, params, size, &ret_ptr, &ret_len );
+    status = KeUserModeCallback( NtUserCallWinProc, params, size, &ret_ptr, &ret_len );
     thread_info->recursion_count--;
+
+    if (status) return result;
 
     if (ret_len >= sizeof(result))
     {
@@ -2942,8 +2945,8 @@ int peek_message( MSG *msg, const struct peek_message_filter *filter )
                 hook.time        = info.msg.time;
                 hook.dwExtraInfo = msg_data->hardware.info;
                 TRACE( "calling keyboard LL hook vk %x scan %x flags %x time %u info %lx\n",
-                       (int)hook.vkCode, (int)hook.scanCode, (int)hook.flags,
-                       (int)hook.time, (long)hook.dwExtraInfo );
+                       hook.vkCode, hook.scanCode, hook.flags,
+                       hook.time, hook.dwExtraInfo );
                 result = call_hooks( WH_KEYBOARD_LL, HC_ACTION, info.msg.wParam,
                                      (LPARAM)&hook, sizeof(hook) );
             }
@@ -2957,8 +2960,8 @@ int peek_message( MSG *msg, const struct peek_message_filter *filter )
                 hook.time        = info.msg.time;
                 hook.dwExtraInfo = msg_data->hardware.info;
                 TRACE( "calling mouse LL hook pos %d,%d data %x flags %x time %u info %lx\n",
-                       (int)hook.pt.x, (int)hook.pt.y, (int)hook.mouseData, (int)hook.flags,
-                       (int)hook.time, (long)hook.dwExtraInfo );
+                       hook.pt.x, hook.pt.y, hook.mouseData, hook.flags,
+                       hook.time, hook.dwExtraInfo );
                 result = call_hooks( WH_MOUSE_LL, HC_ACTION, info.msg.wParam,
                                      (LPARAM)&hook, sizeof(hook) );
             }
@@ -3984,8 +3987,7 @@ static LRESULT call_messageAtoW( winproc_callback_t callback, HWND hwnd, UINT ms
 {
     LRESULT ret = 0;
 
-    TRACE( "(hwnd=%p,msg=%s,wp=%#lx,lp=%#lx)\n", hwnd, debugstr_msg_name( msg, hwnd ),
-           (long)wparam, (long)lparam );
+    TRACE( "(hwnd=%p,msg=%s,wp=%#lx,lp=%#lx)\n", hwnd, debugstr_msg_name( msg, hwnd ), (long)wparam, lparam );
 
     switch(msg)
     {
@@ -4298,8 +4300,10 @@ BOOL WINAPI NtUserKillTimer( HWND hwnd, UINT_PTR id )
     return ret;
 }
 
-/* see KillSystemTimer */
-BOOL kill_system_timer( HWND hwnd, UINT_PTR id )
+/***********************************************************************
+ *           NtUserKillSystemTimer (win32u.@)
+ */
+BOOL WINAPI NtUserKillSystemTimer( HWND hwnd, UINT_PTR id )
 {
     BOOL ret;
 
@@ -4570,7 +4574,7 @@ LRESULT WINAPI NtUserMessageCall( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
         return post_dde_message_call( hwnd, msg, wparam, lparam, result_info );
 
     default:
-        FIXME( "%p %x %lx %lx %p %x %x\n", hwnd, msg, (long)wparam, lparam, result_info, (int)type, ansi );
+        FIXME( "%p %x %lx %lx %p %x %x\n", hwnd, msg, (long)wparam, lparam, result_info, type, ansi );
     }
     return 0;
 }

@@ -2504,11 +2504,11 @@ void signal_init_process(void)
 
     if (cpu_info.ProcessorFeatureBits & CPU_FEATURE_XSAVE) syscall_flags |= SYSCALL_HAVE_XSAVE;
     if (xstate_compaction_enabled) syscall_flags |= SYSCALL_HAVE_XSAVEC;
+
+#ifdef __linux__
 #ifdef AT_HWCAP2
     if (getauxval( AT_HWCAP2 ) & 2) syscall_flags |= SYSCALL_HAVE_WRFSGSBASE;
 #endif
-
-#ifdef __linux__
     if (wow_teb)
     {
         int sel;
@@ -2946,6 +2946,7 @@ __ASM_GLOBAL_FUNC( __wine_syscall_dispatcher,
                    "movq (%rsp),%rcx\n\t"          /* frame->rip */
                    "pushq %r11\n\t"
                    /* make sure that if trap flag is set the trap happens on the first instruction after iret */
+                   "andq $~0x4000,(%rsp)\n\t" /* make sure NT flag is not set, or iretq will fault */
                    "popfq\n\t"
                    "iretq\n"
                    /* CONTEXT_INTEGER */
@@ -2956,6 +2957,9 @@ __ASM_GLOBAL_FUNC( __wine_syscall_dispatcher,
                    "movq 0x40(%rcx),%r10\n\t"
                    "movq 0x48(%rcx),%r11\n\t"
                    "movq 0x10(%rcx),%rcx\n\t"
+                   "pushfq\n\t"
+                   "andq $~0x4000,(%rsp)\n\t" /* make sure NT flag is not set, or iretq will fault */
+                   "popfq\n\t"
                    "iretq\n"
                    /* RESTORE_FLAGS_INSTRUMENTATION */
                    "2:\tmovq %gs:0x348,%r10\n\t"  /* amd64_thread_data()->instrumentation_callback */
@@ -2967,12 +2971,13 @@ __ASM_GLOBAL_FUNC( __wine_syscall_dispatcher,
                    "xchgq %r10,(%rsp)\n\t"
                    "pushq %r11\n\t"
                    /* make sure that if trap flag is set the trap happens on the first instruction after iret */
+                   "andq $~0x4000,(%rsp)\n\t" /* make sure NT flag is not set, or iretq will fault */
                    "popfq\n\t"
                    "iretq\n\t"
 
                    /* pop rbp-based kernel stack cfi */
                    __ASM_CFI("\t.cfi_restore_state\n")
-                   "5:\tmovl $0xc000000d,%eax\n\t" /* STATUS_INVALID_PARAMETER */
+                   "5:\tmovl $0xc000001c,%eax\n\t" /* STATUS_INVALID_SYSTEM_SERVICE */
                    "movq %rsp,%rcx\n\t"
                    "jmp " __ASM_LOCAL_LABEL("__wine_syscall_dispatcher_return") )
 

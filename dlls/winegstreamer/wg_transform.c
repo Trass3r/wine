@@ -129,9 +129,6 @@ static void align_video_info_planes(MFVideoInfo *video_info, gsize plane_align,
     }
 
     align->stride_align[0] = plane_align;
-    align->stride_align[1] = plane_align;
-    align->stride_align[2] = plane_align;
-    align->stride_align[3] = plane_align;
 
     gst_video_info_align(info, align);
 
@@ -1228,15 +1225,23 @@ NTSTATUS wg_transform_flush(void *args)
     struct wg_transform *transform = get_transform(*(wg_transform_t *)args);
     GstBuffer *input_buffer;
     GstSample *sample;
+    GstEvent *event;
     NTSTATUS status;
 
     GST_LOG("transform %p", transform);
+
+    /* this ensures no messages are travelling through the pipeline whilst we flush */
+    event = gst_event_new_flush_start();
+    gst_pad_push_event(transform->my_src, event);
 
     while ((input_buffer = gst_atomic_queue_pop(transform->input_queue)))
         gst_buffer_unref(input_buffer);
 
     if (transform->stepper)
         wg_stepper_flush(transform->stepper);
+
+    event = gst_event_new_flush_stop(true);
+    gst_pad_push_event(transform->my_src, event);
 
     if ((status = wg_transform_drain(args)))
         return status;

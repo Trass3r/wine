@@ -726,7 +726,10 @@ static void read_file_test(void)
     CloseHandle( handle );
 
     if (!(handle = create_temp_file(FILE_FLAG_OVERLAPPED | FILE_FLAG_NO_BUFFERING)))
+    {
+        CloseHandle(event);
         return;
+    }
 
     apc_count = 0;
     offset.QuadPart = 0;
@@ -4902,6 +4905,7 @@ static void test_NtCreateFile(void)
                             0, FILE_SHARE_READ|FILE_SHARE_WRITE, FILE_CREATE,
                             FILE_DIRECTORY_FILE, NULL, 0);
     ok( !status, "failed %s %lx\n", debugstr_w(nameW.Buffer), status );
+    pRtlFreeUnicodeString( &nameW );
     RemoveDirectoryW( path );
 }
 

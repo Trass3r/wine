@@ -375,6 +375,7 @@ sync_test("builtin_obj", function() {
         ok(!(f.apply instanceof Function), "f.apply instance of Function");
         ok(!(f.call instanceof Function), "f.call instance of Function");
         ok(!("arguments" in f), "arguments in f");
+        ok(!("caller" in f), "caller in f");
         ok(!("length" in f), "length in f");
         e = 0;
         try {
@@ -393,6 +394,9 @@ sync_test("builtin_obj", function() {
         ok(e === "[object Window]", "window.toString with null context = " + e);
         e = window.toString.call(external.nullDisp);
         ok(e === "[object Window]", "window.toString with nullDisp context = " + e);
+
+        test_own_props(f, "createElement", [ "arguments", "caller", "prototype" ], [ "prototype" ]);
+        ok(f.arguments === null, "createElement arguments = " + f.arguments);
     }
 
     e = 0;
@@ -904,6 +908,21 @@ sync_test("style_props", function() {
         todo_wine.
         ok(!r.length, "style has own props after delete: " + r);
     }
+});
+
+sync_test("constructor props", function() {
+    function test_exposed(constructor, prop, expect) {
+        if(expect)
+            ok(prop in constructor, prop + " not found in " + constructor);
+        else
+            ok(!(prop in constructor), prop + " found in " + constructor);
+    }
+    var v = document.documentMode;
+
+    test_exposed(Image, "create", v < 9);
+    test_exposed(Option, "create", v < 9);
+    test_exposed(XMLHttpRequest, "create", true);
+    if(v >= 11) test_exposed(MutationObserver, "create", false);
 });
 
 sync_test("createElement_inline_attr", function() {
@@ -3131,6 +3150,13 @@ sync_test("__proto__", function() {
         ok(e.number === 0xa13b6 - 0x80000000 && e.name === "TypeError",
             "changing __proto__ on non-extensible object threw exception " + e.number + " (" + e.name + ")");
     }
+
+    obj = document.createElement("img");
+    obj.__proto__ = ctor.prototype;
+    document.body.setAttribute.call(obj, "height", "101");
+    r = document.body.getAttribute.call(obj, "height");
+    ok(r === "101", "getAttribute(height) = " + r);
+    ok(!("getAttribute" in obj), "getAttribute exposed in obj");
 });
 
 sync_test("__defineGetter__", function() {
@@ -3750,6 +3776,13 @@ sync_test("prototypes", function() {
     check(Attr.prototype, Node.prototype, "attr prototype");
     check(document.createDocumentFragment(), DocumentFragment.prototype, "fragment");
     check(DocumentFragment.prototype, Node.prototype, "fragment prototype");
+
+    try {
+        HTMLAreaElement.prototype.toString.call(document.createElement("a"));
+        ok(false, "Area element's toString on Anchor element didn't fail");
+    } catch(e) {
+        ok(e.number == 0xffff - 0x80000000, "Area element's toString on Anchor element threw exception " + e.number);
+    }
 });
 
 sync_test("prototype props", function() {
@@ -3980,4 +4013,67 @@ sync_test("prototype props", function() {
     check(StyleSheet, [ "disabled", "href", "media", "ownerNode", "parentStyleSheet", "title", "type" ]);
     check(Text, [ "removeNode", "replaceNode", "replaceWholeText", "splitText", "swapNode", "wholeText" ], [ "replaceWholeText", "wholeText" ]);
     check(UIEvent, [ "detail", "initUIEvent", "view" ], null, [ "deviceSessionId" ]);
+});
+
+sync_test("constructors", function() {
+    var v = document.documentMode, i, r, old;
+    if(v < 9)
+        return;
+
+    var ctors = [ "Image", "Option", "XMLHttpRequest" ];
+    if (v >= 11)
+        ctors.push("MutationObserver");
+    for(i = 0; i < ctors.length; i++) {
+        r = ctors[i];
+        ok(window.hasOwnProperty(r), r + " not prop of window");
+        ok(!(r in Window.prototype), r + " is a prop of window's prototype");
+        ok(window[r].toString() === "\nfunction " + r + "() {\n    [native code]\n}\n", r + ".toString() = " + window[r].toString());
+
+        ok(window[r].hasOwnProperty("arguments"), "arguments not a prop of " + r);
+        ok(window[r].hasOwnProperty("caller"), "caller not a prop of " + r);
+        ok(window[r].hasOwnProperty("prototype"), "prototype not a prop of " + r);
+        ok(!window[r].hasOwnProperty("length"), "length is a prop of " + r);
+    }
+    ok(window.Image.prototype === window.HTMLImageElement.prototype, "Image.prototype != HTMLImageElement.prototype");
+    ok(window.Option.prototype === window.HTMLOptionElement.prototype, "Option.prototype != HTMLOptionElement.prototype");
+
+    ok(typeof(XMLHttpRequest.create) === "function", "XMLHttpRequest.create not a function");
+    ok(XMLHttpRequest.create.toString() === "\nfunction create() {\n    [native code]\n}\n", "XMLHttpRequest.create.toString() = " + XMLHttpRequest.create.toString());
+    ok(XMLHttpRequest.create() instanceof XMLHttpRequest, "XMLHttpRequest.create did not return XMLHttpRequest instance");
+    ok(XMLHttpRequest.create.call(Object) instanceof XMLHttpRequest, "XMLHttpRequest.create with Object 'this' did not return XMLHttpRequest instance");
+    try {
+        new XMLHttpRequest.create();
+        ok(false, "new XMLHttpRequest.create() did not throw");
+    }catch(e) {
+        ok(e.number === 0x0ffff - 0x80000000, "new XMLHttpRequest.create() threw " + e.number);
+    }
+    test_own_props(XMLHttpRequest.create, "XMLHttpRequest.create", [ "arguments", "caller", "prototype" ], [ "prototype" ]);
+
+    r = Object.getOwnPropertyDescriptor(HTMLMetaElement, "prototype");
+    ok(r.value === HTMLMetaElement.prototype, "HTMLMetaElement.prototype value = " + r.value);
+    ok(!("get" in r), "HTMLMetaElement.prototype has getter");
+    ok(!("set" in r), "HTMLMetaElement.prototype has setter");
+    ok(r.writable === false, "HTMLMetaElement.prototype writable = " + r.writable);
+    ok(r.enumerable === false, "HTMLMetaElement.prototype enumerable = " + r.enumerable);
+    ok(r.configurable === false, "HTMLMetaElement.prototype configurable = " + r.configurable);
+
+    old = HTMLMetaElement.prototype;
+    HTMLMetaElement.prototype = Object.prototype;
+    ok(HTMLMetaElement.prototype === old, "HTMLMetaElement.prototype = " + HTMLMetaElement.prototype);
+
+    r = (delete HTMLMetaElement.prototype);
+    ok(r === false, "delete HTMLMetaElement.prototype returned " + r);
+    ok(HTMLMetaElement.hasOwnProperty("prototype"), "prototype not a prop anymore of HTMLMetaElement");
+
+    old = window.HTMLMetaElement;
+    r = (delete window.HTMLMetaElement);
+    ok(r === true, "delete HTMLMetaElement returned " + r);
+    ok(!window.hasOwnProperty("HTMLMetaElement"), "HTMLMetaElement still a property of window");
+    window.HTMLMetaElement = old;
+
+    old = HTMLMetaElement.prototype.constructor;
+    r = (delete HTMLMetaElement.prototype.constructor);
+    ok(r === true, "delete HTMLMetaElement.prototype.constructor returned " + r);
+    ok(!HTMLMetaElement.prototype.hasOwnProperty("constructor"), "constructor still a property of HTMLMetaElement.prototype");
+    HTMLMetaElement.prototype.constructor = old;
 });

@@ -745,7 +745,7 @@ static void handle_wm_protocols( HWND hwnd, XClientMessageEvent *event )
                         NtUserSetActiveWindow( hwnd );
                         break;
                     default:
-                        WARN( "unknown WM_MOUSEACTIVATE code %d\n", (int) ma );
+                        WARN( "unknown WM_MOUSEACTIVATE code %ld\n", ma );
                         break;
                 }
             }
@@ -767,21 +767,13 @@ static void handle_wm_protocols( HWND hwnd, XClientMessageEvent *event )
         TRACE( "window %p/%lx WM_TAKE_FOCUS serial %lu, event_time %ld, foreground %p\n", hwnd, event->window,
                event->serial, event_time, foreground );
         TRACE( "  enabled %u, visible %u, style %#x, focus %p, active %p, last %p\n",
-                NtUserIsWindowEnabled( hwnd ), NtUserIsWindowVisible( hwnd ), (int)NtUserGetWindowLongW( hwnd, GWL_STYLE ),
+                NtUserIsWindowEnabled( hwnd ), NtUserIsWindowVisible( hwnd ), NtUserGetWindowLongW( hwnd, GWL_STYLE ),
                 get_focus(), get_active_window(), last_focus );
 
         if (can_activate_window(hwnd))
         {
-            /* simulate a mouse click on the menu to find out
-             * whether the window wants to be activated */
-            LRESULT ma = send_message( hwnd, WM_MOUSEACTIVATE,
-                                       (WPARAM)NtUserGetAncestor( hwnd, GA_ROOT ),
-                                       MAKELONG( HTMENU, WM_LBUTTONDOWN ) );
-            if (ma != MA_NOACTIVATEANDEAT && ma != MA_NOACTIVATE)
-            {
-                set_focus( event->display, hwnd, event_time );
-                return;
-            }
+            set_focus( event->display, hwnd, event_time );
+            return;
         }
         else if (hwnd == NtUserGetDesktopWindow())
         {
@@ -978,7 +970,7 @@ static BOOL X11DRV_Expose( HWND hwnd, XEvent *xev )
     RECT rect, abs_rect;
     POINT pos;
     struct x11drv_win_data *data;
-    UINT flags = RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN;
+    UINT flags = RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN;
 
     TRACE( "win %p (%lx) %d,%d %dx%d\n",
            hwnd, event->window, event->x, event->y, event->width, event->height );
@@ -1585,7 +1577,7 @@ static void handle_xdnd_position_event( HWND hwnd, XClientMessageEvent *event )
     effect = drag_drop_drag( hwnd, point, effect );
 
     TRACE( "actionRequested(%ld) chosen(0x%x) at x(%d),y(%d)\n",
-           event->data.l[4], effect, (int)point.x, (int)point.y );
+           event->data.l[4], effect, point.x, point.y );
 
     /*
      * Let source know if we're accepting the drop by

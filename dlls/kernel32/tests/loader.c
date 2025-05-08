@@ -36,16 +36,6 @@
 
 #define ALIGN_SIZE(size, alignment) (((size) + ((ULONG_PTR)(alignment) - 1)) & ~(((ULONG_PTR)(alignment) - 1)))
 
-struct PROCESS_BASIC_INFORMATION_PRIVATE
-{
-    NTSTATUS  ExitStatus;
-    PPEB      PebBaseAddress;
-    DWORD_PTR AffinityMask;
-    DWORD_PTR BasePriority;
-    ULONG_PTR UniqueProcessId;
-    ULONG_PTR InheritedFromUniqueProcessId;
-};
-
 static LONG *child_failures;
 static WORD cb_count, cb_count_sys;
 static DWORD page_size;
@@ -3409,7 +3399,7 @@ static void child_process(const char *dll_name, DWORD target_offset)
     DWORD ret, dummy, i, code, expected_code;
     HANDLE file, thread, process;
     HMODULE hmod;
-    struct PROCESS_BASIC_INFORMATION_PRIVATE pbi;
+    PROCESS_BASIC_INFORMATION pbi;
     DWORD_PTR affinity;
     void *cookie;
 
@@ -3716,7 +3706,7 @@ static void child_process(const char *dll_name, DWORD target_offset)
 static void test_ExitProcess(void)
 {
 #if defined(__i386__) || defined(__x86_64__) || defined(__aarch64__)
-#include "pshpack1.h"
+#pragma pack(push,1)
 #ifdef __x86_64__
     static struct section_data
     {
@@ -3739,7 +3729,7 @@ static void test_ExitProcess(void)
         void *target;
     } section_data = { 0x58000040, 0xd61f0000, dll_entry_point };
 #endif
-#include "poppack.h"
+#pragma pack(pop)
     DWORD dummy, file_align;
     HANDLE file, thread, process, hmap, hmap_dup;
     char temp_path[MAX_PATH], dll_name[MAX_PATH], cmdline[MAX_PATH * 2];
@@ -3748,7 +3738,7 @@ static void test_ExitProcess(void)
     PROCESS_INFORMATION pi;
     STARTUPINFOA si = { sizeof(si) };
     CONTEXT ctx;
-    struct PROCESS_BASIC_INFORMATION_PRIVATE pbi;
+    PROCESS_BASIC_INFORMATION pbi;
     MEMORY_BASIC_INFORMATION mbi;
     DWORD_PTR affinity;
     PROCESS_PRIORITY_CLASS ppc;
