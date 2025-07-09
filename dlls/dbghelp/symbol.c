@@ -432,6 +432,8 @@ void symt_add_func_line(struct module* module, struct symt_function* func,
         WARN("Duplicate addition of line number in %s\n", debugstr_a(func->hash_elt.name));
         return;
     }
+    /* clear previous last */
+    if (prev) prev->is_last = 0;
     if (!last_matches)
     {
         /* we shouldn't have line changes on first line of function */
@@ -442,8 +444,6 @@ void symt_add_func_line(struct module* module, struct symt_function* func,
         dli->line_number    = 0;
         dli->u.source_file  = source_idx;
     }
-    /* clear previous last */
-    if (prev) prev->is_last = 0;
     dli = vector_add(&func->vlines, &module->pool);
     dli->is_source_file = 0;
     dli->is_first       = 0; /* only a source file can be first */
@@ -892,14 +892,47 @@ static BOOL send_symbol(const struct sym_enum* se, struct module_pair* pair,
     return !se->cb(se->sym_info, se->sym_info->Size, se->user);
 }
 
+struct symbol_enum_method
+{
+    struct module_pair *pair;
+    const struct sym_enum *se;
+};
+
+static BOOL symbol_enum_method_cb(symref_t symref, const char *name, void *user)
+{
+    struct symbol_enum_method *sem = user;
+
+    sem->se->sym_info->SizeOfStruct = sizeof(SYMBOL_INFO);
+    sem->se->sym_info->MaxNameLen = sizeof(sem->se->buffer) - sizeof(SYMBOL_INFO);
+
+    if (symt_is_symref_ptr(symref))
+    {
+        if (send_symbol(sem->se, sem->pair, NULL, (struct symt*)symref)) return TRUE;
+    }
+    else FIXME("No support for this case yet %Ix\n", symref);
+    return TRUE;
+}
+
 static BOOL symt_enum_module(struct module_pair* pair, const WCHAR* match,
                              const struct sym_enum* se)
 {
+    struct module_format_vtable_iterator iter = {};
     void*                       ptr;
     struct symt_ht*             sym = NULL;
     struct hash_table_iter      hti;
     WCHAR*                      nameW;
     BOOL                        ret;
+
+    while ((module_format_vtable_iterator_next(pair->effective, &iter,
+                                               MODULE_FORMAT_VTABLE_INDEX(enumerate_symbols))))
+    {
+        struct symbol_enum_method sem = {pair, se};
+        enum method_result result = iter.modfmt->vtable->enumerate_symbols(iter.modfmt, match, symbol_enum_method_cb, &sem);
+
+        if (result == MR_SUCCESS) return TRUE;
+        if (result == MR_FAILURE) return FALSE;
+        /* fall back in all the other cases */
+    }
 
     hash_table_iter_init(&pair->effective->ht_symbols, &hti, NULL);
     while ((ptr = hash_table_iter_up(&hti)))
@@ -1034,7 +1067,7 @@ static int symt_get_best_at(struct module* module, int idx_sorttab)
 }
 
 /* assume addr is in module */
-struct symt_ht* symt_find_nearest(struct module* module, DWORD_PTR addr)
+static struct symt_ht* symt_find_nearest_internal(struct module* module, DWORD_PTR addr)
 {
     int         mid, high, low;
     ULONG64     ref_addr, ref_size;
@@ -1078,6 +1111,33 @@ struct symt_ht* symt_find_nearest(struct module* module, DWORD_PTR addr)
     low = symt_get_best_at(module, low);
 
     return module->addr_sorttab[low];
+}
+
+struct symt_ht *symt_find_nearest(struct module *module, DWORD_PTR addr)
+{
+    static int recursive;
+    struct module_format_vtable_iterator iter = {};
+
+    /* prevent recursive lookup inside backend */
+    if (!recursive++)
+    {
+        while ((module_format_vtable_iterator_next(module, &iter,
+                                                   MODULE_FORMAT_VTABLE_INDEX(lookup_by_address))))
+        {
+            symref_t symref;
+            enum method_result result = iter.modfmt->vtable->lookup_by_address(iter.modfmt, addr, &symref);
+            if (result == MR_SUCCESS)
+            {
+                recursive--;
+                if (symt_is_symref_ptr(symref)) return (struct symt_ht*)SYMT_SYMREF_TO_PTR(symref);
+                FIXME("No support for this case yet\n");
+                return NULL;
+            }
+            /* fall back in all the other cases */
+        }
+    }
+    recursive--;
+    return symt_find_nearest_internal(module, addr);
 }
 
 struct symt_ht* symt_find_symbol_at(struct module* module, DWORD_PTR addr)
@@ -1426,6 +1486,7 @@ BOOL WINAPI SymEnumSymbolsW(HANDLE hProcess, ULONG64 BaseOfDll, PCWSTR Mask,
     return doSymEnumSymbols(hProcess, BaseOfDll, Mask, sym_enumW, &sew);
 }
 
+#ifndef _WIN64
 struct sym_enumerate
 {
     void*                       ctx;
@@ -1452,6 +1513,7 @@ BOOL WINAPI SymEnumerateSymbols(HANDLE hProcess, DWORD BaseOfDll,
     
     return SymEnumSymbols(hProcess, BaseOfDll, NULL, sym_enumerate_cb, &se);
 }
+#endif
 
 struct sym_enumerate64
 {
@@ -1583,6 +1645,7 @@ BOOL WINAPI SymGetSymFromAddr64(HANDLE hProcess, DWORD64 Address,
 static BOOL find_name(struct process* pcs, struct module* module, const char* name,
                       SYMBOL_INFO* symbol)
 {
+    struct module_format_vtable_iterator iter = {};
     struct hash_table_iter      hti;
     void*                       ptr;
     struct symt_ht*             sym = NULL;
@@ -1591,6 +1654,24 @@ static BOOL find_name(struct process* pcs, struct module* module, const char* na
     pair.pcs = pcs;
     if (!(pair.requested = module)) return FALSE;
     if (!module_get_debug(&pair)) return FALSE;
+
+    while ((module_format_vtable_iterator_next(pair.effective, &iter,
+                                               MODULE_FORMAT_VTABLE_INDEX(lookup_by_name))))
+    {
+        symref_t symref;
+        enum method_result result = iter.modfmt->vtable->lookup_by_name(iter.modfmt, name, &symref);
+        if (result == MR_SUCCESS)
+        {
+            if (symt_is_symref_ptr(symref))
+            {
+                symt_fill_sym_info(&pair, NULL, SYMT_SYMREF_TO_PTR(symref), symbol);
+                return TRUE;
+            }
+            FIXME("Not expected case\n");
+            return FALSE;
+        }
+        if (result != MR_NOT_FOUND) return FALSE;
+    }
 
     hash_table_iter_init(&pair.effective->ht_symbols, &hti, name);
     while ((ptr = hash_table_iter_up(&hti)))
@@ -1777,6 +1858,7 @@ static void init_lineinfo(struct lineinfo_t* line_info, BOOL unicode)
     line_info->address = 0;
 }
 
+#ifndef _WIN64
 static BOOL lineinfo_copy_toA32(const struct lineinfo_t* line_info, IMAGEHLP_LINE* l32)
 {
     if (line_info->unicode) return FALSE;
@@ -1786,6 +1868,7 @@ static BOOL lineinfo_copy_toA32(const struct lineinfo_t* line_info, IMAGEHLP_LIN
     l32->Address = line_info->address;
     return TRUE;
 }
+#endif
 
 static BOOL lineinfo_copy_toA64(const struct lineinfo_t* line_info, IMAGEHLP_LINE64* l64)
 {
@@ -1932,6 +2015,7 @@ BOOL WINAPI SymGetSymNext64(HANDLE hProcess, PIMAGEHLP_SYMBOL64 Symbol)
     return FALSE;
 }
 
+#ifndef _WIN64
 /***********************************************************************
  *		SymGetSymNext (DBGHELP.@)
  */
@@ -1941,6 +2025,7 @@ BOOL WINAPI SymGetSymNext(HANDLE hProcess, PIMAGEHLP_SYMBOL Symbol)
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
     return FALSE;
 }
+#endif
 
 /***********************************************************************
  *		SymGetSymPrev64 (DBGHELP.@)
@@ -1952,6 +2037,7 @@ BOOL WINAPI SymGetSymPrev64(HANDLE hProcess, PIMAGEHLP_SYMBOL64 Symbol)
     return FALSE;
 }
 
+#ifndef _WIN64
 /***********************************************************************
  *		SymGetSymPrev (DBGHELP.@)
  */
@@ -1961,7 +2047,9 @@ BOOL WINAPI SymGetSymPrev(HANDLE hProcess, PIMAGEHLP_SYMBOL Symbol)
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
     return FALSE;
 }
+#endif
 
+#ifndef _WIN64
 /******************************************************************
  *		SymGetLineFromAddr (DBGHELP.@)
  *
@@ -1978,6 +2066,7 @@ BOOL WINAPI SymGetLineFromAddr(HANDLE hProcess, DWORD dwAddr,
     if (!get_line_from_addr(hProcess, dwAddr, pdwDisplacement, &line_info)) return FALSE;
     return lineinfo_copy_toA32(&line_info, Line);
 }
+#endif
 
 /******************************************************************
  *		SymGetLineFromAddr64 (DBGHELP.@)
@@ -2075,6 +2164,7 @@ BOOL WINAPI SymGetLinePrev64(HANDLE hProcess, PIMAGEHLP_LINE64 Line)
     return lineinfo_copy_toA64(&line_info, Line);
 }
 
+#ifndef _WIN64
 /******************************************************************
  *             SymGetLinePrev (DBGHELP.@)
  *
@@ -2090,6 +2180,7 @@ BOOL WINAPI SymGetLinePrev(HANDLE hProcess, PIMAGEHLP_LINE Line)
     if (!symt_get_func_line_prev(hProcess, &line_info, Line->Key, Line->Address)) return FALSE;
     return lineinfo_copy_toA32(&line_info, Line);
 }
+#endif
 
 /******************************************************************
  *             SymGetLinePrevW64 (DBGHELP.@)
@@ -2165,6 +2256,7 @@ BOOL WINAPI SymGetLineNext64(HANDLE hProcess, PIMAGEHLP_LINE64 Line)
     return lineinfo_copy_toA64(&line_info, Line);
 }
 
+#ifndef _WIN64
 /******************************************************************
  *		SymGetLineNext (DBGHELP.@)
  *
@@ -2180,6 +2272,7 @@ BOOL WINAPI SymGetLineNext(HANDLE hProcess, PIMAGEHLP_LINE Line)
     if (!symt_get_func_line_next(hProcess, &line_info, Line->Key, Line->Address)) return FALSE;
     return lineinfo_copy_toA32(&line_info, Line);
 }
+#endif
 
 /******************************************************************
  *		SymGetLineNextW64 (DBGHELP.@)
@@ -2197,6 +2290,7 @@ BOOL WINAPI SymGetLineNextW64(HANDLE hProcess, PIMAGEHLP_LINEW64 Line)
     return lineinfo_copy_toW64(&line_info, Line);
 }
 
+#ifndef _WIN64
 /***********************************************************************
  *		SymUnDName (DBGHELP.@)
  */
@@ -2205,6 +2299,7 @@ BOOL WINAPI SymUnDName(PIMAGEHLP_SYMBOL sym, PSTR UnDecName, DWORD UnDecNameLeng
     return UnDecorateSymbolName(sym->Name, UnDecName, UnDecNameLength,
                                 UNDNAME_COMPLETE) != 0;
 }
+#endif
 
 /***********************************************************************
  *		SymUnDName64 (DBGHELP.@)

@@ -797,7 +797,7 @@
 @ stub NtUserAddVisualIdentifier
 @ stub NtUserAllowForegroundActivation
 @ stub NtUserAllowSetForegroundWindow
-@ stub NtUserAlterWindowStyle
+@ stdcall -syscall NtUserAlterWindowStyle(ptr long long)
 @ stub NtUserApplyWindowAction
 @ stdcall -syscall NtUserArrangeIconicWindows(long)
 @ stdcall -syscall NtUserAssociateInputContext(long long long)
@@ -1286,7 +1286,7 @@
 @ stub NtUserRegisterUserApiHook
 @ stub NtUserRegisterUserHungAppHandlers
 @ stub NtUserRegisterWindowArrangementCallout
-@ stub NtUserRegisterWindowMessage
+@ stdcall -syscall NtUserRegisterWindowMessage(ptr)
 @ stdcall -syscall NtUserReleaseCapture()
 @ stdcall -syscall NtUserReleaseDC(long long)
 @ stub NtUserReleaseDwmHitTestWaiters
@@ -1320,7 +1320,7 @@
 @ stub NtUserRestoreWindowDpiChanges
 @ stub NtUserSBGetParms
 @ stub NtUserScaleSystemMetricForDPIWithoutCache
-@ stub NtUserScheduleDispatchNotification
+@ stdcall -syscall NtUserScheduleDispatchNotification(ptr)
 @ stdcall -syscall NtUserScrollDC(long long long ptr ptr long ptr)
 @ stdcall -syscall NtUserScrollWindowEx(long long long ptr ptr long ptr long)
 @ stdcall -syscall NtUserSelectPalette(long long long)

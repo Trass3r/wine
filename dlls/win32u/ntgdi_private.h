@@ -61,6 +61,7 @@ typedef struct tagDC
     UINT         bounds_enabled:1; /* bounds tracking is enabled */
     UINT         path_open:1;      /* path is currently open (only for saved DCs) */
     UINT         is_display:1;     /* DC is for display device */
+    struct opengl_drawable *opengl_drawable; /* GL driver drawable for the DC */
 
     RECT         device_rect;      /* rectangle for the whole device */
     int          pixel_format;     /* pixel format (for memory DCs) */
@@ -640,7 +641,5 @@ static inline void copy_bitmapinfo( BITMAPINFO *dst, const BITMAPINFO *src )
 extern void free_heap_bits( struct gdi_image_bits *bits );
 
 void set_gdi_client_ptr( HGDIOBJ handle, void *ptr );
-
-extern SYSTEM_BASIC_INFORMATION system_info;
 
 #endif /* __WINE_NTGDI_PRIVATE_H */

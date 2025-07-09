@@ -161,6 +161,7 @@ struct tiff_decoder
     IStream *stream;
     TIFF *tiff;
     DWORD frame_count;
+    unsigned int *frame_map;
     DWORD cached_frame;
     tiff_decode_info cached_decode_info;
     INT cached_tile_x, cached_tile_y;
@@ -214,6 +215,18 @@ static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
     decode_info->planar = planar;
 
     TRACE("planar %u, photometric %u, samples %u, bps %u\n", planar, photometric, samples, bps);
+
+    if (photometric == PHOTOMETRIC_YCBCR)
+    {
+        uint16_t compress;
+
+        TIFFGetFieldDefaulted(tiff, TIFFTAG_COMPRESSION, &compress);
+        if (planar == PLANARCONFIG_CONTIG && compress == COMPRESSION_JPEG)
+        {
+            TIFFSetField(tiff, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
+            photometric = PHOTOMETRIC_RGB;
+        }
+    }
 
     switch(photometric)
     {
@@ -564,6 +577,56 @@ static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
     return S_OK;
 }
 
+static bool tiff_decoder_should_skip_directory(TIFF *tiff)
+{
+    unsigned int value;
+
+    if (TIFFGetField(tiff, TIFFTAG_SUBFILETYPE, &value))
+        return value & FILETYPE_REDUCEDIMAGE;
+
+    return false;
+}
+
+static HRESULT tiff_decoder_collect_frames(struct tiff_decoder *decoder)
+{
+    unsigned int dir_count = TIFFNumberOfDirectories(decoder->tiff), frame_count, dir;
+    unsigned int *map;
+
+    if (!dir_count)
+        return S_OK;
+
+    if (!(map = calloc(dir_count, sizeof(*map))))
+        return E_OUTOFMEMORY;
+
+    frame_count = 0;
+    for (dir = 0; dir < dir_count; ++dir)
+    {
+        if (!TIFFSetDirectory(decoder->tiff, dir))
+        {
+            free(map);
+            return E_FAIL;
+        }
+
+        if (tiff_decoder_should_skip_directory(decoder->tiff)) continue;
+
+        map[frame_count++] = dir;
+    }
+
+    if (!frame_count)
+    {
+        free(map);
+        return WINCODEC_ERR_BADIMAGE;
+    }
+
+    /* Back to the first useful directory. */
+    TIFFSetDirectory(decoder->tiff, map[0]);
+
+    decoder->frame_count = frame_count;
+    decoder->frame_map = map;
+
+    return S_OK;
+}
+
 static HRESULT CDECL tiff_decoder_initialize(struct decoder* iface, IStream *stream, struct decoder_stat *st)
 {
     struct tiff_decoder *This = impl_from_decoder(iface);
@@ -573,7 +636,9 @@ static HRESULT CDECL tiff_decoder_initialize(struct decoder* iface, IStream *str
     if (!This->tiff)
         return E_FAIL;
 
-    This->frame_count = TIFFNumberOfDirectories(This->tiff);
+    if (FAILED(hr = tiff_decoder_collect_frames(This)))
+        goto fail;
+
     This->cached_frame = 0;
     hr = tiff_get_decode_info(This->tiff, &This->cached_decode_info);
     if (FAILED(hr))
@@ -605,7 +670,7 @@ static HRESULT tiff_decoder_select_frame(struct tiff_decoder* This, DWORD frame)
 
     prev_tile_size = This->cached_tile ? This->cached_decode_info.tile_size : 0;
 
-    res = TIFFSetDirectory(This->tiff, frame);
+    res = TIFFSetDirectory(This->tiff, This->frame_map[frame]);
     if (!res)
         return E_INVALIDARG;
 
@@ -911,7 +976,7 @@ static HRESULT tiff_decoder_read_tile(struct tiff_decoder *This, UINT tile_x, UI
     else if (info->source_bpp == 16 && info->samples == 4 && info->frame.bpp == 32)
     {
         BYTE *srcdata, *src, *dst;
-        DWORD x, y, count, width_bytes = (info->tile_width * 12 + 7) / 8;
+        DWORD x, y, count, width_bytes = (info->tile_width * 16 + 7) / 8;
 
         count = width_bytes * info->tile_height;
 
@@ -1099,7 +1164,6 @@ static HRESULT CDECL tiff_decoder_get_metadata_blocks(struct decoder *iface,
 {
     struct tiff_decoder *This = impl_from_decoder(iface);
     HRESULT hr;
-    BOOL byte_swapped;
     struct decoder_block result;
 
     hr = tiff_decoder_select_frame(This, frame);
@@ -1111,12 +1175,7 @@ static HRESULT CDECL tiff_decoder_get_metadata_blocks(struct decoder *iface,
     result.offset = TIFFCurrentDirOffset(This->tiff);
     result.length = 0;
 
-    byte_swapped = TIFFIsByteSwapped(This->tiff);
-#ifdef WORDS_BIGENDIAN
-    result.options = byte_swapped ? WICPersistOptionLittleEndian : WICPersistOptionBigEndian;
-#else
-    result.options = byte_swapped ? WICPersistOptionBigEndian : WICPersistOptionLittleEndian;
-#endif
+    result.options = TIFFIsByteSwapped(This->tiff) ? WICPersistOptionBigEndian : WICPersistOptionLittleEndian;
     result.options |= WICPersistOptionNoCacheStream|DECODER_BLOCK_FULL_STREAM|DECODER_BLOCK_READER_CLSID;
     result.reader_clsid = CLSID_WICIfdMetadataReader;
 
@@ -1131,6 +1190,7 @@ static void CDECL tiff_decoder_destroy(struct decoder* iface)
     struct tiff_decoder *This = impl_from_decoder(iface);
     if (This->tiff) TIFFClose(This->tiff);
     free(This->cached_tile);
+    free(This->frame_map);
     free(This);
 }
 
@@ -1148,12 +1208,10 @@ HRESULT CDECL tiff_decoder_create(struct decoder_info *info, struct decoder **re
 {
     struct tiff_decoder *This;
 
-    This = malloc(sizeof(*This));
+    This = calloc(1, sizeof(*This));
     if (!This) return E_OUTOFMEMORY;
 
     This->decoder.vtable = &tiff_decoder_vtable;
-    This->tiff = NULL;
-    This->cached_tile = NULL;
     This->cached_tile_x = -1;
     *result = &This->decoder;
 

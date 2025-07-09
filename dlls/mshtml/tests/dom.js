@@ -385,6 +385,26 @@ sync_test("document_owner", function() {
     ok(node.ownerDocument === document, "text.ownerDocument = " + node.ownerDocument);
 });
 
+sync_test("document_style_props", function() {
+    document.body.innerHTML = '<a href="#"></a>';
+    var r, elem = document.getElementsByTagName("a")[0];
+    todo_wine.
+    ok(document.linkColor === "#0000ff", "default linkColor = " + document.linkColor);
+
+    document.linkColor = "#deadb8";
+    ok(document.linkColor === "#deadb8", "linkColor = " + document.linkColor);
+    r = window.getComputedStyle(elem).color;
+    ok(r === "rgb(222, 173, 184)", "style color = " + r);
+
+    ok(document.vLinkColor === undefined, "default vLinkColor = " + document.vLinkColor);
+    document.vLinkColor = "#b8dead";
+    ok(document.vLinkColor === "#b8dead", "vLinkColor = " + document.vLinkColor);
+
+    ok(document.aLinkColor === undefined, "default aLinkColor = " + document.aLinkColor);
+    document.aLinkColor = "#deb8ad";
+    ok(document.aLinkColor === "#deb8ad", "aLinkColor = " + document.aLinkColor);
+});
+
 sync_test("style_properties", function() {
     document.body.innerHTML = '<div>test</div><svg></svg>';
     var elem = document.body.firstChild;
@@ -1019,4 +1039,17 @@ sync_test("importNode", function() {
     ok(node.parentNode === null, "node.parentNode = " + node.parentNode);
     ok(node2.hasChildNodes() === false, "node2 has child nodes");
     ok(node2.parentNode === null, "node2.parentNode = " + node2.parentNode);
+});
+
+sync_test("attributeNode", function() {
+    document.body.innerHTML = '<div id="test" attr="wine"></div>';
+    var elem = document.getElementById("test");
+    var attr = elem.attributes[0];
+
+    ok(attr.ownerDocument === document, "ownerDocument = " + attr.ownerDocument);
+    ok(attr.ownerElement === elem, "ownerElement = " + attr.ownerElement);
+
+    attr = document.createAttribute("id");
+    ok(attr.ownerDocument === document, "detached attr ownerDocument = " + attr.ownerDocument);
+    ok(attr.ownerElement === null, "detached attr ownerElement = " + attr.ownerElement);
 });

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Mohamad Al-Jaf
+ * Copyright 2025 Tim Clem
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,13 +16,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "dxcore.h"
-#include "wine/debug.h"
+#define WINE_FILEDESCRIPTION_STR "Wine runtime library"
+#define WINE_FILENAME_STR "msvcp140_2.dll"
+#define WINE_FILEVERSION 14,42,34433,0
 
-WINE_DEFAULT_DEBUG_CHANNEL(dxcore);
-
-HRESULT WINAPI DXCoreCreateAdapterFactory( REFIID riid, void **ppv )
-{
-    FIXME( "riid %s, ppv %p stub!\n", debugstr_guid(riid), ppv );
-    return E_NOINTERFACE;
-}
+#include "wine/wine_common_ver.rc"

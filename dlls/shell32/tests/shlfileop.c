@@ -675,7 +675,7 @@ static void test_delete(void)
     /* Empty filename. */
     init_shfo_tests();
     check_file_operation(FO_DELETE, FOF_NO_UI, "\0", NULL,
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     ok(file_exists("test1.txt"), "Expected test1.txt to exist\n");
 
     /* NULL filename. */
@@ -692,7 +692,7 @@ static void test_delete(void)
     /* Empty filename, only one null terminator */
     init_shfo_tests();
     check_file_operation(FO_DELETE, FOF_NO_UI, "", NULL,
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     ok(file_exists("test1.txt"), "Expected test1.txt to exist\n");
 
     /* Nonexistent file. */
@@ -728,6 +728,13 @@ static void test_delete(void)
             ERROR_SUCCESS, FALSE, FALSE, FALSE);
     ok(!file_exists("testdir2\\one.txt"), "Expected testdir2\\one.txt to not exist\n");
     ok(!dir_exists("testdir2\\nested"), "Expected testdir2\\nested to not exist\n");
+}
+
+static BOOL is_below_windows8(void)
+{
+    INT_PTR rc;
+    rc = (INT_PTR)ShellExecuteA(NULL, "averb", "shlproto://foo/bar", NULL, NULL, SW_HIDE);
+    return rc == SE_ERR_ACCESSDENIED;
 }
 
 /* tests the FO_RENAME action */
@@ -831,22 +838,27 @@ static void test_rename(void)
     check_file_operation(FO_RENAME, FOF_NO_UI,
             "test1.txt\0", "test2.txt\0",
             ERROR_SUCCESS, FALSE, FALSE, FALSE);
-    check_file_operation(FO_RENAME, FOF_NO_UI,
-            "testdir2\0", "testdir4\0",
-            ERROR_SUCCESS, FALSE, TRUE, FALSE);
+    if (!is_below_windows8()) /* Hangs with Windows 7 */
+    {
+        check_file_operation(FO_RENAME, FOF_NO_UI,
+                "testdir2\0", "testdir4\0",
+                ERROR_SUCCESS, FALSE, TRUE, FALSE);
+    }
+    else
+        win_skip("Skip FO_RENAME with already existing target directory.\n");
 
     /* Empty source or target. */
     clean_after_shfo_tests();
     init_shfo_tests();
     check_file_operation(FO_RENAME, FOF_NO_UI,
-            "\0", "test1.txt",
-            DE_MANYSRC1DEST, FALSE, TRUE, TRUE);
+            "\0", "test1.txt\0",
+            DE_MANYSRC1DEST, FALSE, FALSE, FALSE);
     check_file_operation(FO_RENAME, FOF_NO_UI,
-            "\0", "testdir2",
-            DE_MANYSRC1DEST, FALSE, TRUE, TRUE);
+            "\0", "testdir2\0",
+            DE_MANYSRC1DEST, FALSE, FALSE, FALSE);
     check_file_operation(FO_RENAME, FOF_NO_UI,
-            "\0", "nonexistence",
-            DE_MANYSRC1DEST, FALSE, TRUE, TRUE);
+            "\0", "nonexistence\0",
+            DE_MANYSRC1DEST, FALSE, FALSE, FALSE);
     ok(!file_exists("nonexistence"), "Expected nonexistence to not exist\n");
     check_file_operation(FO_RENAME, FOF_NO_UI,
             "testdir2\0", "\0",
@@ -861,7 +873,7 @@ static void test_rename(void)
             ERROR_FILE_NOT_FOUND, FALSE, FALSE, FALSE);
     check_file_operation(FO_RENAME, FOF_NO_UI,
             "\0", "\0",
-            DE_MANYSRC1DEST, FALSE, TRUE, TRUE);
+            DE_MANYSRC1DEST, FALSE, FALSE, FALSE);
 
     /* NULL source or target. */
     clean_after_shfo_tests();
@@ -877,13 +889,13 @@ static void test_rename(void)
             ERROR_INVALID_PARAMETER, 0xdeadbeef, FALSE, FALSE);
     check_file_operation(FO_RENAME, FOF_NO_UI,
             "test1.txt\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_RENAME, FOF_NO_UI,
             "testdir2\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_RENAME, FOF_NO_UI,
             "nonexistence\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_RENAME, FOF_NO_UI,
             NULL, NULL,
             ERROR_INVALID_PARAMETER, 0xdeadbeef, FALSE, FALSE);
@@ -1348,7 +1360,8 @@ static void test_copy(void)
     ok(!DeleteFileA("threedir\\two.txt"), "Expected file to not exist\n");
     ok(DeleteFileA("one.txt"), "Expected file to exist\n");
     ok(DeleteFileA("two.txt"), "Expected file to exist\n");
-    ok(!RemoveDirectoryA("threedir"), "Expected dir to not exist\n");
+    todo_wine
+    ok(!DeleteFileA("threedir"), "Expected file to not exist\n");
 
     /* pTo contains bogus 2nd name longer than MAX_PATH,
      * multiple source files, target dir exists, with FOF_MULTIDESTFILES. */
@@ -1362,16 +1375,13 @@ static void test_copy(void)
     lstrcpyA(ptr, "fourdir");
     check_file_operation(FO_COPY, FOF_NO_UI | FOF_MULTIDESTFILES,
             "one.txt\0two.txt\0", to,
-            ERROR_SUCCESS, FALSE, TRUE, FALSE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     ok(DeleteFileA("one.txt"), "Expected file to exist\n");
     ok(DeleteFileA("two.txt"), "Expected file to exist\n");
-    todo_wine
     ok(DeleteFileA("threedir\\one.txt"), "Expected file to exist\n");
     ok(!DeleteFileA("threedir\\two.txt"), "Expected file to not exist\n");
-    todo_wine
     ok(DeleteFileA("fourdir\\two.txt"), "Expected file to exist\n");
     RemoveDirectoryA("fourdir");
-    todo_wine
     ok(RemoveDirectoryA("threedir"), "Expected dir to exist\n");
 
     /* Same number sources and targets, first target dir exists, with FOF_MULTIDESTFILES. */
@@ -1380,14 +1390,12 @@ static void test_copy(void)
     CreateDirectoryA("threedir", NULL);
     check_file_operation(FO_COPY, FOF_NO_UI | FOF_MULTIDESTFILES,
             "one.txt\0two.txt\0", "threedir\0fourdir\0",
-            DE_FILEDESTISFLD, FALSE, TRUE, FALSE);
+            DE_FILEDESTISFLD, FALSE, FALSE, FALSE);
     ok(!DeleteFileA("threedir\\one.txt"), "Expected file to not exist\n");
     ok(!DeleteFileA("threedir\\two.txt"), "Expected file to not exist\n");
     ok(DeleteFileA("one.txt"), "Expected file to exist\n");
     ok(DeleteFileA("two.txt"), "Expected file to exist\n");
-    todo_wine
     ok(RemoveDirectoryA("threedir"), "Expected dir to exist\n");
-    todo_wine
     ok(!DeleteFileA("fourdir"), "Expected file to not exist\n");
     ok(!RemoveDirectoryA("fourdir"), "Expected dir to not exist\n");
 
@@ -1397,16 +1405,13 @@ static void test_copy(void)
     CreateDirectoryA("threedir", NULL);
     check_file_operation(FO_COPY, FOF_NO_UI | FOF_MULTIDESTFILES,
             "one.txt\0two.txt\0", "threedir\0fourdir\0five\0",
-            ERROR_SUCCESS, FALSE, TRUE, FALSE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     ok(DeleteFileA("one.txt"), "Expected file to exist\n");
     ok(DeleteFileA("two.txt"), "Expected file to exist\n");
-    todo_wine
     ok(DeleteFileA("threedir\\one.txt"), "Expected file to exist\n");
     ok(!DeleteFileA("threedir\\two.txt"), "Expected file to not exist\n");
-    todo_wine
     ok(DeleteFileA("fourdir\\two.txt"), "Expected file to exist\n");
     RemoveDirectoryA("fourdir");
-    todo_wine
     ok(RemoveDirectoryA("threedir"), "Expected dir to exist\n");
     ok(!DeleteFileA("five"), "Expected file to not exist\n");
     ok(!RemoveDirectoryA("five"), "Expected dir to not exist\n");
@@ -1457,6 +1462,25 @@ static void test_copy(void)
             ERROR_INVALID_NAME, FALSE, FALSE, FALSE);
     ok(!file_exists("two\\aa.txt"), "Expected file to not exist\n");
 
+    check_file_operation(FO_COPY, FOF_NO_UI | FOF_MULTIDESTFILES,
+            "aa.txt\0", "one\0tw?\0",
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
+    ok(DeleteFileA("one\\aa.txt"), "Expected file to exist\n");
+    ok(!DeleteFileA("two\\aa.txt"), "Expected file to not exist\n");
+
+    check_file_operation(FO_COPY, FOF_NO_UI,
+            "aa.txt\0bb.txt\0", "one\0tw?\0",
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
+    ok(DeleteFileA("one\\aa.txt"), "Expected file to exist\n");
+    ok(DeleteFileA("one\\bb.txt"), "Expected file to exist\n");
+    ok(!DeleteFileA("two\\bb.txt"), "Expected file to not exist\n");
+
+    check_file_operation(FO_COPY, FOF_NO_UI | FOF_MULTIDESTFILES,
+            "aa.txt\0bb.txt\0", "one\0tw?\0",
+            ERROR_INVALID_NAME, FALSE, FALSE, FALSE);
+    ok(!DeleteFileA("one\\aa.txt"), "Expected file to not exist\n");
+    ok(!DeleteFileA("two\\bb.txt"), "Expected file to not exist\n");
+
     ok(DeleteFileA("aa.txt"), "Expected file to exist\n");
     ok(DeleteFileA("ab.txt"), "Expected file to exist\n");
     ok(DeleteFileA("bb.txt"), "Expected file to exist\n");
@@ -1480,16 +1504,16 @@ static void test_copy(void)
             ERROR_FILE_NOT_FOUND, FALSE, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
             "\0", "testdir2\0",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
             "\0", "testfile.txt\0",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
-            "\0", "nonexistence",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            "\0", "nonexistence\0",
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
             "\0", "\0",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
 
     /* NULL source or target. */
     clean_after_shfo_tests();
@@ -1505,13 +1529,13 @@ static void test_copy(void)
             ERROR_INVALID_PARAMETER, 0xdeadbeef, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
             "test1.txt\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
             "testdir2\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
             "nonexistence\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_COPY, FOF_NO_UI,
             NULL, NULL,
             ERROR_INVALID_PARAMETER, 0xdeadbeef, FALSE, FALSE);
@@ -1825,26 +1849,26 @@ static void test_move(void)
     init_shfo_tests();
     check_file_operation(FO_MOVE, FOF_NO_UI,
             "\0", "test1.txt\0",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
             "\0", "testdir2\0",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
             "\0", "nonexistence\0",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
     ok(!file_exists("nonexistence"), "Expected nonexistence to not exist.\n");
     check_file_operation(FO_MOVE, FOF_NO_UI,
-            "test1.txt", "\0",
+            "test1.txt\0", "\0",
             ERROR_FILE_NOT_FOUND, FALSE, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
-            "testdir2", "\0",
+            "testdir2\0", "\0",
             DE_DESTSAMETREE, FALSE, TRUE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
-            "nonexistence", "\0",
+            "nonexistence\0", "\0",
             ERROR_FILE_NOT_FOUND, FALSE, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
             "\0", "\0",
-            ERROR_SUCCESS, FALSE, TRUE, TRUE);
+            ERROR_SUCCESS, FALSE, FALSE, FALSE);
 
     /* NULL source or target. */
     clean_after_shfo_tests();
@@ -1860,13 +1884,13 @@ static void test_move(void)
             ERROR_INVALID_PARAMETER, 0xdeadbeef, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
             "test1.txt\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
             "testdir2\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
             "nonexistent\0", NULL,
-            ERROR_ACCESS_DENIED, FALSE, TRUE, FALSE);
+            ERROR_ACCESS_DENIED, FALSE, FALSE, FALSE);
     check_file_operation(FO_MOVE, FOF_NO_UI,
             NULL, NULL,
             ERROR_INVALID_PARAMETER, 0xdeadbeef, FALSE, FALSE);
@@ -2176,7 +2200,7 @@ static void test_unicode(void)
     SHFILEOPSTRUCTW shfoW;
     int ret;
     HANDLE file;
-    static const WCHAR UNICODE_PATH_TO[] = L"c:\\\x00ae\x00ae";
+    static const WCHAR UNICODE_PATH_TO[] = L"c:\\\x00ae\x00ae\0";
     HWND hwnd;
 
     shfoW.hwnd = NULL;

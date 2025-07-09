@@ -608,8 +608,6 @@ static void wayland_surface_reconfigure_client(struct wayland_surface *surface,
         wp_viewport_set_destination(client->wp_viewport, width, height);
     else /* We can't have a 0x0 destination, use 1x1 instead. */
         wp_viewport_set_destination(client->wp_viewport, 1, 1);
-
-    wayland_resize_gl_drawable(client->hwnd);
 }
 
 /**********************************************************************
@@ -802,6 +800,7 @@ struct wayland_shm_buffer *wayland_shm_buffer_create(int width, int height,
     shm_buffer->ref = 1;
     shm_buffer->width = width;
     shm_buffer->height = height;
+    shm_buffer->format = format;
     shm_buffer->map_size = size;
 
     shm_buffer->damage_region = NtGdiCreateRectRgn(0, 0, width, height);

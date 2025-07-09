@@ -29,6 +29,7 @@
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbregistry.h>
+#include "cursor-shape-v1-client-protocol.h"
 #include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "relative-pointer-unstable-v1-client-protocol.h"
 #include "text-input-unstable-v3-client-protocol.h"
@@ -106,6 +107,7 @@ struct wayland_pointer
     struct zwp_confined_pointer_v1 *zwp_confined_pointer_v1;
     struct zwp_locked_pointer_v1 *zwp_locked_pointer_v1;
     struct zwp_relative_pointer_v1 *zwp_relative_pointer_v1;
+    struct wp_cursor_shape_device_v1 *wp_cursor_shape_device_v1;
     HWND focused_hwnd;
     HWND constraint_hwnd;
     BOOL pending_warp;
@@ -120,8 +122,11 @@ struct wayland_pointer
 struct wayland_text_input
 {
     struct zwp_text_input_v3 *zwp_text_input_v3;
-    WCHAR *preedit_string;
-    DWORD preedit_cursor_pos;
+    struct
+    {
+        WCHAR *string;
+        DWORD cursor_pos;
+    } preedit, current_preedit;
     WCHAR *commit_string;
     HWND focused_hwnd;
     pthread_mutex_t mutex;
@@ -172,6 +177,7 @@ struct wayland
     struct zwlr_data_control_manager_v1 *zwlr_data_control_manager_v1;
     struct wl_data_device_manager *wl_data_device_manager;
     struct xdg_toplevel_icon_manager_v1 *xdg_toplevel_icon_manager_v1;
+    struct wp_cursor_shape_manager_v1 *wp_cursor_shape_manager_v1;
     struct wayland_seat seat;
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
@@ -246,6 +252,7 @@ struct wayland_shm_buffer
     struct wl_list link;
     struct wl_buffer *wl_buffer;
     int width, height;
+    uint32_t format;
     void *map_data;
     size_t map_size;
     BOOL busy;
@@ -366,6 +373,7 @@ struct wayland_win_data
     struct window_rects rects;
     BOOL is_fullscreen;
     BOOL managed;
+    BOOL layered_attribs_set;
 };
 
 struct wayland_win_data *wayland_win_data_get(HWND hwnd);
@@ -373,6 +381,7 @@ struct wayland_win_data *wayland_win_data_get_nolock(HWND hwnd);
 void wayland_win_data_release(struct wayland_win_data *data);
 
 struct wayland_client_surface *get_client_surface(HWND hwnd);
+void set_client_surface(HWND hwnd, struct wayland_client_surface *client);
 BOOL set_window_surface_contents(HWND hwnd, struct wayland_shm_buffer *shm_buffer, HRGN damage_region);
 struct wayland_shm_buffer *get_window_surface_contents(HWND hwnd);
 void ensure_window_surface_contents(HWND hwnd);
@@ -408,13 +417,6 @@ void wayland_text_input_deinit(void);
 void wayland_data_device_init(void);
 
 /**********************************************************************
- *          OpenGL
- */
-
-void wayland_destroy_gl_drawable(HWND hwnd);
-void wayland_resize_gl_drawable(HWND hwnd);
-
-/**********************************************************************
  *          Helpers
  */
 
@@ -445,7 +447,9 @@ void WAYLAND_DestroyWindow(HWND hwnd);
 BOOL WAYLAND_SetIMECompositionRect(HWND hwnd, RECT rect);
 void WAYLAND_SetCursor(HWND hwnd, HCURSOR hcursor);
 BOOL WAYLAND_SetCursorPos(INT x, INT y);
+void WAYLAND_SetLayeredWindowAttributes(HWND hwnd, COLORREF key, BYTE alpha, DWORD flags);
 void WAYLAND_SetWindowIcon(HWND hwnd, UINT type, HICON icon);
+void WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style);
 void WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text);
 LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam, const POINT *pos);
 UINT WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager, void *param);
@@ -455,6 +459,6 @@ void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UIN
 BOOL WAYLAND_WindowPosChanging(HWND hwnd, UINT swp_flags, BOOL shaped, const struct window_rects *rects);
 BOOL WAYLAND_CreateWindowSurface(HWND hwnd, BOOL layered, const RECT *surface_rect, struct window_surface **surface);
 UINT WAYLAND_VulkanInit(UINT version, void *vulkan_handle, const struct vulkan_driver_funcs **driver_funcs);
-UINT WAYLAND_OpenGLInit(UINT version, struct opengl_funcs **opengl_funcs, const struct opengl_driver_funcs **driver_funcs);
+UINT WAYLAND_OpenGLInit(UINT version, const struct opengl_funcs *opengl_funcs, const struct opengl_driver_funcs **driver_funcs);
 
 #endif /* __WINE_WAYLANDDRV_H */

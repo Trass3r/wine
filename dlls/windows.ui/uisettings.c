@@ -18,6 +18,8 @@
  */
 
 #include "private.h"
+#include "initguid.h"
+#include "weakref.h"
 
 #include "wine/debug.h"
 
@@ -32,7 +34,7 @@ struct uisettings
     IUISettings3 IUISettings3_iface;
     IUISettings4 IUISettings4_iface;
     IUISettings5 IUISettings5_iface;
-    LONG ref;
+    struct weak_reference_source weak_reference_source;
 };
 
 static inline struct uisettings *impl_from_IUISettings( IUISettings *iface )
@@ -71,6 +73,10 @@ static HRESULT WINAPI uisettings_QueryInterface( IUISettings *iface, REFIID iid,
     {
         *out = &impl->IUISettings5_iface;
     }
+    else if (IsEqualGUID( iid, &IID_IWeakReferenceSource ))
+    {
+        *out = &impl->weak_reference_source.IWeakReferenceSource_iface;
+    }
 
     if (!*out)
     {
@@ -85,7 +91,7 @@ static HRESULT WINAPI uisettings_QueryInterface( IUISettings *iface, REFIID iid,
 static ULONG WINAPI uisettings_AddRef( IUISettings *iface )
 {
     struct uisettings *impl = impl_from_IUISettings( iface );
-    ULONG ref = InterlockedIncrement( &impl->ref );
+    ULONG ref = weak_reference_strong_add_ref( &impl->weak_reference_source );
     TRACE( "iface %p, ref %lu.\n", iface, ref );
     return ref;
 }
@@ -93,7 +99,7 @@ static ULONG WINAPI uisettings_AddRef( IUISettings *iface )
 static ULONG WINAPI uisettings_Release( IUISettings *iface )
 {
     struct uisettings *impl = impl_from_IUISettings( iface );
-    ULONG ref = InterlockedDecrement( &impl->ref );
+    ULONG ref = weak_reference_strong_release( &impl->weak_reference_source );
 
     TRACE( "iface %p, ref %lu.\n", iface, ref );
 
@@ -537,6 +543,7 @@ static HRESULT WINAPI factory_GetTrustLevel( IActivationFactory *iface, TrustLev
 static HRESULT WINAPI factory_ActivateInstance( IActivationFactory *iface, IInspectable **instance )
 {
     struct uisettings *impl;
+    HRESULT hr;
 
     TRACE( "iface %p, instance %p.\n", iface, instance );
 
@@ -551,9 +558,16 @@ static HRESULT WINAPI factory_ActivateInstance( IActivationFactory *iface, IInsp
     impl->IUISettings3_iface.lpVtbl = &uisettings3_vtbl;
     impl->IUISettings4_iface.lpVtbl = &uisettings4_vtbl;
     impl->IUISettings5_iface.lpVtbl = &uisettings5_vtbl;
-    impl->ref = 1;
 
-    *instance = (IInspectable *)&impl->IUISettings3_iface;
+    if (FAILED(hr = weak_reference_source_init( &impl->weak_reference_source,
+                                                (IUnknown *)&impl->IUISettings_iface )))
+    {
+        *instance = NULL;
+        free( impl );
+        return hr;
+    }
+
+    *instance = (IInspectable *)&impl->IUISettings5_iface;
     return S_OK;
 }
 

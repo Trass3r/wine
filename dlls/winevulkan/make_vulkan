@@ -64,7 +64,7 @@ from enum import Enum
 LOGGER = logging.Logger("vulkan")
 LOGGER.addHandler(logging.StreamHandler())
 
-VK_XML_VERSION = "1.4.312"
+VK_XML_VERSION = "1.4.318"
 WINE_VK_VERSION = (1, 4)
 
 # Filenames to create.
@@ -2203,8 +2203,10 @@ class VkStruct(Sequence):
         if self.name == "VkAllocationCallbacks":
             return False
 
-        # pFixedRateFlags field is missing const, but it doesn't need output conversion
-        if direction == Direction.OUTPUT and self.name == "VkImageCompressionControlEXT":
+        # avoid some unneded conversions
+        if direction == Direction.INPUT and self.name == "VkPerformanceValueDataINTEL":
+            return False
+        if direction == Direction.OUTPUT and re.match("^VkClusterAccelerationStructure",self.name):
             return False
 
         needs_output_copy = False

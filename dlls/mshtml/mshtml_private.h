@@ -201,6 +201,7 @@ struct constructor;
     XIID(IHTMLDocument7) \
     XIID(IHTMLDOMAttribute) \
     XIID(IHTMLDOMAttribute2) \
+    XIID(IHTMLDOMAttribute3) \
     XIID(IHTMLDOMChildrenCollection) \
     XIID(IHTMLDOMImplementation) \
     XIID(IHTMLDOMImplementation2) \
@@ -398,7 +399,7 @@ typedef struct {
     /* These are called when the object implements GetMemberName, InvokeEx, DeleteMemberByDispID and GetNextDispID for custom props */
     HRESULT (*invoke)(DispatchEx*,DISPID,LCID,WORD,DISPPARAMS*,VARIANT*,EXCEPINFO*,IServiceProvider*);
     HRESULT (*delete)(DispatchEx*,DISPID);
-    HRESULT (*next_dispid)(DispatchEx*,DISPID,DISPID*);
+    HRESULT (*next_dispid)(DispatchEx*,DISPID,BOOL,DISPID*);
     HRESULT (*get_prop_desc)(DispatchEx*,DISPID,struct property_info*);
 
     /* Similar to invoke, but allows overriding all dispids */
@@ -647,6 +648,7 @@ HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, D
 HRESULT dispex_prop_name(DispatchEx *dispex, DISPID id, BSTR *ret);
 HRESULT dispex_define_property(DispatchEx *dispex, const WCHAR *name, DWORD flags, VARIANT *v, DISPID *id);
 HRESULT dispex_index_prop_desc(DispatchEx*,DISPID,struct property_info*);
+const WCHAR *dispex_builtin_prop_name(DispatchEx *dispex, DISPID id);
 IWineJSDispatchHost *dispex_outer_iface(DispatchEx *dispex);
 HRESULT get_constructor(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret);
 HRESULT get_prototype(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret);
@@ -782,6 +784,7 @@ struct HTMLInnerWindow {
     IHTMLStorage *local_storage;
     IWineMSHTMLConsole *console;
 
+    BOOL static_props_filled;
     BOOL performance_initialized;
     VARIANT performance;
 
@@ -1333,12 +1336,14 @@ typedef struct {
     DispatchEx dispex;
     IHTMLDOMAttribute IHTMLDOMAttribute_iface;
     IHTMLDOMAttribute2 IHTMLDOMAttribute2_iface;
+    IHTMLDOMAttribute3 IHTMLDOMAttribute3_iface;
 
     /* value is valid only for detached attributes (when elem == NULL). */
     VARIANT value;
     /* name must be valid for detached attributes */
     WCHAR *name;
 
+    HTMLDocumentNode *doc;
     HTMLElement *elem;
     DISPID dispid;
     struct list entry;

@@ -2489,6 +2489,17 @@ HRESULT dispex_prop_name(DispatchEx *dispex, DISPID id, BSTR *ret)
     return *ret ? S_OK : E_OUTOFMEMORY;
 }
 
+const WCHAR *dispex_builtin_prop_name(DispatchEx *dispex, DISPID id)
+{
+    func_info_t *func;
+    HRESULT hres;
+
+    hres = get_builtin_func(dispex->info, id, &func);
+    assert(SUCCEEDED(hres));
+
+    return func->name;
+}
+
 static HRESULT WINAPI DispatchEx_GetMemberName(IWineJSDispatchHost *iface, DISPID id, BSTR *pbstrName)
 {
     DispatchEx *This = impl_from_IWineJSDispatchHost(iface);
@@ -2553,7 +2564,7 @@ HRESULT dispex_next_id(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, D
     }
 
     if(dispex->info->vtbl->next_dispid) {
-        hres = dispex->info->vtbl->next_dispid(dispex, id, ret);
+        hres = dispex->info->vtbl->next_dispid(dispex, id, enum_all_own_props, ret);
         if(hres != S_FALSE)
             return hres;
     }
@@ -2670,21 +2681,6 @@ static HRESULT WINAPI JSDispatchHost_LookupProperty(IWineJSDispatchHost *iface, 
     return get_host_property_descriptor(This, id, desc);
 }
 
-static HRESULT WINAPI JSDispatchHost_NextProperty(IWineJSDispatchHost *iface, DISPID id, struct property_info *desc)
-{
-    DispatchEx *This = impl_from_IWineJSDispatchHost(iface);
-    DISPID next;
-    HRESULT hres;
-
-    TRACE("%s (%p)->(%lx)\n", This->info->name, This, id);
-
-    hres = dispex_next_id(This, id, TRUE, &next);
-    if(hres != S_OK)
-        return hres;
-
-    return get_host_property_descriptor(This, next, desc);
-}
-
 static HRESULT WINAPI JSDispatchHost_GetProperty(IWineJSDispatchHost *iface, DISPID id, LCID lcid, VARIANT *r,
                                                  EXCEPINFO *ei, IServiceProvider *caller)
 {
@@ -2772,6 +2768,34 @@ static HRESULT WINAPI JSDispatchHost_Construct(IWineJSDispatchHost *iface, LCID 
     return dispex_prop_call(This, DISPID_VALUE, lcid, flags, dp, ret, ei, caller);
 }
 
+static HRESULT WINAPI JSDispatchHost_FillProperties(IWineJSDispatchHost *iface)
+{
+    DispatchEx *This = impl_from_IWineJSDispatchHost(iface);
+    DISPID id = DISPID_STARTENUM;
+    struct property_info desc;
+    HRESULT hres;
+
+    TRACE("%s (%p)->(%lx)\n", This->info->name, This, id);
+
+    for(;;) {
+        hres = dispex_next_id(This, id, TRUE, &id);
+        if(FAILED(hres))
+            return hres;
+        if(hres == S_FALSE)
+            break;
+
+        hres = get_host_property_descriptor(This, id, &desc);
+        if(FAILED(hres))
+            return hres;
+
+        hres = IWineJSDispatch_UpdateProperty(This->jsdisp, &desc);
+        if(FAILED(hres))
+            return hres;
+    }
+
+    return (This->info->desc->js_flags & HOSTOBJ_VOLATILE_FILL) ? S_FALSE : S_OK;
+}
+
 static HRESULT WINAPI JSDispatchHost_GetOuterDispatch(IWineJSDispatchHost *iface, IWineJSDispatchHost **ret)
 {
     DispatchEx *This = impl_from_IWineJSDispatchHost(iface);
@@ -2807,13 +2831,13 @@ static IWineJSDispatchHostVtbl JSDispatchHostVtbl = {
     DispatchEx_GetNameSpaceParent,
     JSDispatchHost_GetJSDispatch,
     JSDispatchHost_LookupProperty,
-    JSDispatchHost_NextProperty,
     JSDispatchHost_GetProperty,
     JSDispatchHost_SetProperty,
     JSDispatchHost_DeleteProperty,
     JSDispatchHost_ConfigureProperty,
     JSDispatchHost_CallFunction,
     JSDispatchHost_Construct,
+    JSDispatchHost_FillProperties,
     JSDispatchHost_GetOuterDispatch,
     JSDispatchHost_ToString,
 };
@@ -3033,9 +3057,19 @@ static HRESULT prototype_find_dispid(DispatchEx *dispex, const WCHAR *name, DWOR
     return hres;
 }
 
+static HRESULT prototype_next_dispid(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, DISPID *pid)
+{
+    if(id == DISPID_STARTENUM) {
+        HRESULT hres = dispex_get_id(dispex, L"constructor", 0, &id);
+        if(hres != S_OK) return hres;
+    }
+    return S_FALSE;
+}
+
 static const dispex_static_data_vtbl_t prototype_dispex_vtbl = {
     .destructor  = prototype_destructor,
     .find_dispid = prototype_find_dispid,
+    .next_dispid = prototype_next_dispid,
 };
 
 HRESULT get_prototype(HTMLInnerWindow *script_global, object_id_t id, DispatchEx **ret)
@@ -3150,6 +3184,15 @@ static HRESULT stub_constructor_find_dispid(DispatchEx *dispex, const WCHAR *nam
     return hres;
 }
 
+static HRESULT stub_constructor_next_dispid(DispatchEx *dispex, DISPID id, BOOL enum_all_own_props, DISPID *pid)
+{
+    if(id == DISPID_STARTENUM) {
+        HRESULT hres = dispex_get_id(dispex, L"prototype", 0, &id);
+        if(hres != S_OK) return hres;
+    }
+    return S_FALSE;
+}
+
 static const char *stub_constructor_get_name(DispatchEx *dispex)
 {
     struct stub_constructor *constr = stub_constructor_from_DispatchEx(dispex);
@@ -3159,6 +3202,7 @@ static const char *stub_constructor_get_name(DispatchEx *dispex)
 static const dispex_static_data_vtbl_t stub_constructor_dispex_vtbl = {
     .destructor  = stub_constructor_destructor,
     .find_dispid = stub_constructor_find_dispid,
+    .next_dispid = stub_constructor_next_dispid,
     .get_name    = stub_constructor_get_name,
 };
 

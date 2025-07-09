@@ -990,7 +990,9 @@ static void taskdialog_layout(struct taskdialog_info *dialog_info)
             line_count++;
         }
     }
-    line_count++;
+
+    if (dialog_info->button_count > 0)
+        line_count++;
 
     /* Try to balance lines so they are about the same size */
     for (i = 1; i < line_count - 1; i++)
@@ -1040,7 +1042,8 @@ static void taskdialog_layout(struct taskdialog_info *dialog_info)
     }
 
     /* Add height for last row button and spacing */
-    dialog_height += size.cy + v_spacing;
+    if (dialog_info->button_count > 0)
+        dialog_height += size.cy + v_spacing;
     dialog_height = max(dialog_height, expando_bottom);
 
     Free(button_layout_infos);
@@ -1304,7 +1307,7 @@ static INT_PTR CALLBACK taskdialog_proc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             taskdialog_check_default_radio_buttons(dialog_info);
             return FALSE;
         case WM_COMMAND:
-            if (HIWORD(wParam) == BN_CLICKED)
+            if (dialog_info && HIWORD(wParam) == BN_CLICKED)
             {
                 taskdialog_on_button_click(dialog_info, (HWND)lParam, LOWORD(wParam));
                 break;

@@ -1266,6 +1266,75 @@ NTSTATUS bluez_device_disconnect( void *connection, const char *device_path )
     return STATUS_SUCCESS;
 }
 
+static BOOL bluez_event_list_queue_new_event( struct list *event_list,
+                                              enum winebluetooth_watcher_event_type event_type,
+                                              union winebluetooth_watcher_event_data event );
+struct bluez_device_pair_data
+{
+    IRP *irp;
+    struct bluez_watcher_ctx *watcher_ctx;
+};
+
+static void bluez_device_pair_callback( DBusPendingCall *pending, void *param )
+{
+    struct bluez_device_pair_data *data = param;
+    DBusMessage *reply;
+    DBusError error;
+    union winebluetooth_watcher_event_data event = {0};
+
+    event.pairing_finished.irp = data->irp;
+    reply = p_dbus_pending_call_steal_reply( pending );
+    p_dbus_error_init( &error );
+    if (p_dbus_set_error_from_message( &error, reply ))
+    {
+        event.pairing_finished.result = bluez_dbus_error_to_ntstatus( &error );
+        ERR( "Failed to pair: %s: %s\n", debugstr_a( error.name ), debugstr_a( error.message ) );
+    }
+    p_dbus_error_free( &error );
+
+    bluez_event_list_queue_new_event( &data->watcher_ctx->event_list,
+                                      BLUETOOTH_WATCHER_EVENT_TYPE_PAIRING_FINISHED, event );
+    p_dbus_message_unref( reply );
+}
+
+NTSTATUS bluez_device_start_pairing( void *connection, void *watcher_ctx, struct unix_name *device, IRP *irp )
+{
+    DBusMessage *request;
+    DBusPendingCall *pending_call = NULL;
+    struct bluez_device_pair_data *data;
+    dbus_bool_t success;
+
+    TRACE( "(%p, %p, %s, %p)\n", connection, watcher_ctx, debugstr_a( device->str ), irp );
+
+    request = p_dbus_message_new_method_call( BLUEZ_DEST, device->str, BLUEZ_INTERFACE_DEVICE, "Pair" );
+    if (!request)
+        return STATUS_NO_MEMORY;
+
+    data = malloc( sizeof( *data ) );
+    if (!data)
+    {
+        p_dbus_message_unref( request );
+        return STATUS_NO_MEMORY;
+    }
+    data->irp = irp;
+    data->watcher_ctx = watcher_ctx;
+    success = p_dbus_connection_send_with_reply( connection, request, &pending_call, bluez_timeout );
+    p_dbus_message_unref( request );
+    if (!success)
+        return STATUS_NO_MEMORY;
+    if (!pending_call)
+        return STATUS_INTERNAL_ERROR;
+    if (!p_dbus_pending_call_set_notify( pending_call, bluez_device_pair_callback, data, free ))
+    {
+        p_dbus_pending_call_cancel( pending_call );
+        p_dbus_pending_call_unref( pending_call );
+        return STATUS_NO_MEMORY;
+    }
+
+    p_dbus_pending_call_unref( pending_call );
+    return STATUS_PENDING;
+}
+
 struct bluez_watcher_event
 {
     struct list entry;
@@ -1659,7 +1728,7 @@ static DBusHandlerResult bluez_filter( DBusConnection *conn, DBusMessage *msg, v
                 if (status != STATUS_SUCCESS)
                 {
                     ERR( "Failed to create async call to get adapter properties: %#x\n",
-                         (int)status );
+                         status );
                     unix_name_free( radio );
                     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
                 }
@@ -1741,7 +1810,7 @@ static DBusHandlerResult bluez_filter( DBusConnection *conn, DBusMessage *msg, v
                 status = bluez_device_get_props_by_path_async( conn, device->str, &pending_call );
                 if (status)
                 {
-                    ERR( "Failed to create async call to get device properties: %#x\n", (int)status );
+                    ERR( "Failed to create async call to get device properties: %#x\n", status );
                     unix_name_free( device );
                     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
                 }
@@ -1825,6 +1894,8 @@ static void bluez_watcher_free( struct bluez_watcher_ctx *watcher )
         case BLUETOOTH_WATCHER_EVENT_TYPE_DEVICE_PROPERTIES_CHANGED:
             unix_name_free( (struct unix_name *)event1->event.device_props_changed.device.handle );
             break;
+        case BLUETOOTH_WATCHER_EVENT_TYPE_PAIRING_FINISHED:
+            break;
         }
         free( event1 );
     }
@@ -1846,7 +1917,7 @@ NTSTATUS bluez_watcher_init( void *connection, void **ctx )
     if (status != STATUS_SUCCESS)
     {
         free( watcher_ctx );
-        ERR( "could not create async GetManagedObjects call: %#x\n", (int)status);
+        ERR( "could not create async GetManagedObjects call: %#x\n", status);
         return status;
     }
     watcher_ctx->init_device_list_call = call;
@@ -2147,7 +2218,7 @@ NTSTATUS bluez_dbus_loop( void *c, void *watcher, void *auth_agent,
             p_dbus_message_unref( reply );
             if (status != STATUS_SUCCESS)
             {
-                WARN( "Error building initial bluetooth devices list: %#x\n", (int)status );
+                WARN( "Error building initial bluetooth devices list: %#x\n", status );
                 p_dbus_connection_unref( connection );
                 bluez_auth_agent_ctx_decref( auth_agent );
                 return status;
@@ -2192,6 +2263,10 @@ NTSTATUS bluez_auth_agent_send_response( void *auth_agent, struct unix_name *dev
     return STATUS_NOT_SUPPORTED;
 }
 NTSTATUS bluez_device_disconnect( void *connection, const char *device_path )
+{
+    return STATUS_NOT_SUPPORTED;
+}
+NTSTATUS bluez_device_start_pairing( void *connection, void *watcher_ctx, struct unix_name *device, IRP *irp )
 {
     return STATUS_NOT_SUPPORTED;
 }
