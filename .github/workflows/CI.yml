@@ -25,7 +25,8 @@ jobs:
       run: |
         set -eux
         export DEBIAN_FRONTEND=noninteractive
-        sudo sed -i s/noble/plucky/ /etc/apt/sources.list.d/ubuntu.sources
+        sudo rm -f /etc/apt/sources.list.d/azure-cli.sources
+        sudo sed -i "s/$(lsb_release -cs)/plucky/g; s/$(lsb_release -rs)/25.04/g" /etc/apt/sources.list.d/*
         sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
         sudo apt-get build-dep wine -y
@@ -60,5 +61,6 @@ jobs:
         name: binaries-${{ matrix.name }}
         path: |
           wine.tar.xz
+
 
 
