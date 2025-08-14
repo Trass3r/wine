@@ -3539,7 +3539,6 @@ static void output_module( struct makefile *make, unsigned int arch )
         add_install_rule( make, make->module, link_arch, module_name,
                           strmake( "%c%s%s%s", '0' + arch, arch_install_dirs[arch], make->module,
                                    dll_ext[arch] ));
-
     output( "%s:", obj_dir_path( make, module_name ));
     if (spec_file) output_filename( spec_file );
     output_filenames_obj_dir( make, make->object_files[arch] );
@@ -3559,6 +3558,9 @@ static void output_module( struct makefile *make, unsigned int arch )
     if (link_arch != arch) output_filenames_obj_dir( make, make->object_files[link_arch] );
     output_filenames_obj_dir( make, make->res_files[arch] );
     output_debug_files( make, module_name, link_arch );
+    add_install_rule( make, make->module, link_arch, module_name,
+                      strmake( "d%s%s", arch_install_dirs[arch],
+                               make->debug_files.str[make->debug_files.count-1] ));
     output_filenames( all_libs );
     output_filename( arch_make_variable( "LDFLAGS", link_arch ));
     output( "\n" );
