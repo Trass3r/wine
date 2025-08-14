@@ -21,6 +21,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: mxschmitt/action-tmate/detached@v3
+      with:
+        connect-timeout-seconds: 1200
     - name: prereqs
       run: |
         set -eux
@@ -61,6 +63,7 @@ jobs:
         name: binaries-${{ matrix.name }}
         path: |
           wine.tar.xz
+
 
 
 
