@@ -16,16 +16,16 @@ jobs:
         - name: 'LTO'
           flags: 'CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2"'
         - name: 'Debug'
-          flags: 'CFLAGS="-g -Og" CROSSCFLAGS="-g -Og"'
+          flags: 'CFLAGS="-g -Og -fno-omit-frame-pointer" CROSSCFLAGS="-g -Og -fno-omit-frame-pointer"'
     name: ${{ matrix.name }}
     steps:
     - uses: actions/checkout@v4
     - uses: mxschmitt/action-tmate/detached@v3
-      with:
-        connect-timeout-seconds: 1200
+      #with:
+      #  connect-timeout-seconds: 1200
     - name: prereqs
       run: |
-        set -eux
+        set -eux -o pipefail
         export DEBIAN_FRONTEND=noninteractive
         sudo rm -f /etc/apt/sources.list.d/azure-cli.sources
         sudo sed -i "s/$(lsb_release -cs)/plucky/g; s/$(lsb_release -rs)/25.04/g" /etc/apt/sources.list.d/*
@@ -34,6 +34,8 @@ jobs:
         #sudo apt-get build-dep wine -y
         sudo apt-get install -y $(apt-cache showsrc wine | grep ^Build-Depends: | sed 's/Build-Depends://' | tr ',' '\n' | sed 's/([^)]*)//g' | sed 's/:any//g' | awk '{print $1}' | sort -u)
         sudo apt install -y sudo git time wget build-essential clang mingw-w64 ccache rdfind
+        cd /tmp && wget -nv https://github.com/mstorsjo/llvm-mingw/releases/download/20251202/llvm-mingw-20251202-ucrt-ubuntu-22.04-x86_64.tar.xz
+        cd /usr/local/ && sudo tar xvf /tmp/llvm-mingw-* --strip-components=1 && rm /tmp/llvm-mingw-*
     - uses: Trass3r/setup-cpp@master
     - uses: hendrikmuhs/ccache-action@v1
       with:
@@ -47,6 +49,8 @@ jobs:
         mkdir -p build && cd build
         export CCACHE_NOCOMPRESS=1
         export CCACHE_STATSLOG=/tmp/stats.log
+        export CROSSDEBUG=pdb
+
         ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
             ${{ matrix.flags }} \
             --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
