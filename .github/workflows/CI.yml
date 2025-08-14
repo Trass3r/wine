@@ -20,6 +20,7 @@ jobs:
     name: ${{ matrix.name }}
     steps:
     - uses: actions/checkout@v4
+    - uses: mxschmitt/action-tmate/detached@v3
     - name: prereqs
       run: |
         set -eux
@@ -59,4 +60,5 @@ jobs:
         name: binaries-${{ matrix.name }}
         path: |
           wine.tar.xz
+
 
