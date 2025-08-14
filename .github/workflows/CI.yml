@@ -31,7 +31,8 @@ jobs:
         sudo sed -i "s/$(lsb_release -cs)/plucky/g; s/$(lsb_release -rs)/25.04/g" /etc/apt/sources.list.d/*
         sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
-        sudo apt-get build-dep wine -y
+        #sudo apt-get build-dep wine -y
+        sudo apt-get install -y $(apt-cache showsrc wine | grep ^Build-Depends: | sed 's/Build-Depends://' | tr ',' '\n' | sed 's/([^)]*)//g' | sed 's/:any//g' | awk '{print $1}' | sort -u)
         sudo apt install -y sudo git time wget build-essential clang mingw-w64 ccache rdfind
     - uses: Trass3r/setup-cpp@master
     - uses: hendrikmuhs/ccache-action@v1
