@@ -108,12 +108,12 @@ metadata_header =
 
 enum
 {
-    STREAM_TABLE,
-    STREAM_STRING,
-    STREAM_USERSTRING,
-    STREAM_GUID,
-    STREAM_BLOB,
-    STREAM_MAX
+    WINMD_STREAM_TABLE,
+    WINMD_STREAM_STRING,
+    WINMD_STREAM_USERSTRING,
+    WINMD_STREAM_GUID,
+    WINMD_STREAM_BLOB,
+    WINMD_STREAM_MAX
 };
 
 static struct
@@ -146,7 +146,7 @@ static void write_headers( UINT image_size )
 
     put_data( &nt_header, sizeof(nt_header) );
 
-    for (i = 0; i < STREAM_MAX; i++)
+    for (i = 0; i < WINMD_STREAM_MAX; i++)
     {
         if (!streams[i].data_size) continue;
         streams_size += streams[i].header_size + streams[i].data_size;
@@ -171,7 +171,7 @@ static void write_headers( UINT image_size )
 
     metadata_header.num_streams = num_streams;
     put_data( &metadata_header, sizeof(metadata_header) );
-    for (i = 0; i < STREAM_MAX; i++)
+    for (i = 0; i < WINMD_STREAM_MAX; i++)
     {
         if (!streams[i].data_size) continue;
         put_data( &streams[i], streams[i].header_size );
@@ -479,14 +479,16 @@ static void add_bytes( struct buffer *buf, const BYTE *data, UINT size )
     buf->offset += size;
 }
 
-static void serialize_byte( BYTE value )
+static void serialize_byte( UINT value )
 {
-    add_bytes( &tables_disk, (const BYTE *)&value, sizeof(value) );
+    assert( !(value >> 24) );
+    add_bytes( &tables_disk, (const BYTE *)&value, sizeof(BYTE) );
 }
 
-static void serialize_ushort( USHORT value )
+static void serialize_ushort( UINT value )
 {
-    add_bytes( &tables_disk, (const BYTE *)&value, sizeof(value) );
+    assert( !(value >> 16) );
+    add_bytes( &tables_disk, (const BYTE *)&value, sizeof(USHORT) );
 }
 
 static void serialize_uint( UINT value )
@@ -623,11 +625,11 @@ static enum table has_semantics_to_table( UINT token )
 
 struct module_row
 {
-    USHORT generation;
-    UINT   name;
-    UINT   mvid;
-    UINT   encid;
-    UINT   encbaseid;
+    UINT generation;
+    UINT name;
+    UINT mvid;
+    UINT encid;
+    UINT encbaseid;
 };
 
 static UINT add_module_row( UINT name, UINT mvid )
@@ -713,9 +715,9 @@ static void serialize_typedef_table( void )
 
 struct field_row
 {
-    USHORT flags;
-    UINT   name;
-    UINT   signature;
+    UINT flags;
+    UINT name;
+    UINT signature;
 };
 
 static UINT add_field_row( UINT flags, UINT name, UINT signature )
@@ -740,12 +742,12 @@ static void serialize_field_table( void )
 
 struct methoddef_row
 {
-    UINT   rva;
-    USHORT implflags;
-    USHORT flags;
-    UINT   name;
-    UINT   signature;
-    UINT   paramlist;
+    UINT rva;
+    UINT implflags;
+    UINT flags;
+    UINT name;
+    UINT signature;
+    UINT paramlist;
 };
 
 static UINT add_methoddef_row( UINT implflags, UINT flags, UINT name, UINT signature, UINT paramlist )
@@ -775,9 +777,9 @@ static void serialize_methoddef_table( void )
 
 struct param_row
 {
-    USHORT flags;
-    USHORT sequence;
-    UINT   name;
+    UINT flags;
+    UINT sequence;
+    UINT name;
 };
 
 static UINT add_param_row( USHORT flags, USHORT sequence, UINT name )
@@ -868,8 +870,8 @@ static void serialize_memberref_table( void )
 
 struct constant_row
 {
-    BYTE type;
-    BYTE padding;
+    UINT type;
+    UINT padding;
     UINT parent;
     UINT value;
 };
@@ -947,15 +949,15 @@ static void serialize_customattribute_table( void )
 
 struct assembly_row
 {
-    UINT   hashalgid;
-    USHORT majorversion;
-    USHORT minorversion;
-    USHORT buildnumber;
-    USHORT revisionnumber;
-    UINT   flags;
-    UINT   publickey;
-    UINT   name;
-    UINT   culture;
+    UINT hashalgid;
+    UINT majorversion;
+    UINT minorversion;
+    UINT buildnumber;
+    UINT revisionnumber;
+    UINT flags;
+    UINT publickey;
+    UINT name;
+    UINT culture;
 };
 
 static UINT add_assembly_row( UINT name )
@@ -981,15 +983,15 @@ static void serialize_assembly_table( void )
 
 struct assemblyref_row
 {
-    USHORT majorversion;
-    USHORT minorversion;
-    USHORT buildnumber;
-    USHORT revisionnumber;
-    UINT   flags;
-    UINT   publickey;
-    UINT   name;
-    UINT   culture;
-    UINT   hashvalue;
+    UINT majorversion;
+    UINT minorversion;
+    UINT buildnumber;
+    UINT revisionnumber;
+    UINT flags;
+    UINT publickey;
+    UINT name;
+    UINT culture;
+    UINT hashvalue;
 };
 
 static UINT add_assemblyref_row( UINT flags, UINT publickey, UINT name )
@@ -1045,9 +1047,9 @@ static void serialize_propertymap_table( void )
 
 struct property_row
 {
-    USHORT flags;
-    UINT   name;
-    UINT   type;
+    UINT flags;
+    UINT name;
+    UINT type;
 };
 
 static UINT add_property_row( USHORT flags, UINT name, UINT type )
@@ -1097,9 +1099,9 @@ static void serialize_eventmap_table( void )
 
 struct event_row
 {
-    USHORT flags;
-    UINT   name;
-    UINT   type;
+    UINT flags;
+    UINT name;
+    UINT type;
 };
 
 static UINT add_event_row( USHORT flags, UINT name, UINT type )
@@ -1124,9 +1126,9 @@ static void serialize_event_table( void )
 
 struct methodsemantics_row
 {
-    USHORT semantics;
-    UINT   method;
-    UINT   association;
+    UINT semantics;
+    UINT method;
+    UINT association;
 };
 
 static UINT add_methodsemantics_row( USHORT flags, UINT name, UINT type )
@@ -1569,6 +1571,22 @@ static UINT make_member_sig3( UINT token, BYTE *buf )
     return len;
 }
 
+static UINT make_member_sig4( UINT token, UINT token2, BYTE *buf )
+{
+    UINT len = 4;
+
+    buf[0] = SIG_TYPE_HASTHIS;
+    buf[1] = 4;
+    buf[2] = ELEMENT_TYPE_VOID;
+    buf[3] = ELEMENT_TYPE_CLASS;
+    len += encode_int( token, buf + 4 );
+    buf[len++] = ELEMENT_TYPE_VALUETYPE;
+    len += encode_int( token2, buf + len );
+    buf[len++] = ELEMENT_TYPE_U4;
+    buf[len++] = ELEMENT_TYPE_STRING;
+    return len;
+}
+
 static UINT make_type_sig( const type_t *type, BYTE *buf )
 {
     UINT len = 0;
@@ -1628,13 +1646,22 @@ static UINT make_type_sig( const type_t *type, BYTE *buf )
     return len;
 }
 
-static UINT make_method_sig( const var_t *method, BYTE *buf )
+static BOOL is_retval( const var_t *arg )
+{
+    const type_t *type = arg->declspec.type;
+
+    /* array return values are encoded as out parameters even if the retval attribute is present */
+    if (!is_attr( arg->attrs, ATTR_RETVAL ) || type_get_type( type ) == TYPE_ARRAY) return FALSE;
+    return TRUE;
+}
+
+static UINT make_method_sig( const var_t *method, BYTE *buf, BOOL is_static )
 {
     const var_t *arg;
     const var_list_t *arg_list = type_function_get_args( method->declspec.type );
     UINT len = 3;
 
-    buf[0] = SIG_TYPE_HASTHIS;
+    buf[0] = is_static ? SIG_TYPE_DEFAULT : SIG_TYPE_HASTHIS;
     buf[1] = 0;
     buf[2] = ELEMENT_TYPE_VOID;
 
@@ -1645,7 +1672,7 @@ static UINT make_method_sig( const var_t *method, BYTE *buf )
     {
         const type_t *type;
 
-        if (!is_attr( arg->attrs, ATTR_RETVAL )) continue;
+        if (!is_retval( arg )) continue;
         type = type_pointer_get_ref_type( arg->declspec.type ); /* retval must be a pointer */
         len = make_type_sig( type, buf + 2 ) + 2;
     }
@@ -1653,20 +1680,20 @@ static UINT make_method_sig( const var_t *method, BYTE *buf )
     /* add remaining parameters */
     LIST_FOR_EACH_ENTRY( arg, arg_list, var_t, entry )
     {
-        if (is_attr( arg->attrs, ATTR_RETVAL ) ) continue;
+        if (is_size_param( arg, arg_list ) || is_retval( arg ) ) continue;
         len += make_type_sig( arg->declspec.type, buf + len );
         buf[1]++;
     }
     return len;
 }
 
-static UINT make_property_sig( const var_t *method, BYTE *buf )
+static UINT make_property_sig( const var_t *method, BYTE *buf, BOOL is_static )
 {
     const var_t *arg;
     const var_list_t *arg_list = type_function_get_args( method->declspec.type );
     UINT len = 3;
 
-    buf[0] = SIG_TYPE_HASTHIS | SIG_TYPE_PROPERTY;
+    buf[0] = is_static ? SIG_TYPE_PROPERTY : SIG_TYPE_HASTHIS | SIG_TYPE_PROPERTY;
     buf[1] = 0;
     buf[2] = ELEMENT_TYPE_VOID;
 
@@ -1674,9 +1701,51 @@ static UINT make_property_sig( const var_t *method, BYTE *buf )
     {
         const type_t *type;
 
-        if (!is_attr( arg->attrs, ATTR_RETVAL )) continue;
+        if (!is_retval( arg )) continue;
         type = type_pointer_get_ref_type( arg->declspec.type ); /* retval must be a pointer */
         len = make_type_sig( type, buf + 2 ) + 2;
+    }
+
+    return len;
+}
+
+static UINT make_activation_sig( const var_t *method, BYTE *buf )
+{
+    const var_t *arg;
+    UINT len = 3;
+
+    buf[0] = SIG_TYPE_HASTHIS;
+    buf[1] = 0;
+    buf[2] = ELEMENT_TYPE_VOID;
+
+    if (method) LIST_FOR_EACH_ENTRY( arg, type_function_get_args(method->declspec.type), var_t, entry )
+    {
+        if (is_retval( arg )) continue;
+        len += make_type_sig( arg->declspec.type, buf + len );
+        buf[1]++;
+    }
+
+    return len;
+}
+
+static UINT make_composition_sig( const var_t *method, BYTE *buf )
+{
+    const var_t *arg;
+    UINT len = 3, count = 0;
+
+    buf[0] = SIG_TYPE_HASTHIS;
+    buf[1] = 0;
+    buf[2] = ELEMENT_TYPE_VOID;
+
+    if (method) LIST_FOR_EACH_ENTRY( arg, type_function_get_args(method->declspec.type), var_t, entry ) count++;
+
+    if (method) assert( count >= 3 );
+
+    if (count > 3) LIST_FOR_EACH_ENTRY( arg, type_function_get_args(method->declspec.type), var_t, entry )
+    {
+        if (--count < 3) break; /* omit last 3 standard composition args */
+        len += make_type_sig( arg->declspec.type, buf + len );
+        buf[1]++;
     }
 
     return len;
@@ -1698,12 +1767,12 @@ static UINT make_deprecated_sig( UINT token, BYTE *buf )
     return len;
 }
 
-static UINT make_contract_value( const type_t *type, BYTE *buf )
+static UINT make_contract_value( const attr_t *attr, BYTE *buf )
 {
-    const expr_t *attr = get_attrp( type->attrs, ATTR_CONTRACT );
-    const type_t *contract = attr->u.var->declspec.type;
+    const expr_t *expr = attr->u.pval;
+    const type_t *contract = expr->u.var->declspec.type;
     char *name = format_namespace( contract->namespace, "", ".", contract->name, NULL );
-    UINT version = attr->ref->u.integer.value, len = strlen( name );
+    UINT version = expr->ref->u.integer.value, len = strlen( name );
 
     buf[0] = 1;
     buf[1] = 0;
@@ -1719,24 +1788,38 @@ static UINT make_contract_value( const type_t *type, BYTE *buf )
     return len;
 }
 
-static UINT make_version_value( const type_t *type, BYTE *buf )
+static UINT make_version_value( const attr_t *attr, BYTE *buf )
 {
-    UINT version = get_attrv( type->attrs, ATTR_VERSION );
+    const version_t *version;
+    UINT value;
+
+    if (attr && (version = attr->u.pval)) value = (version->major << 16) | version->minor;
+    else value = 1;
 
     buf[0] = 1;
     buf[1] = 0;
-    buf[2] = is_attr( type->attrs, ATTR_VERSION ) ? 0 : 1;
-    buf[3] = 0;
-    memcpy( buf + 4, &version, sizeof(version) );
+    memcpy( buf + 2, &value, sizeof(value) );
+    buf[6] = buf[7] = 0;
     return 8;
 }
 
-static void add_contract_attr_step1( type_t *type )
+static attr_t *get_attr( const attr_list_t *list, enum attr_type attr_type )
+{
+    attr_t *attr;
+    if (list) LIST_FOR_EACH_ENTRY( attr, list, attr_t, entry )
+    {
+        if (attr->type == attr_type ) return attr;
+    }
+    return NULL;
+}
+
+static void add_contract_attr_step1( const type_t *type )
 {
     UINT assemblyref, scope, typeref, typeref_type, class, sig_size;
     BYTE sig[32];
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_CONTRACT )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_CONTRACT ))) return;
 
     add_assemblyref_row( 0x200, 0, add_string("windowscontracts") );
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
@@ -1749,72 +1832,77 @@ static void add_contract_attr_step1( type_t *type )
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
     sig_size = make_member_sig( typedef_or_ref(TABLE_TYPEREF, typeref_type), sig );
-    type->md.member[MD_ATTR_CONTRACT] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
 }
 
-static void add_contract_attr_step2( type_t *type )
+static void add_contract_attr_step2( const type_t *type )
 {
     UINT parent, attr_type, value_size;
     BYTE value[MAX_NAME + sizeof(UINT) + 5];
+    const attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_CONTRACT )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_CONTRACT ))) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_CONTRACT] );
-    value_size = make_contract_value( type, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_contract_value( attr, value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 }
 
-static void add_version_attr_step1( type_t *type )
+static void add_version_attr_step1( const type_t *type )
 {
     static const BYTE sig[] = { SIG_TYPE_HASTHIS, 1, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U4 };
     UINT assemblyref, scope, typeref, class;
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_VERSION ) && is_attr( type->attrs, ATTR_CONTRACT )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_VERSION )) && is_attr( type->attrs, ATTR_CONTRACT )) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
 
     typeref = add_typeref_row( scope, add_string("VersionAttribute"), add_string("Windows.Foundation.Metadata") );
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_VERSION] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
 }
 
-static void add_version_attr_step2( type_t *type )
+static void add_version_attr_step2( const type_t *type )
 {
     UINT parent, attr_type, value_size;
     BYTE value[8];
+    const attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_VERSION ) && is_attr( type->attrs, ATTR_CONTRACT )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_VERSION )) && is_attr( type->attrs, ATTR_CONTRACT )) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_VERSION] );
-    value_size = make_version_value( type, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_version_value( attr, value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 }
 
-static void add_flags_attr_step1( type_t *type )
+static void add_flags_attr_step1( const type_t *type )
 {
     static const BYTE sig[] = { SIG_TYPE_HASTHIS, 0, ELEMENT_TYPE_VOID };
     UINT scope, typeref, class;
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_FLAGS )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_FLAGS ))) return;
 
     scope = resolution_scope( TABLE_ASSEMBLYREF, MSCORLIB_ROW );
     typeref = add_typeref_row( scope, add_string("FlagsAttribute"), add_string("System") );
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_FLAGS] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
 }
 
-static void add_flags_attr_step2( type_t *type )
+static void add_flags_attr_step2( const type_t *type )
 {
     static const BYTE value[] = { 0x01, 0x00, 0x00, 0x00 };
     UINT parent, attr_type;
+    const attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_FLAGS )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_FLAGS ))) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_FLAGS] );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
     add_customattribute_row( parent, attr_type, add_blob(value, sizeof(value)) );
 }
 
@@ -1911,42 +1999,46 @@ static void add_struct_type_step2( type_t *type )
     add_contract_attr_step2( type );
 }
 
-static void add_uuid_attr_step1( type_t *type )
+static void add_uuid_attr_step1( const type_t *type )
 {
     static const BYTE sig[] =
         { SIG_TYPE_HASTHIS, 11, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U4, ELEMENT_TYPE_U2, ELEMENT_TYPE_U2,
           ELEMENT_TYPE_U1, ELEMENT_TYPE_U1, ELEMENT_TYPE_U1, ELEMENT_TYPE_U1, ELEMENT_TYPE_U1, ELEMENT_TYPE_U1,
           ELEMENT_TYPE_U1, ELEMENT_TYPE_U1 };
     UINT assemblyref, scope, typeref, class;
+    attr_t *attr;
+
+    if (!(attr = get_attr( type->attrs, ATTR_UUID ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
     typeref = add_typeref_row( scope, add_string("GuidAttribute"), add_string("Windows.Foundation.Metadata") );
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_UUID] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
 }
 
-static void add_uuid_attr_step2( type_t *type )
+static void add_uuid_attr_step2( const type_t *type )
 {
-    static const BYTE default_uuid[] =
-        { 0xe7, 0x1f, 0xb5, 0x67, 0x6e, 0x38, 0x31, 0x5a, 0x8a, 0x1c, 0x89, 0x83, 0xc9, 0x49, 0x5c, 0x33 };
-    const struct uuid *uuid = get_attrp( type->attrs, ATTR_UUID );
+    const struct uuid *uuid;
     BYTE value[sizeof(*uuid) + 4] = { 0x01 };
     UINT parent, attr_type;
+    const attr_t *attr;
 
-    if (uuid) memcpy( value + 2, uuid, sizeof(*uuid) );
-    else memcpy( value + 2, default_uuid, sizeof(default_uuid) );
+    if (!(attr = get_attr( type->attrs, ATTR_UUID ))) return;
+
+    uuid = attr->u.pval;
+    memcpy( value + 2, uuid, sizeof(*uuid) );
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_UUID] );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
     add_customattribute_row( parent, attr_type, add_blob(value, sizeof(value)) );
 }
 
-static UINT make_exclusiveto_value( const type_t *type, BYTE *buf )
+static UINT make_exclusiveto_value( const attr_t *attr, BYTE *buf )
 {
-    const type_t *attr = get_attrp( type->attrs, ATTR_EXCLUSIVETO );
-    char *name = format_namespace( attr->namespace, "", ".", attr->name, NULL );
+    const type_t *type = attr->u.pval;
+    char *name = format_namespace( type->namespace, "", ".", type->name, NULL );
     UINT len = strlen( name );
 
     buf[0] = 1;
@@ -1961,12 +2053,13 @@ static UINT make_exclusiveto_value( const type_t *type, BYTE *buf )
     return len;
 }
 
-static void add_exclusiveto_attr_step1( type_t *type )
+static void add_exclusiveto_attr_step1( const type_t *type )
 {
     UINT assemblyref, scope, typeref, typeref_type, class, sig_size;
     BYTE sig[32];
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_EXCLUSIVETO )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_EXCLUSIVETO ))) return;
 
     scope = resolution_scope( TABLE_ASSEMBLYREF, MSCORLIB_ROW );
     typeref_type = add_typeref_row( scope, add_string("Type"), add_string("System") );
@@ -1977,30 +2070,31 @@ static void add_exclusiveto_attr_step1( type_t *type )
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
     sig_size = make_member_sig2( ELEMENT_TYPE_CLASS, typedef_or_ref(TABLE_TYPEREF, typeref_type), sig );
-    type->md.member[MD_ATTR_EXCLUSIVETO] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
 }
 
-static void add_exclusiveto_attr_step2( type_t *type )
+static void add_exclusiveto_attr_step2( const type_t *type )
 {
     UINT parent, attr_type, value_size;
     BYTE value[MAX_NAME + 5];
+    const attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_EXCLUSIVETO )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_EXCLUSIVETO ))) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_EXCLUSIVETO] );
-    value_size = make_exclusiveto_value( type, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_exclusiveto_value( attr, value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 }
 
-static UINT make_overload_value( const var_t *method, BYTE *buf )
+static UINT make_overload_value( const char *name, BYTE *buf )
 {
-    UINT len = strlen( method->name );
+    UINT len = strlen( name );
 
     buf[0] = 1;
     buf[1] = 0;
     buf[2] = len;
-    memcpy( buf + 3, method->name, len );
+    memcpy( buf + 3, name, len );
     len += 3;
     buf[len++] = 0;
     buf[len++] = 0;
@@ -2012,16 +2106,16 @@ static void add_overload_attr_step1( const var_t *method )
 {
     static const BYTE sig[] = { SIG_TYPE_HASTHIS, 1, ELEMENT_TYPE_VOID, ELEMENT_TYPE_STRING };
     UINT assemblyref, scope, typeref, class;
-    type_t *type = method->declspec.type;
+    attr_t *attr;
 
-    if (!is_attr( method->attrs, ATTR_OVERLOAD )) return;
+    if (!(attr = get_attr( method->attrs, ATTR_OVERLOAD ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
     typeref = add_typeref_row( scope, add_string("OverloadAttribute"), add_string("Windows.Foundation.Metadata") );
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_OVERLOAD] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
 }
 
 static void add_overload_attr_step2( const var_t *method )
@@ -2029,12 +2123,13 @@ static void add_overload_attr_step2( const var_t *method )
     const type_t *type = method->declspec.type;
     UINT parent, attr_type, value_size;
     BYTE value[MAX_NAME + 5];
+    const attr_t *attr;
 
-    if (!is_attr( method->attrs, ATTR_OVERLOAD )) return;
+    if (!(attr = get_attr( method->attrs, ATTR_OVERLOAD ))) return;
 
     parent = has_customattribute( TABLE_METHODDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_OVERLOAD] );
-    value_size = make_overload_value( method, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_overload_value( method->name, value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 }
 
@@ -2042,16 +2137,16 @@ static void add_default_overload_attr_step1( const var_t *method )
 {
     static const BYTE sig[] = { SIG_TYPE_HASTHIS, 0, ELEMENT_TYPE_VOID };
     UINT assemblyref, scope, typeref, class;
-    type_t *type = method->declspec.type;
+    attr_t *attr;
 
-    if (!is_attr( method->attrs, ATTR_DEFAULT_OVERLOAD ) || !is_attr( method->attrs, ATTR_OVERLOAD )) return;
+    if (!(attr = get_attr( method->attrs, ATTR_DEFAULT_OVERLOAD )) || !is_attr( method->attrs, ATTR_OVERLOAD )) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
     typeref = add_typeref_row( scope, add_string("DefaultOverloadAttribute"), add_string("Windows.Foundation.Metadata") );
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_DEFAULT_OVERLOAD] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
 }
 
 static void add_default_overload_attr_step2( const var_t *method )
@@ -2059,23 +2154,24 @@ static void add_default_overload_attr_step2( const var_t *method )
     static const BYTE value[] = { 0x01, 0x00, 0x00, 0x00 };
     const type_t *type = method->declspec.type;
     UINT parent, attr_type;
+    const attr_t *attr;
 
-    if (!is_attr( method->attrs, ATTR_DEFAULT_OVERLOAD ) || !is_attr( method->attrs, ATTR_OVERLOAD )) return;
+    if (!(attr = get_attr( method->attrs, ATTR_DEFAULT_OVERLOAD )) || !is_attr( method->attrs, ATTR_OVERLOAD )) return;
 
     parent = has_customattribute( TABLE_METHODDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_DEFAULT_OVERLOAD] );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
     add_customattribute_row( parent, attr_type, add_blob(value, sizeof(value)) );
 }
 
-static UINT make_deprecated_value( const var_t *method, BYTE **ret_buf )
+static UINT make_deprecated_value( const attr_t *attr, BYTE **ret_buf )
 {
     static const BYTE zero[] = { 0x00, 0x00, 0x00, 0x00 }, one[] = { 0x01, 0x00, 0x00, 0x00 };
-    const expr_t *attr = get_attrp( method->attrs, ATTR_DEPRECATED );
-    const type_t *type = attr->ext2->u.var->declspec.type;
-    const char *text = attr->ref->u.sval;
-    const char *kind = attr->u.ext->u.sval;
+    const expr_t *expr = attr->u.pval;
+    const type_t *type = expr->ext2->u.var->declspec.type;
+    const char *text = expr->ref->u.sval;
+    const char *kind = expr->u.ext->u.sval;
     BYTE encoded[4];
-    UINT len, len_text = strlen( text ), len_encoded = encode_int( len_text, encoded );
+    UINT len, version, len_text = strlen( text ), len_encoded = encode_int( len_text, encoded );
     BYTE *buf = xmalloc( 2 + len_encoded + len_text + 6 + MAX_NAME + 5 );
     char *contract;
 
@@ -2088,11 +2184,11 @@ static UINT make_deprecated_value( const var_t *method, BYTE **ret_buf )
     if (!strcmp( kind, "remove" )) memcpy( buf + len, one, sizeof(one) );
     else memcpy( buf + len, zero, sizeof(zero) );
     len += 4;
-    buf[len++] = 0;
-    buf[len++] = 0;
 
-    buf[len++] = 1;
-    buf[len++] = 0;
+    version = expr->ext2->ref->u.integer.value;
+    memcpy( buf + len, &version, sizeof(version) );
+    len += sizeof(version);
+
     contract = format_namespace( type->namespace, "", ".", type->name, NULL );
     len_text = strlen( contract );
     buf[len++] = len_text;
@@ -2109,10 +2205,10 @@ static UINT make_deprecated_value( const var_t *method, BYTE **ret_buf )
 static void add_deprecated_attr_step1( const var_t *method )
 {
     UINT assemblyref, scope, typeref_type, typeref, class, sig_size;
-    type_t *type = method->declspec.type;
     BYTE sig[32];
+    attr_t *attr;
 
-    if (!is_attr( method->attrs, ATTR_DEPRECATED )) return;
+    if (!(attr = get_attr( method->attrs, ATTR_DEPRECATED ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
@@ -2121,7 +2217,7 @@ static void add_deprecated_attr_step1( const var_t *method )
 
     sig_size = make_deprecated_sig( typedef_or_ref(TABLE_TYPEREF, typeref_type), sig );
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_DEPRECATED] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
 }
 
 static void add_deprecated_attr_step2( const var_t *method )
@@ -2129,12 +2225,13 @@ static void add_deprecated_attr_step2( const var_t *method )
     const type_t *type = method->declspec.type;
     UINT parent, attr_type, value_size;
     BYTE *value;
+    const attr_t *attr;
 
-    if (!is_attr( method->attrs, ATTR_DEPRECATED )) return;
+    if (!(attr = get_attr( method->attrs, ATTR_DEPRECATED ))) return;
 
     parent = has_customattribute( TABLE_METHODDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_DEPRECATED] );
-    value_size = make_deprecated_value( method, &value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_deprecated_value( attr, &value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
     free( value );
 }
@@ -2149,6 +2246,7 @@ static void add_method_params_step1( var_list_t *arg_list )
     {
         type_t *type = arg->declspec.type;
 
+        if (is_size_param( arg, arg_list )) continue;
         if (type_get_type( type ) == TYPE_POINTER) type = type_pointer_get_ref_type( type );
         if (type->name && !strcmp( type->name, "EventRegistrationToken" ))
         {
@@ -2162,18 +2260,24 @@ static void add_method_params_step1( var_list_t *arg_list )
     }
 }
 
+static void add_runtimeclass_type_step1( type_t * );
+
 static void add_interface_type_step1( type_t *type )
 {
     const statement_t *stmt;
     UINT name, namespace;
+    type_t *class;
 
     name = add_name( type, &namespace );
 
     type->md.ref = add_typeref_row( resolution_scope(TABLE_MODULE, MODULE_ROW), name, namespace );
 
+    add_exclusiveto_attr_step1( type );
+
+    if ((class = type->details.iface->runtime_class)) add_runtimeclass_type_step1( class );
+
     add_contract_attr_step1( type );
     add_uuid_attr_step1( type );
-    add_exclusiveto_attr_step1( type );
 
     STATEMENTS_FOR_EACH_FUNC( stmt, type_iface_get_stmts(type) )
     {
@@ -2207,7 +2311,7 @@ static UINT add_method_params_step2( var_list_t *arg_list )
 
     LIST_FOR_EACH_ENTRY( arg, arg_list, var_t, entry )
     {
-        if (is_attr( arg->attrs, ATTR_RETVAL ))
+        if (is_retval( arg ))
         {
             first = add_param_row( 0, 0, add_string(arg->name) );
             break;
@@ -2216,7 +2320,7 @@ static UINT add_method_params_step2( var_list_t *arg_list )
 
     LIST_FOR_EACH_ENTRY( arg, arg_list, var_t, entry )
     {
-        if (is_attr( arg->attrs, ATTR_RETVAL )) continue;
+        if (is_size_param( arg, arg_list) || is_retval( arg )) continue;
         row = add_param_row( get_param_attrs(arg), seq++, add_string(arg->name) );
         if (!first) first = row;
     }
@@ -2237,28 +2341,53 @@ static char *get_method_name( const var_t *method )
     return strmake( "%s", method->name );
 }
 
-static UINT get_method_attrs( BOOL abstract, BOOL special, UINT *flags )
+static BOOL is_special_method( const var_t *method )
 {
-    UINT attrs = METHOD_ATTR_PUBLIC | METHOD_ATTR_VIRTUAL | METHOD_ATTR_HIDEBYSIG | METHOD_ATTR_NEWSLOT;
+    if (is_attr( method->attrs, ATTR_PROPGET )  || is_attr( method->attrs, ATTR_PROPPUT ) ||
+        is_attr( method->attrs, ATTR_EVENTADD ) || is_attr( method->attrs, ATTR_EVENTREMOVE )) return TRUE;
+    return FALSE;
+}
 
-    if (abstract)
+static BOOL is_static_iface( const type_t *class, const type_t *iface )
+{
+    const attr_t *attr;
+
+    if (!class || !class->attrs) return FALSE;
+
+    LIST_FOR_EACH_ENTRY( attr, class->attrs, const attr_t, entry )
+    {
+        const expr_t *value = attr->u.pval;
+
+        if (attr->type != ATTR_STATIC) continue;
+        if (value->u.var->declspec.type == iface) return TRUE;
+    }
+
+    return FALSE;
+}
+
+static UINT get_method_attrs( const type_t *class, const type_t *iface, const var_t *method, UINT *flags )
+{
+    UINT attrs = METHOD_ATTR_PUBLIC | METHOD_ATTR_HIDEBYSIG;
+
+    if (!class)
     {
         *flags = 0;
-        attrs |= METHOD_ATTR_ABSTRACT;
+        attrs |= METHOD_ATTR_ABSTRACT | METHOD_ATTR_VIRTUAL | METHOD_ATTR_NEWSLOT;
     }
     else
     {
         *flags = METHOD_IMPL_RUNTIME;
-        attrs |= METHOD_ATTR_FINAL;
+        if (is_static_iface( class, iface )) attrs |= METHOD_ATTR_STATIC;
+        else attrs |= METHOD_ATTR_VIRTUAL | METHOD_ATTR_NEWSLOT | METHOD_ATTR_FINAL;
     }
 
-    if (special) attrs |= METHOD_ATTR_SPECIALNAME;
+    if (is_special_method( method )) attrs |= METHOD_ATTR_SPECIALNAME;
     return attrs;
 }
 
 static void add_propget_method( const type_t *class, const type_t *iface, const var_t *method )
 {
-    UINT sig_size, property, paramlist, flags, attrs = get_method_attrs( class == NULL, TRUE, &flags );
+    UINT sig_size, property, paramlist, flags, attrs = get_method_attrs( class, iface, method, &flags );
     char *name = get_method_name( method );
     type_t *type = method->declspec.type;
     BYTE sig[256];
@@ -2267,7 +2396,7 @@ static void add_propget_method( const type_t *class, const type_t *iface, const 
     else property = type->md.iface_property;
 
     paramlist = add_method_params_step2( type_function_get_args(type) );
-    sig_size = make_method_sig( method, sig );
+    sig_size = make_method_sig( method, sig, is_static_iface(class, iface) );
 
     type->md.def = add_methoddef_row( flags, attrs, add_string(name), add_blob(sig, sig_size), paramlist );
     add_methodsemantics_row( METHOD_SEM_GETTER, type->md.def, has_semantics(TABLE_PROPERTY, property) );
@@ -2289,13 +2418,13 @@ static const var_t *find_propget_method( const type_t *iface, const char *name )
 static void add_propput_method( const type_t *class, const type_t *iface, const var_t *method )
 {
     const var_t *propget = find_propget_method( iface, method->name );
-    UINT sig_size, paramlist, property, flags, attrs = get_method_attrs( class == NULL, TRUE, &flags );
+    UINT sig_size, paramlist, property, flags, attrs = get_method_attrs( class, iface, method, &flags );
     char *name = get_method_name( method );
     type_t *type = method->declspec.type;
     BYTE sig[256];
 
     paramlist = add_method_params_step2( type_function_get_args(method->declspec.type) );
-    sig_size = make_method_sig( method, sig );
+    sig_size = make_method_sig( method, sig, is_static_iface(class, iface) );
 
     type->md.def = add_methoddef_row( flags, attrs, add_string(name), add_blob(sig, sig_size), paramlist );
     free( name );
@@ -2317,7 +2446,7 @@ static void add_propput_method( const type_t *class, const type_t *iface, const 
 
 static void add_eventadd_method( const type_t *class, const type_t *iface, const var_t *method )
 {
-    UINT event, sig_size, paramlist, flags, attrs = get_method_attrs( class == NULL, TRUE, &flags );
+    UINT event, sig_size, paramlist, flags, attrs = get_method_attrs( class, iface, method, &flags );
     char *name = get_method_name( method );
     type_t *type = method->declspec.type;
     BYTE sig[256];
@@ -2326,7 +2455,7 @@ static void add_eventadd_method( const type_t *class, const type_t *iface, const
     else event = type->md.iface_event;
 
     paramlist = add_method_params_step2( type_function_get_args(type) );
-    sig_size = make_method_sig( method, sig );
+    sig_size = make_method_sig( method, sig, is_static_iface(class, iface) );
 
     type->md.def = add_methoddef_row( flags, attrs, add_string(name), add_blob(sig, sig_size), paramlist );
     free( name );
@@ -2349,13 +2478,13 @@ static const var_t *find_eventadd_method( const type_t *iface, const char *name 
 static void add_eventremove_method( const type_t *class, const type_t *iface, const var_t *method )
 {
     const var_t *eventadd = find_eventadd_method( iface, method->name );
-    UINT event, sig_size, paramlist, flags, attrs = get_method_attrs( class == NULL, TRUE, &flags );
+    UINT event, sig_size, paramlist, flags, attrs = get_method_attrs( class, iface, method, &flags );
     char *name = get_method_name( method );
     type_t *type = method->declspec.type;
     BYTE sig[256];
 
     paramlist = add_method_params_step2( type_function_get_args(type) );
-    sig_size = make_method_sig( method, sig );
+    sig_size = make_method_sig( method, sig, is_static_iface(class, iface) );
 
     type->md.def = add_methoddef_row( flags, attrs, add_string(name), add_blob(sig, sig_size), paramlist );
     free( name );
@@ -2377,13 +2506,13 @@ static void add_eventremove_method( const type_t *class, const type_t *iface, co
 
 static void add_regular_method( const type_t *class, const type_t *iface, const var_t *method )
 {
-    UINT paramlist, sig_size, flags, attrs = get_method_attrs( class == NULL, FALSE, &flags );
+    UINT paramlist, sig_size, flags, attrs = get_method_attrs( class, iface, method, &flags );
     char *name = get_method_name( method );
     type_t *type = method->declspec.type;
     BYTE sig[256];
 
     paramlist = add_method_params_step2( type_function_get_args(type) );
-    sig_size = make_method_sig( method, sig );
+    sig_size = make_method_sig( method, sig, is_static_iface(class, iface) );
 
     type->md.def = add_methoddef_row( flags, attrs, add_string(name), add_blob(sig, sig_size), paramlist );
     free( name );
@@ -2397,7 +2526,7 @@ static void add_property( type_t *class, type_t *iface, const var_t *method )
 
     if (!is_attr( method->attrs, ATTR_PROPGET )) return;
 
-    sig_size = make_property_sig( method, sig );
+    sig_size = make_property_sig( method, sig, is_static_iface(class, iface) );
     if (class)
     {
         type->md.class_property = add_property_row( 0, add_string(method->name), add_blob(sig, sig_size) );
@@ -2448,12 +2577,15 @@ static void add_method( type_t *class, type_t *iface, const var_t *method )
     else add_regular_method( class, iface, method );
 }
 
+static void add_runtimeclass_type_step2( type_t *type );
+
 static void add_interface_type_step2( type_t *type )
 {
     UINT name, namespace, interface, flags = TYPE_ATTR_INTERFACE | TYPE_ATTR_ABSTRACT | TYPE_ATTR_UNKNOWN;
     const typeref_list_t *require_list = type_iface_get_requires( type );
     const typeref_t *require;
     const statement_t *stmt;
+    type_t *class;
 
     name = add_name( type, &namespace );
 
@@ -2479,71 +2611,69 @@ static void add_interface_type_step2( type_t *type )
         add_overload_attr_step2( method );
     }
 
+    if ((class = type->details.iface->runtime_class)) add_runtimeclass_type_step2( class );
+
     add_contract_attr_step2( type );
     add_uuid_attr_step2( type );
     add_exclusiveto_attr_step2( type );
 }
 
-static UINT make_contractversion_value( const type_t *type, BYTE *buf )
-{
-    UINT version = get_attrv( type->attrs, ATTR_CONTRACTVERSION ), len = 2 + sizeof(version);
-
-    buf[0] = 1;
-    buf[1] = 0;
-    memcpy( buf + 2, &version, sizeof(version) );
-    buf[len++] = 0;
-    buf[len++] = 0;
-    return len;
-}
-
-static void add_contractversion_attr_step1( type_t *type )
+static void add_contractversion_attr_step1( const type_t *type )
 {
     static const BYTE sig[] = { SIG_TYPE_HASTHIS, 1, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U4 };
     UINT assemblyref, scope, typeref, class;
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_CONTRACTVERSION )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_CONTRACTVERSION ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
     typeref = add_typeref_row( scope, add_string("ContractVersionAttribute"), add_string("Windows.Foundation.Metadata") );
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_CONTRACTVERSION] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
 }
 
-static void add_contractversion_attr_step2( type_t *type )
+static void add_contractversion_attr_step2( const type_t *type )
 {
     UINT parent, attr_type, value_size;
     BYTE value[8];
+    const attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_CONTRACTVERSION )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_CONTRACTVERSION ))) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_CONTRACTVERSION] );
-    value_size = make_contractversion_value( type, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_version_value( attr, value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 }
 
-static void add_apicontract_attr_step1( type_t *type )
+static void add_apicontract_attr_step1( const type_t *type )
 {
     static const BYTE sig[] = { SIG_TYPE_HASTHIS, 0, ELEMENT_TYPE_VOID };
     UINT assemblyref, scope, typeref, class;
+    attr_t *attr;
+
+    if (!(attr = get_attr( type->attrs, ATTR_APICONTRACT ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
     typeref = add_typeref_row( scope, add_string("ApiContractAttribute"), add_string("Windows.Foundation.Metadata") );
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
-    type->md.member[MD_ATTR_APICONTRACT] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sizeof(sig)) );
 }
 
-static void add_apicontract_attr_step2( type_t *type )
+static void add_apicontract_attr_step2( const type_t *type )
 {
     static const BYTE value[] = { 0x01, 0x00, 0x00, 0x00 };
     UINT parent, attr_type;
+    const attr_t *attr;
+
+    if (!(attr = get_attr( type->attrs, ATTR_APICONTRACT ))) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_APICONTRACT] );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
     add_customattribute_row( parent, attr_type, add_blob(value, sizeof(value)) );
 }
 
@@ -2578,12 +2708,13 @@ static void add_runtimeclass_type_step1( type_t *type )
 {
     UINT name, namespace;
 
-    name = add_name( type, &namespace );
+    if (type->md.ref) return;
 
+    name = add_name( type, &namespace );
     type->md.ref = add_typeref_row( resolution_scope(TABLE_MODULE, MODULE_ROW), name, namespace );
 }
 
-static void add_default_attr( const type_t *type, UINT interfaceimpl_ref )
+static void add_default_attr( UINT interfaceimpl_ref )
 {
     static const BYTE sig[] = { SIG_TYPE_HASTHIS, 0, ELEMENT_TYPE_VOID };
     static const BYTE value[] = { 0x01, 0x00, 0x00, 0x00 };
@@ -2608,7 +2739,7 @@ static void add_method_impl( const type_t *class, const type_t *iface, const var
     BYTE sig[256];
 
     parent = memberref_parent( TABLE_TYPEREF, iface->md.ref );
-    sig_size = make_method_sig( method, sig );
+    sig_size = make_method_sig( method, sig, FALSE );
 
     memberref = add_memberref_row( parent, add_string(name), add_blob(sig, sig_size) );
     free( name );
@@ -2623,10 +2754,11 @@ static void add_method_contract_attrs( const type_t *class, const type_t *iface,
 {
     UINT parent, attr_type, value_size;
     BYTE value[MAX_NAME + sizeof(UINT) + 5];
+    const attr_t *attr = get_attr( iface->attrs, ATTR_CONTRACT );
 
     parent = has_customattribute( TABLE_METHODDEF, method->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, iface->md.member[MD_ATTR_CONTRACT] );
-    value_size = make_contract_value( class, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_contract_value( get_attr(class->attrs, ATTR_CONTRACT), value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 
     if (method->md.class_property)
@@ -2671,12 +2803,13 @@ static UINT make_static_value( const expr_t *attr, BYTE *buf )
     return len_iface + len_contract + 10;
 }
 
-static void add_static_attr_step1( type_t *type )
+static void add_static_attr_step1( const type_t *type )
 {
     UINT assemblyref, scope, typeref, typeref_type, class, sig_size;
     BYTE sig[32];
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_STATIC )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_STATIC ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
@@ -2687,10 +2820,10 @@ static void add_static_attr_step1( type_t *type )
 
     class = memberref_parent( TABLE_TYPEREF, typeref );
     sig_size = make_member_sig3( typedef_or_ref(TABLE_TYPEREF, typeref_type), sig );
-    type->md.member[MD_ATTR_STATIC] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
 }
 
-static void add_static_attr_step2( type_t *type )
+static void add_static_attr_step2( const type_t *type )
 {
     const attr_t *attr;
 
@@ -2702,7 +2835,7 @@ static void add_static_attr_step2( type_t *type )
         if (attr->type != ATTR_STATIC) continue;
 
         parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-        attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_STATIC] );
+        attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
         value_size = make_static_value( attr->u.pval, value );
         add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
     }
@@ -2711,16 +2844,23 @@ static void add_static_attr_step2( type_t *type )
 static UINT make_activatable_value( const expr_t *attr, BYTE *buf )
 {
     char *name_iface = NULL, *name_contract;
-    UINT len_iface = 0, len_contract, len_extra = 5;
-    const type_t *type_iface = attr->u.var->declspec.type, *type_contract;
+    const type_t *type_iface, *type_contract;
+    UINT version, len_iface = 0, len_contract, len_extra = 5;
     BYTE *ptr = buf;
 
-    if (attr->type != EXPR_MEMBER) type_contract = attr->u.var->declspec.type;
-    else
+    if (attr->type == EXPR_MEMBER)
     {
+        type_iface = attr->u.var->declspec.type;
         name_iface = format_namespace( type_iface->namespace, "", ".", type_iface->name, NULL );
         len_iface = strlen( name_iface );
+
         type_contract = attr->ref->u.var->declspec.type;
+        version = attr->ref->ref->u.integer.value;
+    }
+    else
+    {
+        type_contract = attr->u.var->declspec.type;
+        version = attr->ref->u.integer.value;
     }
 
     name_contract = format_namespace( type_contract->namespace, "", ".", type_contract->name, NULL );
@@ -2737,19 +2877,23 @@ static UINT make_activatable_value( const expr_t *attr, BYTE *buf )
         ptr += 2;
         len_extra += 5;
     }
+
     ptr[0] = 1;
     ptr[1] = 0;
-    ptr[2] = len_contract;
-    memcpy( ptr + 3, name_contract, len_contract );
-    ptr += len_contract + 3;
+    memcpy( ptr + 2, &version, sizeof(version) );
+    ptr += sizeof(version) + 2;
+
+    ptr[0] = len_contract;
+    memcpy( ptr + 1, name_contract, len_contract );
+    ptr += len_contract + 1;
     ptr[0] = ptr[1] = 0;
 
     free( name_iface );
     free( name_contract );
-    return len_iface + len_contract + len_extra;
+    return len_iface + sizeof(version) + len_contract + len_extra;
 }
 
-static void add_activatable_attr_step1( type_t *type )
+static void add_activatable_attr_step1( const type_t *type )
 {
     static const BYTE sig_default[] = { SIG_TYPE_HASTHIS, 2, ELEMENT_TYPE_VOID, ELEMENT_TYPE_U4, ELEMENT_TYPE_STRING };
     attr_t *attr;
@@ -2783,14 +2927,14 @@ static void add_activatable_attr_step1( type_t *type )
     }
 }
 
-static void add_activatable_attr_step2( type_t *type )
+static void add_activatable_attr_step2( const type_t *type )
 {
     const attr_t *attr;
 
     if (type->attrs) LIST_FOR_EACH_ENTRY_REV( attr, type->attrs, const attr_t, entry )
     {
         UINT parent, attr_type, value_size;
-        BYTE value[MAX_NAME * 2 + 10];
+        BYTE value[MAX_NAME * 2 + sizeof(UINT) + 10];
 
         if (attr->type != ATTR_ACTIVATABLE) continue;
 
@@ -2801,9 +2945,9 @@ static void add_activatable_attr_step2( type_t *type )
     }
 }
 
-static UINT make_threading_value( const type_t *type, BYTE *buf )
+static UINT make_threading_value( const attr_t *attr, BYTE *buf )
 {
-    UINT value, model = get_attrv( type->attrs, ATTR_THREADING );
+    UINT value, model = attr->u.ival;
 
     switch (model)
     {
@@ -2828,12 +2972,13 @@ static UINT make_threading_value( const type_t *type, BYTE *buf )
     return 8;
 }
 
-static void add_threading_attr_step1( type_t *type )
+static void add_threading_attr_step1( const type_t *type )
 {
     UINT assemblyref, scope, typeref, typeref_attr, class, sig_size;
     BYTE sig[32];
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_THREADING )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_THREADING ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
@@ -2844,25 +2989,26 @@ static void add_threading_attr_step1( type_t *type )
 
     class = memberref_parent( TABLE_TYPEREF, typeref_attr );
     sig_size = make_member_sig2( ELEMENT_TYPE_VALUETYPE, typedef_or_ref(TABLE_TYPEREF, typeref), sig );
-    type->md.member[MD_ATTR_THREADING] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
 }
 
-static void add_threading_attr_step2( type_t *type )
+static void add_threading_attr_step2( const type_t *type )
 {
     UINT parent, attr_type, value_size;
     BYTE value[8];
+    const attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_THREADING )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_THREADING ))) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_THREADING] );
-    value_size = make_threading_value( type, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_threading_value( attr, value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 }
 
-static UINT make_marshalingbehavior_value( const type_t *type, BYTE *buf )
+static UINT make_marshalingbehavior_value( const attr_t *attr, BYTE *buf )
 {
-    UINT marshaling = get_attrv( type->attrs, ATTR_MARSHALING_BEHAVIOR );
+    UINT marshaling = attr->u.ival;
 
     buf[0] = 1;
     buf[1] = 0;
@@ -2871,12 +3017,13 @@ static UINT make_marshalingbehavior_value( const type_t *type, BYTE *buf )
     return 8;
 }
 
-static void add_marshalingbehavior_attr_step1( type_t *type )
+static void add_marshalingbehavior_attr_step1( const type_t *type )
 {
     UINT assemblyref, scope, typeref, typeref_attr, class, sig_size;
     BYTE sig[32];
+    attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_MARSHALING_BEHAVIOR )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_MARSHALING_BEHAVIOR ))) return;
 
     assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
     scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
@@ -2887,73 +3034,325 @@ static void add_marshalingbehavior_attr_step1( type_t *type )
 
     class = memberref_parent( TABLE_TYPEREF, typeref_attr );
     sig_size = make_member_sig2( ELEMENT_TYPE_VALUETYPE, typedef_or_ref(TABLE_TYPEREF, typeref), sig );
-    type->md.member[MD_ATTR_MARSHALINGBEHAVIOR] = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
+    attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
 }
 
-static void add_marshalingbehavior_attr_step2( type_t *type )
+static void add_marshalingbehavior_attr_step2( const type_t *type )
 {
     UINT parent, attr_type, value_size;
     BYTE value[8];
+    const attr_t *attr;
 
-    if (!is_attr( type->attrs, ATTR_MARSHALING_BEHAVIOR )) return;
+    if (!(attr = get_attr( type->attrs, ATTR_MARSHALING_BEHAVIOR ))) return;
 
     parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
-    attr_type = customattribute_type( TABLE_MEMBERREF, type->md.member[MD_ATTR_MARSHALINGBEHAVIOR] );
-    value_size = make_marshalingbehavior_value( type, value );
+    attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+    value_size = make_marshalingbehavior_value( attr, value );
     add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
 }
 
-static void add_runtimeclass_type_step2( type_t *type )
+static UINT make_composable_value( const expr_t *attr, BYTE *buf )
 {
-    UINT name, namespace, scope, extends, typeref, interface, interfaceimpl_ref, flags;
-    typeref_list_t *iface_list = type_runtimeclass_get_ifaces( type );
-    typeref_t *iface;
-    const statement_t *stmt;
+    char *name_iface, *name_contract;
+    const expr_t *contract = attr->ref;
+    const type_t *type_iface = attr->u.var->declspec.type;
+    const type_t *type_contract = contract->u.var->declspec.type;
+    UINT access_type = 1, contract_version = contract->ref->u.integer.value;
+    UINT len_iface, len_contract;
+    BYTE *ptr = buf;
 
-    name = add_name( type, &namespace );
+    name_iface = format_namespace( type_iface->namespace, "", ".", type_iface->name, NULL );
+    len_iface = strlen( name_iface );
 
-    scope = resolution_scope( TABLE_ASSEMBLYREF, MSCORLIB_ROW );
-    typeref = add_typeref_row( scope, add_string("Object"), add_string("System") );
+    name_contract = format_namespace( type_contract->namespace, "", ".", type_contract->name, NULL );
+    len_contract = strlen( name_contract );
 
-    extends = typedef_or_ref( TABLE_TYPEREF, typeref );
-    flags = TYPE_ATTR_PUBLIC | TYPE_ATTR_SEALED | TYPE_ATTR_UNKNOWN;
-    if (!iface_list) flags |= TYPE_ATTR_ABSTRACT;
+    ptr[0] = 1;
+    ptr[1] = 0;
+    ptr[2] = len_iface;
+    memcpy( ptr + 3, name_iface, len_iface );
+    ptr += len_iface + 3;
 
-    type->md.def = add_typedef_row( flags, name, namespace, extends, 0, 0 );
+    if (is_attr( attr->u.var->attrs, ATTR_PUBLIC)) access_type = 2;
+    memcpy( ptr, &access_type, sizeof(access_type) );
+    ptr += sizeof(access_type);
+
+    memcpy( ptr, &contract_version, sizeof(contract_version) );
+    ptr += sizeof(contract_version);
+
+    ptr[0] = len_contract;
+    memcpy( ptr + 1, name_contract, len_contract );
+    ptr += len_contract + 1;
+    ptr[0] = ptr[1] = 0;
+
+    free( name_iface );
+    free( name_contract );
+    return len_iface + sizeof(access_type) + sizeof(contract_version) + len_contract + 6;
+}
+
+static void add_composable_attr_step1( const type_t *type )
+{
+    attr_t *attr;
+
+    if (type->attrs) LIST_FOR_EACH_ENTRY( attr, type->attrs, attr_t, entry )
+    {
+        UINT assemblyref, scope, typeref, typeref_attr, typeref_type, class, sig_size;
+        BYTE sig[64];
+
+        if (attr->type != ATTR_COMPOSABLE) continue;
+
+        scope = resolution_scope( TABLE_ASSEMBLYREF, MSCORLIB_ROW );
+        typeref_type = add_typeref_row( scope, add_string("Type"), add_string("System") );
+
+        assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
+        scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
+        typeref = add_typeref_row( scope, add_string("CompositionType"), add_string("Windows.Foundation.Metadata") );
+        typeref_attr = add_typeref_row( scope, add_string("ComposableAttribute"), add_string("Windows.Foundation.Metadata") );
+
+        class = memberref_parent( TABLE_TYPEREF, typeref_attr );
+        sig_size = make_member_sig4( typedef_or_ref(TABLE_TYPEREF, typeref_type), typedef_or_ref(TABLE_TYPEREF, typeref), sig );
+        attr->md_member = add_memberref_row( class, add_string(".ctor"), add_blob(sig, sig_size) );
+    }
+}
+
+static void add_composable_attr_step2( const type_t *type )
+{
+    const attr_t *attr;
+
+    if (type->attrs) LIST_FOR_EACH_ENTRY( attr, type->attrs, const attr_t, entry )
+    {
+        UINT parent, attr_type, value_size;
+        BYTE value[MAX_NAME + sizeof(UINT) * 2 + 6];
+
+        if (attr->type != ATTR_COMPOSABLE) continue;
+
+        parent = has_customattribute( TABLE_TYPEDEF, type->md.def );
+        attr_type = customattribute_type( TABLE_MEMBERREF, attr->md_member );
+        value_size = make_composable_value( attr->u.pval, value );
+        add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
+    }
+}
+
+static void add_member_interfaces( type_t *class )
+{
+    const typeref_list_t *iface_list = type_runtimeclass_get_ifaces( class );
+    const typeref_t *iface;
 
     if (iface_list) LIST_FOR_EACH_ENTRY( iface, iface_list, typeref_t, entry )
     {
-        interface = typedef_or_ref( TABLE_TYPEREF, iface->type->md.ref );
-        interfaceimpl_ref = add_interfaceimpl_row( type->md.def, interface );
+        UINT interface = typedef_or_ref( TABLE_TYPEREF, iface->type->md.ref );
+        UINT interfaceimpl_ref = add_interfaceimpl_row( class->md.def, interface );
+        const statement_t *stmt;
 
-        if (is_attr( iface->attrs, ATTR_DEFAULT )) add_default_attr( type, interfaceimpl_ref );
+        if (is_attr( iface->attrs, ATTR_DEFAULT )) add_default_attr( interfaceimpl_ref );
 
         /* add properties in reverse order like midlrt */
         STATEMENTS_FOR_EACH_FUNC_REV( stmt, type_iface_get_stmts(iface->type) )
         {
             const var_t *method = stmt->u.var;
 
-            add_property( type, iface->type, method );
+            add_property( class, iface->type, method );
         }
 
         STATEMENTS_FOR_EACH_FUNC( stmt, type_iface_get_stmts(iface->type) )
         {
             const var_t *method = stmt->u.var;
 
-            add_event( type, iface->type, method );
-            add_method( type, iface->type, method );
-            add_method_impl( type, iface->type, method );
-            add_method_contract_attrs( type, iface->type, method->declspec.type );
+            add_event( class, iface->type, method );
+            add_method( class, iface->type, method );
+            add_method_impl( class, iface->type, method );
+            add_method_contract_attrs( class, iface->type, method->declspec.type );
         }
     }
+}
 
+static void add_static_interfaces( type_t *class )
+{
+    const attr_t *attr;
+
+    if (class->attrs) LIST_FOR_EACH_ENTRY( attr, class->attrs, const attr_t, entry )
+    {
+        const expr_t *value = attr->u.pval;
+        const statement_t *stmt;
+        type_t *iface;
+
+        if (attr->type != ATTR_STATIC) continue;
+
+        iface = value->u.var->declspec.type;
+
+        STATEMENTS_FOR_EACH_FUNC( stmt, type_iface_get_stmts(iface) )
+        {
+            const var_t *method = stmt->u.var;
+
+            add_property( class, iface, method );
+            add_event( class, iface, method );
+            add_method( class, iface, method );
+            add_method_contract_attrs( class, iface, method->declspec.type );
+        }
+    }
+}
+
+static void add_activation_interfaces( const type_t *class )
+{
+    UINT flags = METHOD_ATTR_PUBLIC | METHOD_ATTR_HIDEBYSIG | METHOD_ATTR_SPECIALNAME | METHOD_ATTR_RTSPECIALNAME;
+    const attr_t *attr, *contract_attr = get_attr( class->attrs, ATTR_CONTRACT );
+
+    if (class->attrs) LIST_FOR_EACH_ENTRY_REV( attr, class->attrs, const attr_t, entry )
+    {
+        UINT methoddef, parent, attr_type, value_size, paramlist = 0, sig_size;
+        BYTE value[MAX_NAME + sizeof(UINT) + 5], sig[256];
+        const expr_t *activatable = attr->u.pval;
+        const type_t *iface = NULL;
+        const var_t *method = NULL, *arg;
+        const statement_t *stmt;
+
+        if (attr->type != ATTR_ACTIVATABLE) continue;
+
+        /* interface is optional */
+        if (activatable->type == EXPR_MEMBER) iface = activatable->u.var->declspec.type;
+
+        if (iface) STATEMENTS_FOR_EACH_FUNC( stmt, type_iface_get_stmts(iface) )
+        {
+            UINT seq = 1, row;
+
+            method = stmt->u.var;
+
+            LIST_FOR_EACH_ENTRY( arg, type_function_get_args(method->declspec.type), var_t, entry )
+            {
+                if (is_retval( arg )) continue;
+                row = add_param_row( get_param_attrs(arg), seq++, add_string(arg->name) );
+                if (!paramlist) paramlist = row;
+            }
+            break;
+        }
+
+        sig_size = make_activation_sig( method, sig );
+        methoddef = add_methoddef_row( METHOD_IMPL_RUNTIME, flags, add_string(".ctor"), add_blob(sig, sig_size), paramlist );
+
+        parent = has_customattribute( TABLE_METHODDEF, methoddef );
+        attr_type = customattribute_type( TABLE_MEMBERREF, contract_attr->md_member );
+        value_size = make_contract_value( contract_attr, value );
+        add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
+    }
+}
+
+static void add_composition_interfaces( const type_t *class )
+{
+    UINT flags = METHOD_ATTR_FAMILY | METHOD_ATTR_HIDEBYSIG | METHOD_ATTR_SPECIALNAME | METHOD_ATTR_RTSPECIALNAME;
+    const attr_t *attr, *contract_attr = get_attr( class->attrs, ATTR_CONTRACT );
+
+    if (class->attrs) LIST_FOR_EACH_ENTRY_REV( attr, class->attrs, const attr_t, entry )
+    {
+        UINT methoddef, parent, attr_type, value_size, paramlist = 0, sig_size;
+        BYTE value[MAX_NAME + sizeof(UINT) + 5], sig[256];
+        const expr_t *composable = attr->u.pval;
+        const var_t *method = NULL, *arg;
+        const statement_t *stmt;
+        const type_t *iface;
+
+        if (attr->type != ATTR_COMPOSABLE) continue;
+
+        iface = composable->u.var->declspec.type;
+
+        STATEMENTS_FOR_EACH_FUNC( stmt, type_iface_get_stmts(iface) )
+        {
+            UINT seq = 1, row, count = 0;
+
+            method = stmt->u.var;
+
+            LIST_FOR_EACH_ENTRY( arg, type_function_get_args(method->declspec.type), var_t, entry ) count++;
+
+            if (count > 3) LIST_FOR_EACH_ENTRY( arg, type_function_get_args(method->declspec.type), var_t, entry )
+            {
+                if (--count < 3) break; /* omit last 3 standard composition args */
+                row = add_param_row( get_param_attrs(arg), seq++, add_string(arg->name) );
+                if (!paramlist) paramlist = row;
+            }
+            break;
+        }
+
+        sig_size = make_composition_sig( method, sig );
+        methoddef = add_methoddef_row( METHOD_IMPL_RUNTIME, flags, add_string(".ctor"), add_blob(sig, sig_size), paramlist );
+
+        parent = has_customattribute( TABLE_METHODDEF, methoddef );
+        attr_type = customattribute_type( TABLE_MEMBERREF, contract_attr->md_member );
+        value_size = make_contract_value( contract_attr, value );
+        add_customattribute_row( parent, attr_type, add_blob(value, value_size) );
+    }
+}
+
+static void add_constructor_overload( const type_t *type )
+{
+    static const BYTE sig_default[] = { SIG_TYPE_HASTHIS, 0, ELEMENT_TYPE_VOID };
+    static const BYTE sig_overload[] = { SIG_TYPE_HASTHIS, 1, ELEMENT_TYPE_VOID, ELEMENT_TYPE_STRING };
+    UINT name, namespace;
+    const attr_t *attr;
+
+    if (type->attrs) LIST_FOR_EACH_ENTRY_REV( attr, type->attrs, const attr_t, entry )
+    {
+        const expr_t *value = attr->u.pval;
+
+        if (attr->type == ATTR_COMPOSABLE || (attr->type == ATTR_ACTIVATABLE && value->type == EXPR_MEMBER))
+        {
+            UINT assemblyref, scope, typeref_default, typeref_overload, class;
+
+            assemblyref = add_assemblyref_row( 0x200, 0, add_string("Windows.Foundation") );
+            scope = resolution_scope( TABLE_ASSEMBLYREF, assemblyref );
+
+            name = add_string( "DefaultOverloadAttribute" );
+            namespace = add_string( "Windows.Foundation.Metadata" );
+            typeref_default = add_typeref_row( scope, name, namespace );
+
+            class = memberref_parent( TABLE_TYPEREF, typeref_default );
+            add_memberref_row( class, add_string(".ctor"), add_blob(sig_default, sizeof(sig_default)) );
+
+            name = add_string( "OverloadAttribute" );
+            typeref_overload = add_typeref_row( scope, name, namespace );
+
+            class = memberref_parent( TABLE_TYPEREF, typeref_overload );
+            add_memberref_row( class, add_string(".ctor"), add_blob(sig_overload, sizeof(sig_overload)) );
+            break;
+        }
+    }
+}
+
+static void add_runtimeclass_type_step2( type_t *type )
+{
+    const typeref_list_t *iface_list = type_runtimeclass_get_ifaces( type );
+    UINT name, namespace, scope, extends, typeref, flags;
+
+    if (type->md.def) return;
+
+    name = add_name( type, &namespace );
+
+    add_constructor_overload( type );
+
+    scope = resolution_scope( TABLE_ASSEMBLYREF, MSCORLIB_ROW );
+    typeref = add_typeref_row( scope, add_string("Object"), add_string("System") );
+    extends = typedef_or_ref( TABLE_TYPEREF, typeref );
+
+    flags = TYPE_ATTR_PUBLIC | TYPE_ATTR_UNKNOWN;
+    if (!is_attr( type->attrs, ATTR_COMPOSABLE )) flags |= TYPE_ATTR_SEALED;
+    if (!iface_list) flags |= TYPE_ATTR_ABSTRACT;
+
+    type->md.def = add_typedef_row( flags, name, namespace, extends, 0, 0 );
+
+    /* add contract first so activation/composition constructors can inherit it */
     add_contract_attr_step1( type );
+
+    add_activation_interfaces( type );
+    add_composition_interfaces( type );
+    add_member_interfaces( type );
+    add_static_interfaces( type );
+
+    add_composable_attr_step1( type );
     add_static_attr_step1( type );
     add_activatable_attr_step1( type );
     add_threading_attr_step1( type );
     add_marshalingbehavior_attr_step1( type );
 
     add_contract_attr_step2( type );
+    add_composable_attr_step2( type );
     add_static_attr_step2( type );
     add_activatable_attr_step2( type );
     add_threading_attr_step2( type );
@@ -3001,7 +3400,7 @@ static void add_delegate_type_step2( type_t *type )
         UINT sig_size;
         BYTE sig[256];
 
-        sig_size = make_method_sig( method, sig );
+        sig_size = make_method_sig( method, sig, FALSE );
         paramlist = add_method_params_step2( type_function_get_args(method->declspec.type) );
 
         add_methoddef_row( METHOD_IMPL_RUNTIME, flags, add_string("Invoke"), add_blob(sig, sig_size), paramlist );
@@ -3160,36 +3559,36 @@ static void build_streams( const statement_list_t *stmts )
     len = (tables_disk.offset + 3) & ~3;
     add_bytes( &tables_disk, pad, len - tables_disk.offset );
 
-    streams[STREAM_TABLE].data_size = tables_disk.offset;
-    streams[STREAM_TABLE].data = tables_disk.ptr;
+    streams[WINMD_STREAM_TABLE].data_size = tables_disk.offset;
+    streams[WINMD_STREAM_TABLE].data = tables_disk.ptr;
 
     len = (strings.offset + 3) & ~3;
     add_bytes( &strings, pad, len - strings.offset );
 
-    streams[STREAM_STRING].data_size = strings.offset;
-    streams[STREAM_STRING].data = strings.ptr;
+    streams[WINMD_STREAM_STRING].data_size = strings.offset;
+    streams[WINMD_STREAM_STRING].data = strings.ptr;
 
     len = (userstrings.offset + 3) & ~3;
     add_bytes( &userstrings, pad, len - userstrings.offset );
 
-    streams[STREAM_USERSTRING].data_size = userstrings.offset;
-    streams[STREAM_USERSTRING].data = userstrings.ptr;
+    streams[WINMD_STREAM_USERSTRING].data_size = userstrings.offset;
+    streams[WINMD_STREAM_USERSTRING].data = userstrings.ptr;
 
     len = (blobs.offset + 3) & ~3;
     add_bytes( &blobs, pad, len - blobs.offset );
 
-    streams[STREAM_BLOB].data_size = blobs.offset;
-    streams[STREAM_BLOB].data = blobs.ptr;
+    streams[WINMD_STREAM_BLOB].data_size = blobs.offset;
+    streams[WINMD_STREAM_BLOB].data = blobs.ptr;
 
-    streams[STREAM_GUID].data_size = guids.offset;
-    streams[STREAM_GUID].data = guids.ptr;
+    streams[WINMD_STREAM_GUID].data_size = guids.offset;
+    streams[WINMD_STREAM_GUID].data = guids.ptr;
 
-    for (i = 0; i < STREAM_MAX; i++)
+    for (i = 0; i < WINMD_STREAM_MAX; i++)
     {
         if (!streams[i].data_size) continue;
         offset += streams[i].header_size;
     }
-    for (i = 0; i < STREAM_MAX; i++)
+    for (i = 0; i < WINMD_STREAM_MAX; i++)
     {
         if (!streams[i].data_size) continue;
         streams[i].data_offset = offset;
@@ -3200,7 +3599,7 @@ static void build_streams( const statement_list_t *stmts )
 static void write_streams( void )
 {
     UINT i;
-    for (i = 0; i < STREAM_MAX; i++)
+    for (i = 0; i < WINMD_STREAM_MAX; i++)
     {
         if (!streams[i].data_size) continue;
         put_data( streams[i].data, streams[i].data_size );
@@ -3212,12 +3611,12 @@ void write_metadata( const statement_list_t *stmts )
     static const BYTE pad[FILE_ALIGNMENT];
     UINT image_size, file_size, i;
 
-    if (!do_metadata) return;
+    if (!do_metadata || !winrt_mode) return;
 
     build_streams( stmts );
 
     image_size = FILE_ALIGNMENT + sizeof(cor_header) + 8 + sizeof(metadata_header);
-    for (i = 0; i < STREAM_MAX; i++) image_size += streams[i].header_size + streams[i].data_size;
+    for (i = 0; i < WINMD_STREAM_MAX; i++) image_size += streams[i].header_size + streams[i].data_size;
 
     init_output_buffer();
 

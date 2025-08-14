@@ -176,10 +176,14 @@ static ULONG WINAPI unknown_Release(IUnknown *iface)
             IMFMediaType_Release(decoder->input_type);
         if (decoder->output_type)
             IMFMediaType_Release(decoder->output_type);
+        if (decoder->stream_type)
+            IMFMediaType_Release(decoder->stream_type);
         if (decoder->output_attributes)
             IMFAttributes_Release(decoder->output_attributes);
         if (decoder->attributes)
             IMFAttributes_Release(decoder->attributes);
+        FreeMediaType(&decoder->dmo_input_type);
+        FreeMediaType(&decoder->dmo_output_type);
         wg_sample_queue_destroy(decoder->wg_sample_queue);
         free(decoder);
     }
@@ -942,7 +946,7 @@ static HRESULT WINAPI transform_ProcessOutput(IMFTransform *iface, DWORD flags, 
 {
     struct video_decoder *decoder = impl_from_IMFTransform(iface);
     UINT32 sample_size;
-    LONGLONG duration;
+    LONGLONG duration, sample_duration;
     IMFSample *sample;
     UINT64 frame_size, frame_rate;
     bool preserve_timestamps;
@@ -990,8 +994,7 @@ static HRESULT WINAPI transform_ProcessOutput(IMFTransform *iface, DWORD flags, 
         }
     }
 
-    if (SUCCEEDED(hr = wg_transform_read_mf(decoder->wg_transform, sample,
-            sample_size, &samples->dwStatus, &preserve_timestamps)))
+    if (SUCCEEDED(hr = wg_transform_read_mf(decoder->wg_transform, sample, &samples->dwStatus, &preserve_timestamps)))
     {
         wg_sample_queue_flush(decoder->wg_sample_queue, false);
 
@@ -1011,6 +1014,11 @@ static HRESULT WINAPI transform_ProcessOutput(IMFTransform *iface, DWORD flags, 
             if (FAILED(IMFSample_SetSampleDuration(sample, duration)))
                 WARN("Failed to set sample duration\n");
             decoder->sample_time += duration;
+        }
+        else if (FAILED(IMFSample_GetSampleDuration(sample, &sample_duration)) || !sample_duration)
+        {
+            if (FAILED(IMFSample_SetSampleDuration(sample, duration)))
+                WARN("Failed to set sample duration\n");
         }
     }
 
@@ -1407,8 +1415,8 @@ static HRESULT WINAPI media_object_Discontinuity(IMediaObject *iface, DWORD inde
 
 static HRESULT WINAPI media_object_AllocateStreamingResources(IMediaObject *iface)
 {
-    FIXME("iface %p stub!\n", iface);
-    return E_NOTIMPL;
+    TRACE("iface %p.\n", iface);
+    return S_OK;
 }
 
 static HRESULT WINAPI media_object_FreeStreamingResources(IMediaObject *iface)
