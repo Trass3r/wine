@@ -3603,6 +3603,9 @@ static void output_module( struct makefile *make, unsigned int arch )
     if (link_arch != arch) output_filenames_obj_dir( make, make->object_files[link_arch] );
     output_filenames_obj_dir( make, make->res_files[arch] );
     output_debug_files( make, module_name, link_arch );
+    if (make->debug_files.count > 0)
+        install_data_file( make, make->module, make->debug_files.str[make->debug_files.count-1],
+                           strmake( "$(libdir)/wine/%s", make->debug_files.str[make->debug_files.count-1] ), NULL );
     output_filenames( all_libs );
     output_filename( arch_make_variable( "LDFLAGS", link_arch ));
     output( "\n" );
