@@ -44,13 +44,26 @@ jobs:
         max-size: 5G
     - name: build
       run: |
-        set -ux
+        set -eux
+
+        git fetch --depth=1 origin wine-10.16 && git checkout FETCH_HEAD
+        git clone --depth=1000 https://github.com/Frogging-Family/wine-tkg-git.git
+        (cd wine-tkg-git && git checkout c4aa8dd)
+        patch -p1 < wine-tkg-git/wine-tkg-git/wine-tkg-patches/proton/esync/esync-unix-mainline.patch
+
+        #git clone --depth=100 https://github.com/wine-staging/wine-staging.git ./wine-staging
+        #pushd wine-staging
+        #./staging/patchinstall.py -d ../../ ntdll-Junction_Points server-PeekMessage server-Signal_Thread
+        #git checkout 9c06e8ea # last commit before esync removal
+        #sed -i 's/Disabled: True//' patches/eventfd_synchronization/definition
+        #./staging/patchinstall.py DESTDIR="../../" eventfd_synchronization
+        #popd
+
         set +e
-        mkdir -p build && cd build
         export CCACHE_NOCOMPRESS=1
         export CCACHE_STATSLOG=/tmp/stats.log
         export CROSSDEBUG=pdb
-
+        mkdir -p build && cd build
         ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
             ${{ matrix.flags }} \
             --enable-win64 --disable-tests --with-mingw --enable-archs=i386,x86_64
