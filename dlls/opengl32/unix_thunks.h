@@ -52,6 +52,7 @@ extern GLenum wow64_glClientWaitSync( TEB *teb, GLsync sync, GLbitfield flags, G
 extern void wow64_glDeleteBuffers( TEB *teb, GLsizei n, const GLuint *buffers );
 extern void wow64_glDeleteSync( TEB *teb, GLsync sync );
 extern GLsync wow64_glFenceSync( TEB *teb, GLenum condition, GLbitfield flags );
+extern void wow64_glFlushMappedBufferRange( TEB *teb, GLenum target, GLintptr offset, GLsizeiptr length );
 extern void wow64_glGetBufferPointerv( TEB *teb, GLenum target, GLenum pname, PTR32 *params );
 extern void wow64_glGetBufferPointervARB( TEB *teb, GLenum target, GLenum pname, PTR32 *params );
 extern void wow64_glGetNamedBufferPointerv( TEB *teb, GLuint buffer, GLenum pname, PTR32 *params );

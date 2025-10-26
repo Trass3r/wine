@@ -165,6 +165,8 @@ struct buffer
     void *host_ptr;
     void *map_ptr;
     size_t copy_length;
+    size_t mapped_length;
+    int explicit_flush;
     void *vm_ptr;
     SIZE_T vm_size;
 };
@@ -2144,6 +2146,45 @@ static BOOL buffer_vm_alloc( TEB *teb, struct buffer *buffer, SIZE_T size )
     return TRUE;
 }
 
+static void wow64_flush_buffer( TEB *teb, GLenum target, GLuint name, GLintptr offset, size_t length )
+{
+    struct buffer *buffer = name ? get_named_buffer( teb, name ) : get_target_buffer( teb, target );
+    size_t off, copylen, available;
+
+    TRACE("target %#x name %#x offset %zd, length %zu\n", target, name, (ssize_t)offset, length);
+
+    if (!buffer)
+    {
+        FIXME( "No buffer found for target %#x name %#x\n", target, name );
+        return;
+    }
+    if (!buffer->host_ptr) return;
+
+    /* If the driver returned a direct pointer into the process address space, nothing to do. */
+    if (buffer->host_ptr == buffer->map_ptr) return;
+
+
+    /* Only copy if this mapping was created for write access, or if the mapping
+     * uses explicit flushes (in which case we copy the requested subrange).
+     */
+    if (!buffer->copy_length && !buffer->explicit_flush) return;
+
+    if (offset < 0) return;
+    off = (size_t)offset;
+
+    /* Determine the available mapped length for bounds checking. */
+    available = buffer->mapped_length ? buffer->mapped_length : buffer->copy_length;
+    if (off >= available) return;
+    copylen = length;
+    if (copylen > available - off) copylen = available - off;
+    if (!copylen) return;
+
+    TRACE( "Copying %#zx from wow64 buffer %p+%zu to buffer %p+%zu\n", copylen,
+           buffer->map_ptr, off, buffer->host_ptr, off );
+
+    memcpy( (char *)buffer->host_ptr + off, (char *)buffer->map_ptr + off, copylen );
+}
+
 static PTR32 wow64_map_buffer( TEB *teb, GLenum target, GLuint name, GLintptr offset,
                                size_t length, GLbitfield access, void *ptr )
 {
@@ -2179,16 +2220,30 @@ static PTR32 wow64_map_buffer( TEB *teb, GLenum target, GLuint name, GLintptr of
 
     if (!buffer_vm_alloc( teb, buffer, length + (offset & 0xf) )) goto unmap;
     buffer->map_ptr = (char *)buffer->vm_ptr + (offset & 0xf);
-    buffer->copy_length = (access & GL_MAP_WRITE_BIT) ? length : 0;
+    buffer->mapped_length = length;
+    buffer->explicit_flush = !!(access & GL_MAP_FLUSH_EXPLICIT_BIT);
+
+    /* If the mapping is writable, set up copy tracking. If explicit flush is used
+     * we do not set copy_length here — flush calls will copy subranges directly.
+     */
+    buffer->copy_length = (access & GL_MAP_WRITE_BIT) ? (buffer->explicit_flush ? 0 : length) : 0;
+
     if (!(access & (GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)))
     {
         static int once;
         if (!once++)
             FIXME( "Doing a copy of a mapped buffer (expect performance issues)\n" );
 
+        /* Only copy initial content if we are not using explicit flush model.
+         * If GL_MAP_FLUSH_EXPLICIT_BIT is set we intentionally skip initial copy;
+         * flushes will indicate which subranges are dirty and will copy them.
+         */
+        if (!buffer->explicit_flush)
+        {
         TRACE( "Copying %#zx from buffer at %p to wow64 buffer %p\n", length, buffer->host_ptr,
                buffer->map_ptr );
         memcpy( buffer->map_ptr, buffer->host_ptr, length );
+        }
     }
     TRACE( "returning copy buffer %p\n", buffer->map_ptr );
     return PtrToUlong( buffer->map_ptr );
@@ -2304,6 +2359,16 @@ PTR32 wow64_glMapBufferARB( TEB *teb, GLenum target, GLenum access )
 {
     const struct opengl_funcs *funcs = teb->glTable;
     return wow64_gl_map_buffer( teb, target, access, funcs->p_glMapBufferARB );
+}
+
+void wow64_glFlushMappedBufferRange( TEB *teb, GLenum target, GLintptr offset, GLsizeiptr length )
+{
+    const struct opengl_funcs *funcs = teb->glTable;
+
+    pthread_mutex_lock( &wgl_lock );
+    wow64_flush_buffer( teb, target, 0, offset, length );
+    funcs->p_glFlushMappedBufferRange( target, offset, length );
+    pthread_mutex_unlock( &wgl_lock );
 }
 
 PTR32 wow64_glMapBufferRange( TEB *teb, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access )
