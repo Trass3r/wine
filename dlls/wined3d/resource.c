@@ -394,6 +394,10 @@ GLbitfield wined3d_resource_gl_map_flags(const struct wined3d_bo_gl *bo, DWORD d
         ret |= GL_MAP_WRITE_BIT;
         if (!bo->b.coherent)
             ret |= GL_MAP_FLUSH_EXPLICIT_BIT;
+        if (d3d_flags & WINED3D_MAP_NOOVERWRITE)
+            ret |= GL_MAP_INVALIDATE_RANGE_BIT;
+        if (d3d_flags & WINED3D_MAP_DISCARD)
+          ret |= GL_MAP_INVALIDATE_BUFFER_BIT;
     }
     if (d3d_flags & WINED3D_MAP_READ)
         ret |= GL_MAP_READ_BIT;
