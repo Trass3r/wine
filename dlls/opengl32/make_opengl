@@ -281,6 +281,7 @@ my %manual_wow64_wrappers =
      "glDeleteBuffers" => 0,
      "glDeleteSync" => 0,
      "glFenceSync" => 0,
+     "glFlushBufferRange" => 0,
      "glGetBufferPointerv" => 0,
      "glGetBufferPointervARB" => 0,
      "glGetError" => 0,

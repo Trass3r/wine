@@ -43613,8 +43613,7 @@ static NTSTATUS wow64_ext_glFlushMappedBufferRange( void *args )
         PTR32 length;
     } *params = args;
     TEB *teb = get_teb64( params->teb );
-    const struct opengl_funcs *funcs = teb->glTable;
-    funcs->p_glFlushMappedBufferRange( params->target, (GLintptr)ULongToPtr(params->offset), (GLsizeiptr)ULongToPtr(params->length) );
+    wow64_glFlushMappedBufferRange( teb, params->target, (GLintptr)ULongToPtr(params->offset), (GLsizeiptr)ULongToPtr(params->length) );
     set_context_attribute( teb, -1 /* unsupported */, NULL, 0 );
     return STATUS_SUCCESS;
 }
