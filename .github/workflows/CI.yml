@@ -46,10 +46,10 @@ jobs:
       run: |
         set -eux
 
-        git fetch --depth=1 origin wine-10.17 && git checkout FETCH_HEAD
-        git clone --depth=1000 https://github.com/Frogging-Family/wine-tkg-git.git
-        #(cd wine-tkg-git && git checkout c4aa8dd)
-        patch -p1 < wine-tkg-git/wine-tkg-git/wine-tkg-patches/proton/esync/esync-unix-mainline.patch
+        #git fetch --depth=1 origin wine-10.17 && git checkout FETCH_HEAD
+        #git clone --depth=1000 https://github.com/Frogging-Family/wine-tkg-git.git
+        ##(cd wine-tkg-git && git checkout c4aa8dd) # 10.16 commit
+        #patch -p1 < wine-tkg-git/wine-tkg-git/wine-tkg-patches/proton/esync/esync-unix-mainline.patch
 
         #git clone --depth=100 https://github.com/wine-staging/wine-staging.git ./wine-staging
         #pushd wine-staging
@@ -81,3 +81,4 @@ jobs:
         name: binaries-${{ matrix.name }}
         path: |
           wine.tar.xz
+
