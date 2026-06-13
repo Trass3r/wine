@@ -2592,6 +2592,7 @@ static void install_data_file_src( struct makefile *make, const char *target,
  */
 static void install_header( struct makefile *make, const char *target, const char *obj )
 {
+    return;
     const char *dir, *end;
     bool is_obj = !!obj;
 
@@ -3979,7 +3980,7 @@ static void output_import_lib( struct makefile *make, unsigned int arch )
     output( "\n" );
 
     if (make->disabled[arch]) return;
-    install_data_file( make, make->importlib, name, arch_install_dirs[arch], NULL );
+    //install_data_file( make, make->importlib, name, arch_install_dirs[arch], NULL );
 }
 
 
@@ -4034,7 +4035,7 @@ static void output_static_lib( struct makefile *make, unsigned int arch )
     if (hybrid_arch) output_filenames_obj_dir( make, make->object_files[hybrid_arch] );
     if (!arch) output_filenames_obj_dir( make, make->unixobj_files );
     output( "\n" );
-    install_data_file( make, make->staticlib, name, arch_install_dirs[arch], NULL );
+    //install_data_file( make, make->staticlib, name, arch_install_dirs[arch], NULL );
 }
 
 
