@@ -73,7 +73,7 @@ jobs:
         set +e
         time make -j$(($(nproc) + 1)) -k
         make -k install DESTDIR=../install
-        for file in dlls/*/*-windows/*.{dll,pdb}; do
+        for file in dlls/*/*-windows/*.{dll,pdb,debug}; do
           arch=$(basename "$(dirname "$file")");
           mkdir -p "../install/lib/wine/$arch";
           mv "$file" "../install/lib/wine/$arch/";
