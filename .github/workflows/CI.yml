@@ -69,11 +69,16 @@ jobs:
         mkdir -p build && cd build
         ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
             ${{ matrix.flags }} \
-            --disable-win16 --disable-tests --with-mingw --enable-archs=i386,x86_64
+            --prefix= --disable-win16 --disable-tests --with-mingw --enable-archs=i386,x86_64
         set +e
         time make -j$(($(nproc) + 1)) -k
         make -k install DESTDIR=../install
-        cd ../install/usr/local
+        for pdb in dlls/*/*-windows/*.pdb; do
+          arch=$(basename "$(dirname "$pdb")");
+          mkdir -p "../install/lib/wine/$arch";
+          cp -v "$pdb" "../install/lib/wine/$arch/";
+        done
+        cd ../install
         rdfind -makesymlinks true -makeresultsfile false . || true
         tar cvapf "$GITHUB_WORKSPACE/wine.tar.xz" *
     - uses: actions/upload-artifact@v7

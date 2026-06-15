@@ -3935,9 +3935,6 @@ static void output_module( struct makefile *make, unsigned int arch )
     if (link_arch != arch) output_filenames_obj_dir( make, make->object_files[link_arch] );
     output_filenames_obj_dir( make, make->res_files[arch] );
     output_debug_files( make, module_name, link_arch );
-    if (make->debug_files.count > 0 && !strendswith( make->module, ".drv" )) // msacm32.{dll,drv} .pdb conflict
-        install_data_file( make, make->module, make->debug_files.str[make->debug_files.count-1], // debug_files contains all archs, so can't use STRARRAY_FOR_EACH( debug_file, &make->debug_files )
-                           strmake( "$(libdir)/wine/%s", arch_pe_dirs[arch] ), NULL );
     output_filenames( all_libs );
     output_filename( arch_make_variable( "LDFLAGS", link_arch ));
     output( "\n" );
