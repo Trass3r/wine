@@ -14,7 +14,7 @@ jobs:
         - name: 'Standard'
           flags: '' # default: -gdwarf-4 -g -O2
         - name: 'LTO'
-          flags: 'CFLAGS="-flto" CROSSCFLAGS="-flto" LDFLAGS="-flto=2"'
+          flags: 'CFLAGS="-g1 -O2 -fno-omit-frame-pointer -flto" CROSSCFLAGS="-g1 -O2 -fno-omit-frame-pointer -flto" LDFLAGS="-flto=auto" CROSSLDFLAGS="-flto=auto"'
         - name: 'Debug'
           flags: 'CFLAGS="-g -Og -fno-omit-frame-pointer" CROSSCFLAGS="-g -Og -fno-omit-frame-pointer"'
     name: ${{ matrix.name }}
