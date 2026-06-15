@@ -65,7 +65,7 @@ jobs:
 
         export CCACHE_NOCOMPRESS=1
         export CCACHE_STATSLOG=/tmp/stats.log
-        export CROSSDEBUG=pdb
+        export CROSSDEBUG="split-dwarf pdb"
         mkdir -p build && cd build
         ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
             ${{ matrix.flags }} \
