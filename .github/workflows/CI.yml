@@ -12,11 +12,11 @@ jobs:
       matrix:
         include:
         - name: 'Standard'
-          flags: '' # default: -gdwarf-4 -g -O2
+          flags: 'CFLAGS="-O2 -g -gdwarf-5" CROSSCFLAGS="-O2 -g -gdwarf-5 -gpubnames"' # default: -gdwarf-4 -g -O2
         - name: 'LTO'
-          flags: 'CFLAGS="-g1 -O2 -fno-omit-frame-pointer -flto" CROSSCFLAGS="-g1 -O2 -fno-omit-frame-pointer -flto" LDFLAGS="-flto=auto" CROSSLDFLAGS="-flto=auto"'
+          flags: 'CFLAGS="-O2 -fno-omit-frame-pointer -flto -g1 -gdwarf-5" CROSSCFLAGS="-O2 -fno-omit-frame-pointer -flto -g1 -gdwarf-5" LDFLAGS="-flto=auto" CROSSLDFLAGS="-flto=auto"'
         - name: 'Debug'
-          flags: 'CFLAGS="-g -Og -fno-omit-frame-pointer" CROSSCFLAGS="-g -Og -fno-omit-frame-pointer"'
+          flags: 'CFLAGS="-Og -fno-omit-frame-pointer -g -gdwarf-5" CROSSCFLAGS="-Og -fno-omit-frame-pointer -g -gdwarf-5 -gpubnames"'
     name: ${{ matrix.name }}
     steps:
     - uses: actions/checkout@v6
