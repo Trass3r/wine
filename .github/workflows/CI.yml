@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-26.04
     #container: ubuntu:rolling
     strategy:
+      fail-fast: false
       matrix:
         include:
         - name: 'Standard'
@@ -70,9 +71,9 @@ jobs:
         ../configure CC="ccache gcc" i386_CC="ccache i686-w64-mingw32-gcc" x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
             ${{ matrix.flags }} \
             --prefix= --disable-win16 --disable-tests --with-mingw --enable-archs=i386,x86_64
-        set +e
-        time make -j$(($(nproc) + 1)) -k
-        make -k install DESTDIR=../install
+        BUILD_STATUS=0
+        time make -j$(($(nproc) + 1)) -k    || BUILD_STATUS=$?
+        make -k install DESTDIR=../install  || BUILD_STATUS=$?
         for file in dlls/*/*-windows/*.{dll,pdb,debug}; do
           arch=$(basename "$(dirname "$file")");
           mkdir -p "../install/lib/wine/$arch";
@@ -81,11 +82,14 @@ jobs:
         cd ../install
         rdfind -makesymlinks true -makeresultsfile false . || true
         tar cvapf "$GITHUB_WORKSPACE/wine.tar.xz" *
+        exit $BUILD_STATUS
     - uses: actions/upload-artifact@v7
+      if: always()
       with:
         name: ccache-debug-${{ matrix.name }}
         path: /tmp/stats.log
     - uses: actions/upload-artifact@v7
+      if: always()
       with:
         name: binaries-${{ matrix.name }}
         path: |
