@@ -21,9 +21,9 @@ jobs:
     name: ${{ matrix.name }}
     steps:
     - uses: actions/checkout@v6
-    - uses: mxschmitt/action-tmate/detached@v3
+    - uses: owenthereal/action-upterm/detached@v1
       with:
-        connect-timeout-seconds: 300
+        wait-timeout-minutes: 1
     - name: prereqs
       run: |
         set -eux -o pipefail
